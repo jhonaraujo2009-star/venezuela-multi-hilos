@@ -7,7 +7,7 @@ import toast from "react-hot-toast";
 
 export default function CartDrawer() {
   const { items, removeItem, updateQuantity, isOpen, setIsOpen, coupon, setCoupon, subtotal, discount, total, clearCart, createOrder } = useCart();
-  const { settings, bsPrice } = useApp();
+  const { settings, bsPrice, storeData } = useApp();
   
   const [couponCode, setCouponCode] = useState("");
   const [checkingCoupon, setCheckingCoupon] = useState(false);
@@ -19,24 +19,33 @@ export default function CartDrawer() {
   const freeShippingProgress = Math.min(100, (total / settings.freeShippingGoal) * 100);
   const remaining = Math.max(0, settings.freeShippingGoal - total);
 
-  // Cargar métodos al abrir
+  // 🌟 MAGIA: Cargar métodos de pago SOLO de la tienda actual
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && storeData?.id) {
       const loadPayments = async () => {
-        const snap = await getDocs(collection(db, "payments"));
+        const q = query(collection(db, "payments"), where("storeId", "==", storeData.id));
+        const snap = await getDocs(q);
         setPaymentMethods(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       };
       loadPayments();
-    } else {
+    } else if (!isOpen) {
       setStep(1); // Resetear al cerrar
     }
-  }, [isOpen]);
+  }, [isOpen, storeData?.id]);
 
+  // 🌟 MAGIA: Buscar cupones SOLO de la tienda actual
   const applyCoupon = async () => {
-    if (!couponCode.trim()) return;
+    if (!couponCode.trim() || !storeData?.id) return;
     setCheckingCoupon(true);
     try {
-      const snap = await getDocs(query(collection(db, "coupons"), where("code", "==", couponCode.toUpperCase()), where("active", "==", true)));
+      const q = query(
+        collection(db, "coupons"), 
+        where("code", "==", couponCode.toUpperCase()), 
+        where("active", "==", true),
+        where("storeId", "==", storeData.id)
+      );
+      const snap = await getDocs(q);
+      
       if (snap.empty) {
         toast.error("Cupón inválido o expirado");
       } else {
@@ -53,7 +62,12 @@ export default function CartDrawer() {
     if (!selectedPayment) return toast.error("Elige cómo vas a pagar");
     if (!customer.name || !customer.phone) return toast.error("Dinos tu nombre y teléfono");
 
-    const targetPhone = selectedPayment.phone || settings.whatsappNumber;
+    // 🌟 MAGIA LÁSER: Nuevo orden de prioridad para el WhatsApp 🌟
+    // 1. Teléfono del Método de Pago
+    // 2. Número de WhatsApp VIP del dueño
+    // 3. Teléfono viejo de la tienda
+    // 4. Teléfono global de la plataforma
+    const targetPhone = selectedPayment?.phone || storeData?.whatsappWidget?.number || storeData?.telefono || settings.whatsappNumber;
 
     try {
       const orderData = { ...customer, paymentId: selectedPayment.id, total };
@@ -61,7 +75,7 @@ export default function CartDrawer() {
 
       const itemLines = items.map((i) => `• ${i.product.name}${i.variant ? ` [${i.variant.label}]` : ""} (x${i.quantity})`).join("\n");
       
-      const message = `🛍️ *LUCKATHYS SHOP - NUEVA ORDEN*\n\n` +
+      const message = `🛍️ *NUEVA ORDEN - ${storeData?.nombre ? storeData.nombre.toUpperCase() : "LUCKATHYS SHOP"}*\n\n` +
                       `👤 *Cliente:* ${customer.name}\n` +
                       `📞 *Teléfono:* ${customer.phone}\n\n` +
                       `📦 *Pedido:*\n${itemLines}\n\n` +
@@ -154,21 +168,48 @@ export default function CartDrawer() {
 
               <div className="space-y-3">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Selecciona Método de Pago 🇻🇪</label>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {paymentMethods.map((pm) => (
                     <button 
                       key={pm.id} 
                       onClick={() => setSelectedPayment(pm)}
-                      className={`w-full flex items-center gap-4 p-4 rounded-[1.8rem] border-2 transition-all ${selectedPayment?.id === pm.id ? "border-pink-500 bg-pink-50 shadow-md scale-[1.02]" : "border-gray-50 bg-gray-50/50 opacity-70 hover:opacity-100"}`}
+                      className={`w-full flex flex-col p-4 rounded-[1.8rem] border-2 transition-all text-left ${selectedPayment?.id === pm.id ? "border-pink-500 bg-pink-50 shadow-md scale-[1.02]" : "border-gray-50 bg-gray-50/50 opacity-70 hover:opacity-100 hover:bg-white"}`}
                     >
-                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-2xl shadow-sm">
-                        {pm.bankName.toLowerCase().includes('zelle') ? "💎" : "🏦"}
+                      {/* Cabecera del Banco */}
+                      <div className="flex items-center gap-4 w-full">
+                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-2xl shadow-sm overflow-hidden flex-shrink-0">
+                          {/* 🌟 MAGIA: Si hay logo lo muestra, si no el emoji */}
+                          {pm.logo ? (
+                            <img src={pm.logo} alt={pm.bankName} className="w-full h-full object-contain p-1" />
+                          ) : (
+                            pm.bankName.toLowerCase().includes('zelle') ? "💎" : "🏦"
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-[13px] font-black text-gray-800 uppercase leading-none mb-1">{pm.bankName}</p>
+                          <p className="text-[10px] font-bold text-gray-400">{pm.holderName}</p>
+                        </div>
+                        {selectedPayment?.id === pm.id && <div className="text-pink-500 font-bold text-xl">✔</div>}
                       </div>
-                      <div className="text-left">
-                        <p className="text-[13px] font-black text-gray-800 uppercase leading-none mb-1">{pm.bankName}</p>
-                        <p className="text-[10px] font-bold text-gray-400">{pm.holderName}</p>
-                      </div>
-                      {selectedPayment?.id === pm.id && <div className="ml-auto text-pink-500">✔</div>}
+
+                      {/* 🌟 MAGIA: Acordeón con los Datos (Solo se muestra si está seleccionado) */}
+                      {selectedPayment?.id === pm.id && (
+                        <div className="mt-4 pt-4 border-t border-pink-200/50 w-full space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                          {pm.idNumber && (
+                            <p className="text-xs text-gray-600"><span className="font-bold text-gray-800">C.I / RIF:</span> <span className="select-all">{pm.idNumber}</span></p>
+                          )}
+                          {pm.accountNumber && (
+                            <p className="text-xs text-gray-600"><span className="font-bold text-gray-800">Cuenta / Email:</span> <span className="select-all">{pm.accountNumber}</span></p>
+                          )}
+                          {pm.phone && (
+                            <p className="text-xs text-gray-600"><span className="font-bold text-gray-800">Teléfono:</span> <span className="select-all">{pm.phone}</span></p>
+                          )}
+                          
+                          <div className="mt-3 bg-white rounded-xl py-2 px-3 text-center border border-pink-100 shadow-sm">
+                            <p className="text-[9px] font-black text-pink-500 uppercase tracking-widest">👇 Transfiere y luego confirma 👇</p>
+                          </div>
+                        </div>
+                      )}
                     </button>
                   ))}
                 </div>

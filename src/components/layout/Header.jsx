@@ -4,8 +4,8 @@ import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../context/AuthContext";
+import { useApp } from "../../context/AppContext"; 
 
-// 🌟 MAGIA: Añadimos onFilter aquí arriba sin borrar onProductClick
 export default function Header({ onProductClick, onFilter }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -17,17 +17,22 @@ export default function Header({ onProductClick, onFilter }) {
   const menuRef = useRef(null);
   const { itemCount, setIsOpen } = useCart();
   const { user } = useAuth();
+  const { storeData } = useApp(); 
   const navigate = useNavigate();
 
   useEffect(() => {
+    if (!storeData?.id) return;
     const fetchSessions = async () => {
-      // HEMOS QUITADO EL 'orderBy' AQUÍ PARA ARREGLAR TU ERROR
-      const q = query(collection(db, "sessions"), where("hidden", "==", false));
+      const q = query(
+        collection(db, "sessions"), 
+        where("hidden", "==", false),
+        where("storeId", "==", storeData.id) 
+      );
       const snap = await getDocs(q);
       setSessions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     };
     fetchSessions();
-  }, []);
+  }, [storeData?.id]);
 
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -37,7 +42,12 @@ export default function Header({ onProductClick, onFilter }) {
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
-        const snap = await getDocs(collection(db, "products"));
+        let qRef = collection(db, "products");
+        if (storeData?.id) {
+          qRef = query(collection(db, "products"), where("storeId", "==", storeData.id));
+        }
+        const snap = await getDocs(qRef);
+        
         const q = searchQuery.toLowerCase();
         const results = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
@@ -53,9 +63,8 @@ export default function Header({ onProductClick, onFilter }) {
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, storeData?.id]);
 
-  // Cerrar menú al hacer clic afuera
   useEffect(() => {
     const handler = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
@@ -69,7 +78,7 @@ export default function Header({ onProductClick, onFilter }) {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100 h-14 transition-all duration-300">
       
-      {/* 🌟 1. BUSCADOR INTELIGENTE ANIMADO (Reemplaza tu buscador viejo) 🌟 */}
+      {/* BUSCADOR INTELIGENTE ANIMADO */}
       <div 
         className={`absolute inset-0 bg-white/95 backdrop-blur-2xl z-50 flex items-center px-4 transition-all duration-500 ease-out ${
           searchOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-full pointer-events-none'
@@ -125,23 +134,41 @@ export default function Header({ onProductClick, onFilter }) {
       {/* CABECERA NORMAL */}
       <div className="max-w-md mx-auto px-4 h-full flex items-center justify-between gap-3">
         
-        {/* Logo (Ahora resetea los filtros al tocarlo) */}
+        {/* Logo Dinámico con Placa de Verificación PRO */}
         <div 
-          className="flex-shrink-0 cursor-pointer" 
+          className="flex-shrink-0 cursor-pointer flex items-center gap-1.5" 
           onClick={() => { 
             if(onFilter) onFilter("all"); 
             window.scrollTo(0, 0); 
           }}
         >
-          <span className="text-xl font-black tracking-tighter uppercase" style={{ color: "var(--primary)" }}>
-            ✨ Luckathys
+          <span className="text-xl font-black tracking-tighter uppercase flex items-center gap-1.5" style={{ color: "var(--primary)" }}>
+            {/* 🌟 LÓGICA DE NOMBRE REPARADA 🌟 */}
+            ✨ {storeData?.nombre || storeData?.id || "Mi Tienda"}
+            
+            {/* 🌟 LÓGICA DE PLACA DE VERIFICACIÓN PRO 🌟 */}
+            {storeData?.verification?.status === "verified" ? (
+              <div className="relative flex items-center justify-center ml-1" title="Tienda Verificada Oficialmente">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-20 animate-ping"></span>
+                <svg className="relative w-5 h-5 text-blue-500 drop-shadow-[0_0_6px_rgba(59,130,246,0.6)]" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
+                </svg>
+              </div>
+            ) : (
+              <div className="ml-1.5 px-2.5 py-1 text-[8px] font-black bg-gradient-to-r from-gray-50 to-gray-100 text-gray-500 rounded-full border border-gray-200/60 flex items-center gap-1.5 tracking-widest uppercase shadow-[0_2px_8px_rgba(0,0,0,0.04)]" title="Solicita tu verificación en el Panel Admin">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-gray-400"></span>
+                </span>
+                No Verificado
+              </div>
+            )}
           </span>
         </div>
 
-        {/* Botonera */}
+        {/* Botonera Intacta */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
           
-          {/* Botón Lupa */}
           <button 
             onClick={() => setSearchOpen(true)} 
             className="p-2.5 rounded-full hover:bg-gray-50 transition-colors active:scale-90 text-gray-800"
@@ -151,7 +178,6 @@ export default function Header({ onProductClick, onFilter }) {
             </svg>
           </button>
 
-          {/* 🌟 2. BOTÓN WISHLIST (CORAZÓN VIP) 🌟 */}
           <button 
             onClick={() => { 
               if(onFilter) onFilter("wishlist"); 
@@ -164,7 +190,6 @@ export default function Header({ onProductClick, onFilter }) {
             </svg>
           </button>
 
-          {/* Botón Carrito Intacto */}
           <button 
             onClick={() => setIsOpen(true)} 
             className="relative p-2.5 rounded-full hover:bg-gray-50 transition-colors active:scale-90 text-gray-800"
@@ -182,7 +207,6 @@ export default function Header({ onProductClick, onFilter }) {
             )}
           </button>
 
-          {/* Tu Menú Original de 3 puntos (INTACTO) */}
           <div className="relative" ref={menuRef}>
             <button 
               onClick={() => setMenuOpen(!menuOpen)} 
@@ -213,14 +237,16 @@ export default function Header({ onProductClick, onFilter }) {
                   </button>
                 ))}
                 <div className="border-t border-gray-100 my-1" />
+                
                 <button
-                  onClick={() => { navigate("/preguntas"); setMenuOpen(false); }}
+                  onClick={() => { navigate(storeData?.id ? `/${storeData.id}/preguntas` : "/"); setMenuOpen(false); }}
                   className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 text-gray-700"
                 >
                   💬 Zona de Preguntas
                 </button>
+                
                 <button
-                  onClick={() => { navigate(user ? "/admin" : "/login"); setMenuOpen(false); }}
+                  onClick={() => { navigate(user && storeData?.id ? `/${storeData.id}/admin` : "/login"); setMenuOpen(false); }}
                   className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 text-gray-700"
                 >
                   🔒 Panel Admin

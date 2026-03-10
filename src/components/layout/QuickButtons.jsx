@@ -1,7 +1,7 @@
 import { useApp } from "../../context/AppContext";
 
 export default function QuickButtons({ onFilter }) {
-  const { settings } = useApp();
+  const { settings, storeData } = useApp(); // 🌟 Agregamos storeData
   
   // ESTRUCTURA MAESTRA DE ALTA GAMA
   const defaultButtons = [
@@ -11,8 +11,11 @@ export default function QuickButtons({ onFilter }) {
     { id: 'new', label: 'Lo Último', icon: '✨', filter: 'new' }
   ];
 
-  // LÓGICA DE SEGURIDAD: Si la base de datos falla o le faltan botones, fuerza la estructura maestra.
-  const savedButtons = Array.isArray(settings?.quickButtons) ? settings.quickButtons : [];
+  // 🌟 MAGIA: Leemos los botones que el dueño personalizó en su panel
+  const currentButtons = storeData?.quickButtons || settings?.quickButtons;
+  const savedButtons = Array.isArray(currentButtons) ? currentButtons : [];
+  
+  // LÓGICA DE SEGURIDAD
   const isValid = savedButtons.some(b => b.filter === 'top') && savedButtons.some(b => b.filter === 'new');
   const buttons = isValid ? savedButtons : defaultButtons;
 

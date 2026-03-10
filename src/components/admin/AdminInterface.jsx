@@ -1,34 +1,48 @@
-import { useState } from "react";
-// Eliminamos las importaciones de Firebase Storage que daban error
+import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import toast from "react-hot-toast";
+import { doc, setDoc } from "firebase/firestore";
+import { db } from "../../config/firebase";
 
 export default function AdminInterface() {
-  const { settings, updateSettings } = useApp();
+  const { settings, storeData } = useApp();
+  
   const [form, setForm] = useState({
-    announcementText: settings.announcementText || "",
-    heroTitle: settings.heroTitle || "",
-    heroDescription: settings.heroDescription || "",
-    legalText: settings.legalText || "",
-    socialLinks: { ...settings.socialLinks },
+    announcementText: storeData?.announcementText ?? settings.announcementText ?? "",
+    heroTitle: storeData?.heroTitle ?? settings.heroTitle ?? "",
+    heroDescription: storeData?.heroDescription ?? settings.heroDescription ?? "",
+    legalText: storeData?.legalText ?? settings.legalText ?? "",
+    socialLinks: storeData?.socialLinks ?? settings.socialLinks ?? {},
   });
+  
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // NUEVA FUNCIÓN PARA SUBIR A CLOUDINARY
+  useEffect(() => {
+    if (storeData) {
+      setForm(prev => ({
+        ...prev,
+        announcementText: storeData.announcementText ?? prev.announcementText,
+        heroTitle: storeData.heroTitle ?? prev.heroTitle,
+        heroDescription: storeData.heroDescription ?? prev.heroDescription,
+        legalText: storeData.legalText ?? prev.legalText,
+        socialLinks: storeData.socialLinks ?? prev.socialLinks,
+      }));
+    }
+  }, [storeData]);
+
+  // 🌟 MAGIA: Función rápida para guardar directo en la tienda actual
+  const updateStoreConfig = async (updates) => {
+    if (!storeData?.id) throw new Error("No hay tienda conectada");
+    await setDoc(doc(db, "stores", storeData.id), updates, { merge: true });
+  };
+
   const uploadToCloudinary = async (file) => {
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("upload_preset", "tienda_maquillaje"); // Tu preset configurado
+    formData.append("upload_preset", "tienda_maquillaje"); 
 
-    const res = await fetch(
-      "https://api.cloudinary.com/v1_1/dp3abweme/image/upload", // Tu Cloud Name
-      {
-        method: "POST",
-        body: formData,
-      }
-    );
-
+    const res = await fetch("https://api.cloudinary.com/v1_1/dp3abweme/image/upload", { method: "POST", body: formData });
     if (!res.ok) throw new Error("Error en la subida");
     const data = await res.json();
     return data.secure_url;
@@ -40,10 +54,9 @@ export default function AdminInterface() {
     setUploading(true);
     try {
       const url = await uploadToCloudinary(file);
-      await updateSettings({ profileImage: url });
+      await updateStoreConfig({ profileImage: url }); // Lo guarda en la tienda
       toast.success("Foto de perfil actualizada ✅");
     } catch (error) {
-      console.error(error);
       toast.error("Error al subir foto de perfil");
     } finally {
       setUploading(false);
@@ -55,31 +68,29 @@ export default function AdminInterface() {
     if (!files.length) return;
     setUploading(true);
     try {
-      const urls = await Promise.all(
-        files.map((f) => uploadToCloudinary(f))
-      );
-      const existing = settings.happyCustomerImages || [];
-      await updateSettings({ happyCustomerImages: [...existing, ...urls] });
+      const urls = await Promise.all(files.map((f) => uploadToCloudinary(f)));
+      const existing = storeData?.happyCustomerImages || settings.happyCustomerImages || [];
+      await updateStoreConfig({ happyCustomerImages: [...existing, ...urls] }); // Lo guarda en la tienda
       toast.success(`${urls.length} imagen(es) subida(s) ✅`);
     } catch (error) {
-      console.error(error);
-      toast.error("Error al subir imágenes del carrusel");
+      toast.error("Error al subir imágenes");
     } finally {
       setUploading(false);
     }
   };
 
   const removeHappyCustomer = async (url) => {
-    const updated = (settings.happyCustomerImages || []).filter((u) => u !== url);
-    await updateSettings({ happyCustomerImages: updated });
+    const existing = storeData?.happyCustomerImages || settings.happyCustomerImages || [];
+    const updated = existing.filter((u) => u !== url);
+    await updateStoreConfig({ happyCustomerImages: updated });
     toast.success("Imagen eliminada");
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateSettings(form);
-      toast.success("Interfaz actualizada ✅");
+      await updateStoreConfig(form); // Lo guarda en la tienda
+      toast.success("Textos de la tienda actualizados ✅");
     } catch {
       toast.error("Error al guardar");
     } finally {
@@ -87,17 +98,21 @@ export default function AdminInterface() {
     }
   };
 
+  // Variables visuales (le damos prioridad a los datos de la tienda)
+  const currentProfileImage = storeData?.profileImage || settings.profileImage;
+  const currentHappyImages = storeData?.happyCustomerImages || settings.happyCustomerImages || [];
+
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">🎨 Gestor de Interfaz</h2>
+      <h2 className="text-2xl font-bold text-gray-900">🎨 Interfaz de Tu Tienda</h2>
 
       {/* Profile image */}
       <div className="bg-white rounded-3xl p-6 shadow-sm">
         <h3 className="font-bold text-gray-800 mb-4">Foto de Perfil</h3>
         <div className="flex items-center gap-4">
           <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-100 flex-shrink-0">
-            {settings.profileImage ? (
-              <img src={settings.profileImage} alt="Profile" className="w-full h-full object-cover" />
+            {currentProfileImage ? (
+              <img src={currentProfileImage} alt="Profile" className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-3xl">✨</div>
             )}
@@ -111,16 +126,16 @@ export default function AdminInterface() {
 
       {/* Text content */}
       <div className="bg-white rounded-3xl p-6 shadow-sm space-y-4">
-        <h3 className="font-bold text-gray-800">Textos de la tienda</h3>
+        <h3 className="font-bold text-gray-800">Textos de la Tienda</h3>
 
         <div>
-          <label className="block text-sm font-semibold text-gray-600 mb-1">Cintillo promocional</label>
+          <label className="block text-sm font-semibold text-gray-600 mb-1">Cintillo promocional superior</label>
           <input value={form.announcementText} onChange={(e) => setForm({ ...form, announcementText: e.target.value })}
             className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-pink-300" />
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-gray-600 mb-1">Título principal</label>
+          <label className="block text-sm font-semibold text-gray-600 mb-1">Título debajo de tu foto</label>
           <input value={form.heroTitle} onChange={(e) => setForm({ ...form, heroTitle: e.target.value })}
             className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-pink-300" />
         </div>
@@ -132,33 +147,17 @@ export default function AdminInterface() {
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-gray-600 mb-1">Texto legal / políticas</label>
+          <label className="block text-sm font-semibold text-gray-600 mb-1">Texto legal (pie de página)</label>
           <textarea value={form.legalText} onChange={(e) => setForm({ ...form, legalText: e.target.value })}
             rows={4} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-pink-300 resize-none" />
         </div>
       </div>
 
-      {/* Social links */}
-      <div className="bg-white rounded-3xl p-6 shadow-sm space-y-3">
-        <h3 className="font-bold text-gray-800">Redes Sociales</h3>
-        {["instagram", "tiktok", "facebook", "twitter"].map((net) => (
-          <div key={net}>
-            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{net}</label>
-            <input
-              value={form.socialLinks[net] || ""}
-              onChange={(e) => setForm({ ...form, socialLinks: { ...form.socialLinks, [net]: e.target.value } })}
-              placeholder={`https://${net}.com/tutienda`}
-              className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-pink-300"
-            />
-          </div>
-        ))}
-      </div>
-
       {/* Happy customers carrusel */}
       <div className="bg-white rounded-3xl p-6 shadow-sm">
-        <h3 className="font-bold text-gray-800 mb-3">Carrusel "Clientes Felices"</h3>
+        <h3 className="font-bold text-gray-800 mb-3">Tus Clientes Felices (Fotos)</h3>
         <div className="grid grid-cols-3 gap-2 mb-3">
-          {(settings.happyCustomerImages || []).map((url, i) => (
+          {currentHappyImages.map((url, i) => (
             <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-gray-100">
               <img src={url} alt="" className="w-full h-full object-cover" />
               <button
@@ -177,7 +176,7 @@ export default function AdminInterface() {
       <button onClick={handleSave} disabled={saving || uploading}
         className="w-full py-4 rounded-2xl text-white font-bold disabled:opacity-50"
         style={{ background: "var(--primary)" }}>
-        {saving ? "Guardando..." : "Guardar cambios"}
+        {saving ? "Guardando..." : "Guardar Textos"}
       </button>
     </div>
   );

@@ -1,27 +1,40 @@
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../config/firebase";
+import { useApp } from "./AppContext"; // 🌟 MAGIA: Conectamos el carrito con el cerebro
 
 const CartContext = createContext(null);
 
 export function CartProvider({ children }) {
-  // 🌟 MEMORIA DE ELEFANTE: Revisamos si había algo guardado antes
-  const [items, setItems] = useState(() => {
-    try {
-      const localData = localStorage.getItem("luckathys_vip_cart");
-      return localData ? JSON.parse(localData) : [];
-    } catch (error) {
-      return [];
-    }
-  });
-  
+  const { storeData } = useApp(); // 🌟 Saber en qué tienda estamos
+  const [items, setItems] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [coupon, setCoupon] = useState(null);
 
-  // 🌟 AUTO-GUARDADO: Cada vez que "items" cambia, se guarda en el celular
+  // 🌟 MAGIA: Cargar la bolsa correcta según la tienda
   useEffect(() => {
-    localStorage.setItem("luckathys_vip_cart", JSON.stringify(items));
-  }, [items]);
+    if (!storeData?.id) return;
+    
+    const cartKey = `cart_${storeData.id}`; // Ej: cart_oscar o cart_cuentas_multiples
+    try {
+      const localData = localStorage.getItem(cartKey);
+      if (localData) {
+        setItems(JSON.parse(localData));
+      } else {
+        setItems([]); // Si no hay nada guardado para esta tienda, la bolsa va vacía
+      }
+    } catch (error) {
+      setItems([]);
+    }
+  }, [storeData?.id]);
+
+  // 🌟 MAGIA: Guardar los productos en la bolsa de esta tienda específica
+  useEffect(() => {
+    if (!storeData?.id) return;
+    
+    const cartKey = `cart_${storeData.id}`;
+    localStorage.setItem(cartKey, JSON.stringify(items));
+  }, [items, storeData?.id]);
 
   const addItem = useCallback((product, variant, quantity) => {
     setItems((prev) => {
@@ -75,7 +88,8 @@ export function CartProvider({ children }) {
         })),
         totalAmount: total,
         status: "pending",
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        storeId: storeData?.id // 🌟 MAGIA: Le pegamos la etiqueta de la tienda a la orden para que el dueño correcto lo reciba
       };
       const docRef = await addDoc(collection(db, "orders"), orderData);
       return docRef.id;

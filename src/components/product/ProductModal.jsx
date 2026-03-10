@@ -6,14 +6,17 @@ import { useCart } from "../../context/CartContext";
 import toast from "react-hot-toast";
 
 export default function ProductModal({ product, onClose }) {
-  const { bsPrice } = useApp();
+  const { bsPrice, storeData } = useApp(); // 🌟 MAGIA: Extraemos storeData
   const { addItem } = useCart();
   const [activeImage, setActiveImage] = useState(0);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [quantity, setQuantity] = useState(1);
 
+  // 🌟 MAGIA: Creamos la llave privada de la tienda
+  const likedKey = `userLikes_${storeData?.id || "global"}`;
+
   const [hasLiked, setHasLiked] = useState(() => {
-    const likedProducts = JSON.parse(localStorage.getItem("userLikes") || "{}");
+    const likedProducts = JSON.parse(localStorage.getItem(likedKey) || "{}");
     return !!likedProducts[product.id];
   });
 
@@ -26,7 +29,6 @@ export default function ProductModal({ product, onClose }) {
     ? selectedVariant?.stock ?? 0
     : product.totalStock ?? 0;
 
-  // Lógica de Oferta
   const oldPrice = Number(product.oldPrice) || 0;
   const currentPrice = Number(product.price) || 0;
   const isFlashOffer = product.offerEndsAt && product.offerEndsAt > Date.now();
@@ -39,7 +41,6 @@ export default function ProductModal({ product, onClose }) {
     discountPercentage = Math.round(((oldPrice - currentPrice) / oldPrice) * 100);
   }
 
-  // Sincronizar likes en vivo
   useEffect(() => {
     const productRef = doc(db, "products", product.id);
     const unsubscribe = onSnapshot(productRef, (docSnap) => {
@@ -51,20 +52,18 @@ export default function ProductModal({ product, onClose }) {
     return () => unsubscribe();
   }, [product.id]);
 
-  // 🌟 MAGIA: Lógica de doble acción (Poner y Quitar Corazón) 🌟
   const handleLike = async () => {
     if (isLiking) return;
     setIsLiking(true);
 
-    const likedProducts = JSON.parse(localStorage.getItem("userLikes") || "{}");
+    const likedProducts = JSON.parse(localStorage.getItem(likedKey) || "{}"); // 🌟 Usamos la llave privada
     const productRef = doc(db, "products", product.id);
 
     if (hasLiked) {
-      // QUITAR EL CORAZÓN
       setHasLiked(false);
       setLikesCount((prev) => Math.max(0, prev - 1));
-      delete likedProducts[product.id]; // Lo borramos del celular
-      localStorage.setItem("userLikes", JSON.stringify(likedProducts));
+      delete likedProducts[product.id]; 
+      localStorage.setItem(likedKey, JSON.stringify(likedProducts)); // 🌟 Guardamos en la llave privada
 
       try {
         await updateDoc(productRef, { likes: increment(-1) });
@@ -72,11 +71,10 @@ export default function ProductModal({ product, onClose }) {
         console.error("Error al quitar like", error);
       }
     } else {
-      // PONER EL CORAZÓN
       setHasLiked(true);
       setLikesCount((prev) => prev + 1);
-      likedProducts[product.id] = true; // Lo guardamos en el celular
-      localStorage.setItem("userLikes", JSON.stringify(likedProducts));
+      likedProducts[product.id] = true; 
+      localStorage.setItem(likedKey, JSON.stringify(likedProducts)); // 🌟 Guardamos en la llave privada
 
       try {
         await updateDoc(productRef, { likes: increment(1) });
@@ -96,7 +94,6 @@ export default function ProductModal({ product, onClose }) {
     onClose();
   };
 
-  // 🌟 LÓGICA DEL ZOOM MAGNÉTICO 🌟
   const handleMouseMove = (e) => {
     const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - left) / width) * 100;
@@ -124,7 +121,6 @@ export default function ProductModal({ product, onClose }) {
 
         <div className="flex-1 overflow-y-auto pb-6">
           
-          {/* 🌟 CONTENEDOR DE LA IMAGEN CON ZOOM 🌟 */}
           <div className="relative mx-4 mt-4">
             <div 
               className="relative aspect-[4/5] bg-gray-50 rounded-[2rem] overflow-hidden shadow-inner group cursor-crosshair touch-pan-y"
@@ -138,7 +134,6 @@ export default function ProductModal({ product, onClose }) {
                 e.currentTarget.style.setProperty('--y', `${y}%`);
               }}
             >
-              {/* BADGE DE OFERTA EN GRANDE */}
               {hasDiscount && discountPercentage > 0 && (
                 <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-black/80 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-white/20 shadow-2xl pointer-events-none">
                   <span className="text-lg animate-bounce">{isFlashOffer ? "⚡" : "🔥"}</span>
@@ -160,7 +155,6 @@ export default function ProductModal({ product, onClose }) {
               )}
             </div>
 
-            {/* 🌟 GALERÍA DE MINIATURAS (THUMBNAILS) VIP 🌟 */}
             {product.images?.length > 1 && (
               <div className="flex gap-2 mt-3 overflow-x-auto pb-2 scrollbar-hide px-1">
                 {product.images.map((img, i) => (
@@ -176,7 +170,6 @@ export default function ProductModal({ product, onClose }) {
             )}
           </div>
 
-          {/* INFORMACIÓN DEL PRODUCTO */}
           <div className="px-6 mt-5 space-y-6">
             <div className="flex justify-between items-start gap-4">
               <div>
@@ -200,7 +193,6 @@ export default function ProductModal({ product, onClose }) {
                 </div>
               </div>
 
-              {/* 🌟 BOTÓN DE CORAZÓN CON EFECTO DE QUITAR/PONER 🌟 */}
               <button
                 onClick={handleLike}
                 disabled={isLiking}

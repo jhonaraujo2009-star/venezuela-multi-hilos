@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import ProductCard from "./ProductCard";
+import { useApp } from "../../context/AppContext"; 
 
 export default function ProductCatalog({ activeFilter, onProductClick, onFilter }) {
   const [sessions, setSessions] = useState([]);
@@ -9,15 +10,14 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
   const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(8);
   
-  // 🌟 RELOJ INVISIBLE PARA OFERTAS
+  const { storeData } = useApp();
+
   const [liveTime, setLiveTime] = useState(Date.now());
 
-  // Resetea el conteo visible al cambiar de filtro
   useEffect(() => { 
     setVisibleCount(8); 
   }, [activeFilter]);
 
-  // Actualiza el tiempo en vivo solo si estamos en la pestaña de ofertas
   useEffect(() => {
     if (activeFilter === "ofertas") {
       const interval = setInterval(() => setLiveTime(Date.now()), 1000);
@@ -25,7 +25,6 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
     }
   }, [activeFilter]);
 
-  // Carga las sesiones y productos de Firebase
   useEffect(() => {
     const unsubSessions = onSnapshot(
       query(collection(db, "sessions"), where("hidden", "==", false)), 
@@ -34,12 +33,17 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
       }
     );
 
-    const unsubProducts = onSnapshot(collection(db, "products"), (snap) => {
+    let productsQuery = collection(db, "products");
+    
+    if (storeData?.id) {
+      productsQuery = query(collection(db, "products"), where("storeId", "==", storeData.id));
+    }
+
+    const unsubProducts = onSnapshot(productsQuery, (snap) => {
       const rawProducts = snap.docs.map((d) => {
         const data = d.data();
         const createdAtMs = data.createdAt?.toMillis() || Date.now();
         
-        // 🌟 DETECTIVE DE OFERTAS: Calcula el final de la oferta automáticamente
         let endTime = 0;
         if (data.offerEndsAt) {
           endTime = data.offerEndsAt?.toMillis ? data.offerEndsAt.toMillis() : new Date(data.offerEndsAt).getTime();
@@ -63,9 +67,8 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
       unsubSessions(); 
       unsubProducts(); 
     };
-  }, []);
+  }, [storeData?.id]); 
 
-  // 🌟 PANTALLAS DE CARGA ELEGANTES (SKELETONS VIP) 🌟
   if (loading) {
     return (
       <div className="px-4 pb-24 pt-12 animate-in fade-in duration-500">
@@ -95,21 +98,18 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
   const isWishlist = activeFilter === "wishlist";
 
   if (isTopTen) {
-    // Solo productos con ventas reales
     filtered = [...products]
       .filter(p => (p.salesCount || 0) > 0)
       .sort((a, b) => (b.salesCount || 0) - (a.salesCount || 0))
       .slice(0, 10);
       
   } else if (isNewArrivals) {
-    // Productos de la última semana o marcados como nuevos
     const unaSemanaAtras = Date.now() - 7 * 24 * 60 * 60 * 1000;
     filtered = products
       .filter(p => p.createdAtMs >= unaSemanaAtras || p.isNew)
       .sort((a, b) => b.createdAtMs - a.createdAtMs);
       
   } else if (isOfertas) {
-    // 🌟 NUEVA CALCULADORA DE OFERTAS 🌟
     filtered = products.filter(p => {
       const pOld = Number(p.oldPrice) || 0;
       const pPrice = Number(p.price) || 0;
@@ -137,16 +137,15 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
     });
 
   } else if (isWishlist) {
-    // 🌟 LÓGICA DE EXTRACCIÓN DE FAVORITOS 🌟
-    const likedItems = JSON.parse(localStorage.getItem("userLikes") || "{}");
+    // 🌟 MAGIA: Ahora busca la lista privada de esta tienda
+    const likedKey = `userLikes_${storeData?.id || "global"}`;
+    const likedItems = JSON.parse(localStorage.getItem(likedKey) || "{}");
     filtered = products.filter(p => likedItems[p.id]);
 
   } else if (activeFilter && activeFilter !== "all") {
-    // Filtro por sesión específica
     filtered = products.filter(p => p.sessionId === activeFilter);
   }
 
-  // Si no hay filtro, muestra las categorías/sesiones
   if (!activeFilter || activeFilter === "all") {
     return (
       <div className="px-4 pb-24 space-y-10 animate-in fade-in duration-500">

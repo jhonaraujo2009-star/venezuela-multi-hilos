@@ -1,11 +1,19 @@
 import { useApp } from "../../context/AppContext";
 
 export default function HeroBanner({ activeFilter }) {
-  const { settings } = useApp();
+  // 🌟 CAMBIO: Extraemos storeData además de settings
+  const { settings, storeData } = useApp();
   const isExpanded = activeFilter === "all";
   
-  // Extraemos los logos de envíos (si existen)
-  const shipLogos = settings.shippingLogos || {};
+  // 🌟 MAGIA: Leemos los logos de envío de la franquicia, si no hay, usamos los globales
+  const shipLogos = storeData?.shippingLogos || settings?.shippingLogos || {};
+
+  // 🌟 MAGIA: Leemos los datos de la franquicia, si no hay, usamos los globales por defecto
+  const profileImage = storeData?.profileImage || settings.profileImage;
+  const heroTitle = storeData?.heroTitle || settings.heroTitle || "Mi Tienda";
+  const heroDescription = storeData?.heroDescription || settings.heroDescription;
+  const socialLinks = storeData?.socialLinks || settings.socialLinks || {};
+  const customIcons = storeData?.customIcons || settings.customIcons || {};
 
   return (
     <section 
@@ -15,28 +23,28 @@ export default function HeroBanner({ activeFilter }) {
     >
       <div className={`flex flex-col items-center justify-center transition-opacity duration-300 ${isExpanded ? "opacity-100" : "opacity-0"}`}>
         
-        {/* Imagen de Perfil */}
+        {/* Imagen de Perfil VIP */}
         <div className="relative mb-4">
           <div className="w-24 h-24 rounded-full border-4 border-white shadow-xl overflow-hidden bg-gradient-to-br from-pink-100 to-purple-100" style={{ borderColor: "var(--primary)" }}>
-            {settings.profileImage ? (
-              <img src={settings.profileImage} alt="Profile" className="w-full h-full object-cover" />
+            {profileImage ? (
+              <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-4xl">✨</div>
             )}
           </div>
         </div>
 
-        {/* Título y Descripción */}
-        <h1 className="text-2xl font-bold text-gray-900 text-center mb-2">{settings.heroTitle || "Mi Tienda"}</h1>
-        <p className="text-sm text-gray-500 text-center max-w-xs leading-relaxed">{settings.heroDescription}</p>
+        {/* Título y Descripción VIP */}
+        <h1 className="text-2xl font-bold text-gray-900 text-center mb-2">{heroTitle}</h1>
+        <p className="text-sm text-gray-500 text-center max-w-xs leading-relaxed">{heroDescription}</p>
 
-        {/* Redes Sociales */}
+        {/* Redes Sociales VIP */}
         <div className="flex items-center gap-5 mt-6">
           {['whatsapp', 'instagram', 'tiktok'].map((social) => (
-            settings.socialLinks?.[social] && (
-              <a key={social} href={settings.socialLinks[social]} target="_blank" rel="noreferrer" className="w-10 h-10 transition-transform hover:scale-110">
-                {settings.customIcons?.[social] ? (
-                  <img src={settings.customIcons[social]} className="w-full h-full object-contain" alt={social} />
+            socialLinks[social] && (
+              <a key={social} href={socialLinks[social]} target="_blank" rel="noreferrer" className="w-10 h-10 transition-transform hover:scale-110">
+                {customIcons[social] ? (
+                  <img src={customIcons[social]} className="w-full h-full object-contain" alt={social} />
                 ) : (
                   <div className="w-full h-full bg-gray-50 rounded-xl flex items-center justify-center text-xl shadow-sm">
                     {social === 'whatsapp' ? '💬' : social === 'instagram' ? '📸' : '🎵'}

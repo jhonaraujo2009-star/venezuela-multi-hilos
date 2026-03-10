@@ -10,17 +10,16 @@ import { CartProvider } from "./context/CartContext";
 import ProtectedRoute from "./components/shared/ProtectedRoute";
 
 // Páginas
+import HomePage from "./pages/HomePage"; 
 import StorePage from "./pages/StorePage";
 import AdminPage from "./pages/AdminPage";
 import LoginPage from "./pages/LoginPage";
 import QuestionsPage from "./pages/QuestionsPage";
-
-// IMPORTACIÓN DEL BOTÓN DE INSTALACIÓN
-import InstallButton from "./InstallButton";
+import RegisterStorePage from "./pages/RegisterStorePage";
+import SuperAdminPage from "./pages/SuperAdminPage"; // 🌟 Recuperado
 
 export default function App() {
   return (
-    // 🌟 AQUÍ ESTÁ LA MAGIA: El Fondo de Seda Premium 🌟
     <div className="min-h-screen bg-gradient-to-br from-white via-slate-50/60 to-pink-50/20 text-gray-900 selection:bg-pink-200 selection:text-pink-900 transition-colors duration-500">
       <BrowserRouter>
         <AuthProvider>
@@ -41,21 +40,27 @@ export default function App() {
                 }}
               />
               <Routes>
-                <Route path="/" element={<StorePage />} />
-                <Route path="/preguntas" element={<QuestionsPage />} />
+                
+                <Route path="/" element={<HomePage />} />
+                <Route path="/:storeId/preguntas" element={<QuestionsPage />} />
+                
                 <Route path="/login" element={<LoginPage />} />
+                <Route path="/registro-vendedor" element={<RegisterStorePage />} />
+                <Route path="/super-admin" element={<SuperAdminPage />} /> {/* 🌟 Recuperado */}
+                
                 <Route
-                  path="/admin/*"
+                  path="/:storeId/admin/*"
                   element={
                     <ProtectedRoute>
                       <AdminPage />
                     </ProtectedRoute>
                   }
                 />
+                
+                <Route path="/:storeId" element={<StorePage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
 
-              <InstallButton />
+              </Routes>
               
             </CartProvider>
           </AppProvider>

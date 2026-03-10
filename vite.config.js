@@ -7,6 +7,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      devOptions: {
+        enabled: true // 🌟 MAGIA: Esto enciende el botón mientras programamos en localhost
+      },
       manifest: {
         name: 'Luckathys Shop',
         short_name: 'Luckathys',
@@ -14,6 +17,7 @@ export default defineConfig({
         theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',
+        start_url: '/', 
         icons: [
           {
             src: '/logo192.png',

@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import {
-  collection, doc, setDoc, onSnapshot, addDoc, updateDoc, deleteDoc, serverTimestamp, getDocs
+  collection, doc, setDoc, onSnapshot, addDoc, updateDoc, deleteDoc, serverTimestamp, query, where
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../../config/firebase";
 import toast from "react-hot-toast";
+import { useApp } from "../../context/AppContext"; // 🌟 INYECTAMOS LA TIENDA
 
 const LOGISTICS_IDS = ["mrw", "zoom", "tealca"];
 
@@ -14,29 +15,44 @@ export default function AdminLogistics() {
   const [newCoupon, setNewCoupon] = useState({ code: "", type: "percent", value: "" });
   const [uploading, setUploading] = useState({});
   const [savingCoupon, setSavingCoupon] = useState(false);
+  
+  const { storeData } = useApp(); // 🌟 SABER DE QUIÉN ES LA TIENDA
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "logistics"), (snap) => {
+    if (!storeData?.id) return;
+
+    // 🌟 FILTRAMOS LA LOGÍSTICA POR TIENDA
+    const unsub = onSnapshot(query(collection(db, "logistics"), where("storeId", "==", storeData.id)), (snap) => {
       const data = {};
-      snap.docs.forEach((d) => { data[d.id] = d.data(); });
+      snap.docs.forEach((d) => { 
+        // Recuperamos el nombre original quitándole el storeId ("oscar_mrw" -> "mrw")
+        const originalId = d.id.replace(`${storeData.id}_`, "");
+        data[originalId] = d.data(); 
+      });
       setLogistics(data);
     });
-    const unsubCoupons = onSnapshot(collection(db, "coupons"), (snap) => {
+
+    // 🌟 FILTRAMOS LOS CUPONES POR TIENDA
+    const unsubCoupons = onSnapshot(query(collection(db, "coupons"), where("storeId", "==", storeData.id)), (snap) => {
       setCoupons(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
+
     return () => { unsub(); unsubCoupons(); };
-  }, []);
+  }, [storeData?.id]);
 
   const uploadLogo = async (id, file) => {
     setUploading({ ...uploading, [id]: true });
     try {
-      const r = ref(storage, `logistics/${id}`);
+      // 🌟 GUARDAMOS EL DOC CON PREFIJO (ej: "oscar_mrw") PARA QUE NO SOBREESCRIBA AL DE OTRO DUEÑO
+      const realDocId = `${storeData.id}_${id}`;
+      const r = ref(storage, `logistics/${realDocId}`);
       await uploadBytes(r, file);
       const url = await getDownloadURL(r);
-      await setDoc(doc(db, "logistics", id), {
+      await setDoc(doc(db, "logistics", realDocId), {
         name: id.toUpperCase(),
         logo: url,
         url: logistics[id]?.url || "",
+        storeId: storeData.id // Etiqueta de seguridad
       }, { merge: true });
       toast.success(`Logo de ${id.toUpperCase()} actualizado ✅`);
     } catch {
@@ -47,7 +63,11 @@ export default function AdminLogistics() {
   };
 
   const updateLogisticsUrl = async (id, url) => {
-    await setDoc(doc(db, "logistics", id), { url }, { merge: true });
+    const realDocId = `${storeData.id}_${id}`;
+    await setDoc(doc(db, "logistics", realDocId), { 
+      url, 
+      storeId: storeData.id 
+    }, { merge: true });
   };
 
   const addCoupon = async () => {
@@ -64,6 +84,7 @@ export default function AdminLogistics() {
         active: true,
         usageCount: 0,
         createdAt: serverTimestamp(),
+        storeId: storeData.id // 🌟 ASIGNAMOS EL CUPÓN AL DUEÑO
       });
       setNewCoupon({ code: "", type: "percent", value: "" });
       toast.success("Cupón creado ✅");

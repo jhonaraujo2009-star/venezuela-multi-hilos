@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import {
-  collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp
+  collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, where
 } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import toast from "react-hot-toast";
+import { useApp } from "../../context/AppContext"; // 🌟 Inyectamos el cerebro
 
 export default function AdminSessions() {
   const [sessions, setSessions] = useState([]);
@@ -11,18 +12,28 @@ export default function AdminSessions() {
   const [adding, setAdding] = useState(false);
   const [editId, setEditId] = useState(null);
   const [editName, setEditName] = useState("");
-  const [showForm, setShowForm] = useState(false); // NUEVO: Controla si la ventana se abre
+  const [showForm, setShowForm] = useState(false);
+  
+  const { storeData } = useApp(); // 🌟 Extraemos la tienda actual
 
   useEffect(() => {
+    if (!storeData?.id) return;
+
+    // 🌟 MAGIA: Solo busca las sesiones que pertenezcan a esta tienda
     const unsub = onSnapshot(
-      query(collection(db, "sessions"), orderBy("order")),
-      (snap) => setSessions(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      query(collection(db, "sessions"), where("storeId", "==", storeData.id)),
+      (snap) => {
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        // Las ordenamos manualmente para no pedir índices extra a Firebase
+        data.sort((a, b) => a.order - b.order); 
+        setSessions(data);
+      }
     );
     return unsub;
-  }, []);
+  }, [storeData?.id]);
 
   const addSession = async () => {
-    if (!newName.trim()) return;
+    if (!newName.trim() || !storeData?.id) return;
     setAdding(true);
     try {
       await addDoc(collection(db, "sessions"), {
@@ -31,9 +42,10 @@ export default function AdminSessions() {
         hidden: false,
         order: sessions.length,
         createdAt: serverTimestamp(),
+        storeId: storeData.id // 🌟 MAGIA: Guardamos a quién le pertenece esta sesión
       });
       setNewName("");
-      setShowForm(false); // Cierra la ventana al guardar
+      setShowForm(false);
       toast.success("Sesión creada ✅");
     } catch {
       toast.error("Error al crear sesión");
@@ -63,7 +75,6 @@ export default function AdminSessions() {
 
   return (
     <div className="space-y-6 pb-20">
-      {/* Título y Botón Principal Arreglado */}
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-black text-gray-900 italic">📂 Sesiones</h2>
         <button
@@ -74,7 +85,6 @@ export default function AdminSessions() {
         </button>
       </div>
 
-      {/* Lista de Sesiones */}
       <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden">
         {sessions.length === 0 ? (
           <p className="text-center text-gray-400 py-8 text-sm">No hay sesiones todavía.</p>
@@ -130,7 +140,6 @@ export default function AdminSessions() {
         )}
       </div>
 
-      {/* Ventana Emergente (Modal) Conectada */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">

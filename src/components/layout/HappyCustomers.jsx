@@ -1,8 +1,10 @@
 import { useApp } from "../../context/AppContext";
 
 export default function HappyCustomers() {
-  const { settings } = useApp();
-  const images = settings.happyCustomerImages || [];
+  const { settings, storeData } = useApp(); // 🌟 Agregamos storeData
+  
+  // 🌟 MAGIA: Buscamos las fotos de la tienda actual
+  const images = storeData?.happyCustomerImages || settings.happyCustomerImages || [];
 
   if (images.length === 0) return null;
 

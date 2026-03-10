@@ -2,23 +2,44 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "../config/firebase";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, logout } = useAuth(); // 🌟 MAGIA: Traemos la función correcta de logout
   const navigate = useNavigate();
 
   const handleLogin = async () => {
     if (!email || !password) { toast.error("Completa todos los campos"); return; }
     setLoading(true);
     try {
-      await login(email, password);
-      navigate("/admin");
-      toast.success("¡Bienvenido al panel admin! 🔐");
-    } catch {
-      toast.error("Credenciales incorrectas");
+      // 1. Iniciar sesión en Firebase Auth (La puerta principal)
+      const userCred = await login(email, password);
+      const userUid = userCred.user.uid;
+      
+      // 2. Buscar la tienda que te pertenece
+      const q = query(collection(db, "stores"), where("ownerId", "==", userUid));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        const storeDoc = querySnapshot.docs[0]; 
+        navigate(`/${storeDoc.id}/admin`); // Te enviamos a tu panel privado
+        toast.success("¡Bienvenido al panel admin! 🔐");
+      } else {
+        toast.error("Tu usuario no tiene una tienda asignada.");
+        logout(); // Cierra la sesión si no tiene tienda
+      }
+    } catch (error) {
+      console.error("Detalle del error:", error); // 🌟 Ahora sabremos exactamente qué falla
+      // 🌟 MAGIA: Separa los errores para no dar falsas alarmas
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+        toast.error("Correo o contraseña incorrectos ❌");
+      } else {
+        toast.error("Error al conectar con la tienda. Intenta de nuevo.");
+      }
     } finally {
       setLoading(false);
     }
@@ -55,12 +76,12 @@ export default function LoginPage() {
             className="w-full py-4 rounded-2xl text-white font-bold text-base shadow-lg disabled:opacity-50"
             style={{ background: "var(--primary)" }}
           >
-            {loading ? "Ingresando..." : "Ingresar"}
+            {loading ? "Verificando acceso..." : "Ingresar"}
           </button>
         </div>
 
         <button onClick={() => navigate("/")} className="w-full text-center text-sm text-gray-400 mt-4 hover:text-gray-600">
-          ← Volver a la tienda
+          ← Volver a la tienda principal
         </button>
       </div>
     </div>

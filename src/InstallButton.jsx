@@ -1,60 +1,120 @@
-import React, { useState, useEffect } from 'react';
-// Importamos el cerebro del carrito para que el botón sea inteligente
-import { useCart } from "./context/CartContext";
+import { useState, useEffect } from "react";
+import { useApp } from "./context/AppContext";
 
-const InstallButton = () => {
+export default function InstallButton() {
+  const { storeData } = useApp();
   const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [isVisible, setIsVisible] = useState(false);
-  
-  // Extraemos la información del carrito
-  const { itemCount, isOpen } = useCart();
+  const [isInstallable, setIsInstallable] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
-    const handler = (e) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setIsVisible(true);
-    };
+    // 🌟 1. MAGIA AVANZADA: GENERAMOS EL INSTALADOR DINÁMICO 🌟
+    if (storeData?.id) {
+      const manifest = {
+        name: storeData.nombre || "Mi Tienda",
+        short_name: storeData.nombre || "Tienda",
+        // 🎯 EL TRUCO ARREGLADO: Usamos la URL absoluta para que Chrome no se confunda
+        start_url: `${window.location.origin}/${storeData.id}`, 
+        display: "standalone",
+        background_color: "#ffffff",
+        theme_color: storeData.primaryColor || "#ec4899",
+        icons: [
+          {
+            src: storeData.appLogos?.icon192 || "https://cdn-icons-png.flaticon.com/512/3144/3144456.png",
+            sizes: "192x192",
+            type: "image/png"
+          },
+          {
+            src: storeData.appLogos?.icon512 || "https://cdn-icons-png.flaticon.com/512/3144/3144456.png",
+            sizes: "512x512",
+            type: "image/png"
+          }
+        ]
+      };
 
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
+      // Convertimos el JSON en un archivo virtual
+      const stringManifest = JSON.stringify(manifest);
+      const blob = new Blob([stringManifest], { type: 'application/json' });
+      const manifestURL = URL.createObjectURL(blob);
 
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    
-    if (outcome === 'accepted') {
-      console.log('El usuario aceptó instalar la App');
+      // Le inyectamos el archivo virtual a la página para que el celular lo lea
+      let linkTag = document.querySelector('link[rel="manifest"]');
+      if (!linkTag) {
+        linkTag = document.createElement('link');
+        linkTag.rel = 'manifest';
+        document.head.appendChild(linkTag);
+      }
+      linkTag.href = manifestURL;
     }
 
+    // 🌟 2. CAPTURAMOS EL AVISO DEL CELULAR PARA INSTALAR 🌟
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault(); // Evitamos que salga el feo aviso por defecto de Android
+      setDeferredPrompt(e); // Guardamos el aviso para usarlo en nuestro propio botón
+      setIsInstallable(true);
+    };
+
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setIsInstallable(false);
+      console.log('App instalada con éxito 🚀');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    // Revisamos si ya la tiene instalada
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+       setIsInstalled(true);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, [storeData]);
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return;
+    
+    // Mostramos el aviso nativo de instalación
+    deferredPrompt.prompt();
+    
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      console.log('El usuario aceptó instalar la app');
+    }
+    
     setDeferredPrompt(null);
-    setIsVisible(false);
+    setIsInstallable(false);
   };
 
-  // REGLA 1: Si no hay prompt o el carrito está abierto, lo ocultamos
-  if (!isVisible || isOpen) return null;
-
-  // 🌟 MAGIA: Si hay productos en la bolsa, la barra de pago está visible (mide ~90px). 
-  // Así que subimos este botón a 100px para que quede justo encima flotando en armonía.
-  const isCheckoutBarVisible = itemCount > 0;
-  const bottomPosition = isCheckoutBarVisible ? '100px' : '24px';
+  // Si no se puede instalar, o ya está instalada, o no hay tienda... no mostramos nada
+  if (!isInstallable || isInstalled || !storeData) return null;
 
   return (
-    <div 
-      className="fixed left-1/2 -translate-x-1/2 z-[45] w-[92%] max-w-md transition-all duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
-      style={{ bottom: bottomPosition }}
-    >
-      <button
-        onClick={handleInstallClick}
-        className="w-full py-3.5 bg-white/90 backdrop-blur-xl border border-white shadow-[0_15px_40px_-10px_rgba(0,0,0,0.15)] rounded-2xl text-[11px] font-black text-gray-800 uppercase tracking-[0.2em] flex items-center justify-center gap-3 active:scale-95 transition-transform"
-      >
-        <span className="text-xl animate-bounce">📲</span>
-        Descargar App de la Tienda
-      </button>
+    // 🌟 MAGIA: "md:hidden" asegura que este botón NO aparezca en monitores de PC, solo en celulares
+    <div className="fixed bottom-24 left-4 right-4 z-[60] animate-in slide-in-from-bottom-5 duration-700 fade-in md:hidden">
+      <div className="bg-white/95 backdrop-blur-2xl p-4 rounded-[2rem] shadow-[0_20px_60px_rgba(0,0,0,0.15)] border border-white flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+           <img 
+              src={storeData.appLogos?.icon192 || "https://cdn-icons-png.flaticon.com/512/3144/3144456.png"} 
+              alt="App Icon" 
+              className="w-12 h-12 rounded-2xl object-cover shadow-sm" 
+           />
+           <div>
+             <p className="text-sm font-black text-gray-900 leading-tight">Instalar App</p>
+             <p className="text-[10px] text-gray-500 font-bold tracking-widest uppercase mt-0.5">Tienda {storeData.nombre}</p>
+           </div>
+        </div>
+        <button 
+          onClick={handleInstall}
+          className="px-6 py-3 rounded-2xl text-white text-xs font-black uppercase tracking-[0.2em] shadow-lg active:scale-95 transition-transform"
+          style={{ background: storeData.primaryColor || "var(--primary)" }}
+        >
+          Instalar
+        </button>
+      </div>
     </div>
   );
-};
-
-export default InstallButton;
+}

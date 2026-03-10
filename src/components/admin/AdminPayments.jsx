@@ -1,23 +1,12 @@
 import { useState, useEffect } from "react";
 import {
-  collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp
+  collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, query, where
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../../config/firebase";
+import { db } from "../../config/firebase";
 import toast from "react-hot-toast";
+import { useApp } from "../../context/AppContext"; // 🌟 INYECTAMOS LA TIENDA
 
-const SEED = {
-  bankName: "Banco de Venezuela",
-  holderName: "Jhon Araujo",
-  idNumber: "V-23493744",
-  phone: "04120496690",
-  accountNumber: "",
-  type: "mobile_payment",
-  order: 1,
-  logo: "",
-};
-
-function PaymentForm({ payment, onClose }) {
+function PaymentForm({ payment, onClose, storeData }) {
   const [form, setForm] = useState({
     bankName: payment?.bankName || "",
     holderName: payment?.holderName || "",
@@ -30,15 +19,30 @@ function PaymentForm({ payment, onClose }) {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // 🌟 CIRUGÍA LÁSER: Conectamos la subida a Cloudinary en lugar de Firebase Storage
   const handleLogoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     setUploading(true);
+    
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", "tienda_maquillaje"); // Tu carpeta de Cloudinary
+
     try {
-      const r = ref(storage, `payments/${Date.now()}-${file.name}`);
-      await uploadBytes(r, file);
-      const url = await getDownloadURL(r);
-      setForm({ ...form, logo: url });
+      const res = await fetch("https://api.cloudinary.com/v1_1/dp3abweme/image/upload", { 
+        method: "POST", 
+        body: formData 
+      });
+      
+      if (!res.ok) throw new Error("Error en la subida a Cloudinary");
+      
+      const data = await res.json();
+      setForm({ ...form, logo: data.secure_url });
+      toast.success("Logo subido con éxito");
+    } catch (error) {
+      console.error(error);
+      toast.error("Error al subir el logo");
     } finally {
       setUploading(false);
     }
@@ -55,7 +59,12 @@ function PaymentForm({ payment, onClose }) {
         await updateDoc(doc(db, "payments", payment.id), form);
         toast.success("Método actualizado ✅");
       } else {
-        await addDoc(collection(db, "payments"), { ...form, createdAt: serverTimestamp() });
+        // 🌟 ASIGNAMOS EL MÉTODO DE PAGO AL DUEÑO ACTUAL
+        await addDoc(collection(db, "payments"), { 
+          ...form, 
+          createdAt: serverTimestamp(),
+          storeId: storeData.id 
+        });
         toast.success("Método añadido ✅");
       }
       onClose();
@@ -70,7 +79,7 @@ function PaymentForm({ payment, onClose }) {
     { key: "bankName", label: "Banco / Método", required: true },
     { key: "holderName", label: "Titular", required: true },
     { key: "idNumber", label: "C.I. / RIF" },
-    { key: "phone", label: "Teléfono de Contacto (WhatsApp)" }, // <--- AQUÍ SE INDICA EL TELÉFONO DE WHATSAPP
+    { key: "phone", label: "Teléfono de Contacto (WhatsApp)" }, 
     { key: "accountNumber", label: "Número de cuenta" },
   ];
 
@@ -116,17 +125,17 @@ export default function AdminPayments() {
   const [payments, setPayments] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editPayment, setEditPayment] = useState(null);
+  const { storeData } = useApp(); // 🌟 SABER DE QUIÉN ES LA TIENDA
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "payments"), (snap) => {
+    if (!storeData?.id) return;
+    // 🌟 SOLO TRAE LOS MÉTODOS DE PAGO DE ESTA TIENDA
+    const unsub = onSnapshot(query(collection(db, "payments"), where("storeId", "==", storeData.id)), (snap) => {
       const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      if (data.length === 0) {
-        addDoc(collection(db, "payments"), { ...SEED, createdAt: serverTimestamp() });
-      }
       setPayments(data);
     });
     return unsub;
-  }, []);
+  }, [storeData?.id]);
 
   const deletePayment = async (id) => {
     if (!confirm("¿Eliminar método de pago?")) return;
@@ -176,7 +185,7 @@ export default function AdminPayments() {
       </div>
 
       {showForm && (
-        <PaymentForm payment={editPayment} onClose={() => { setShowForm(false); setEditPayment(null); }} />
+        <PaymentForm payment={editPayment} storeData={storeData} onClose={() => { setShowForm(false); setEditPayment(null); }} />
       )}
     </div>
   );

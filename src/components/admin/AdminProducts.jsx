@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import {
-  collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, getDocs
+  collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, getDocs, query, where
 } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import toast from "react-hot-toast";
+import { useApp } from "../../context/AppContext"; // 🌟 INYECTAMOS EL CEREBRO
 
 // ==========================================
 // 1. VARIANT MANAGER
@@ -54,7 +55,8 @@ function VariantManager({ variants, onChange }) {
 // ==========================================
 // 2. PRODUCT FORM
 // ==========================================
-function ProductForm({ sessions, product, onClose }) {
+// 🌟 RECIBIMOS storeData para saber de quién es el producto
+function ProductForm({ sessions, product, onClose, storeData }) {
   const [form, setForm] = useState({
     name: product?.name || "",
     description: product?.description || "",
@@ -110,6 +112,12 @@ function ProductForm({ sessions, product, onClose }) {
       toast.error("Completa nombre, precio y sesión");
       return;
     }
+    
+    if (!storeData?.id) {
+      toast.error("Error crítico: No se detectó tu tienda.");
+      return;
+    }
+
     setSaving(true);
     try {
       let finalOfferEndsAt = form.offerEndsAt;
@@ -127,6 +135,7 @@ function ProductForm({ sessions, product, onClose }) {
         offerDiscount: form.offerDiscount ? parseFloat(form.offerDiscount) : null,
         offerEndsAt: finalOfferEndsAt,
         updatedAt: serverTimestamp(),
+        storeId: storeData.id // 🌟 MAGIA: Le pegamos la etiqueta de la tienda al producto
       };
 
       if (product?.id) {
@@ -259,20 +268,31 @@ export default function AdminProducts() {
   const [formProduct, setFormProduct] = useState(null);
   const [showForm, setShowForm] = useState(false);
   
+  // 🌟 EXTRAEMOS LOS DATOS DE LA TIENDA ACTUAL
+  const { storeData } = useApp();
+
   // ESTADOS DEL BUSCADOR Y ACORDEÓN
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedSessionId, setExpandedSessionId] = useState(null);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "products"), (snap) => {
+    if (!storeData?.id) return; // Esperar a tener el ID de la tienda
+
+    // 🌟 MAGIA 1: El panel admin AHORA SOLO CARGA los productos de la tienda actual
+    const qProducts = query(collection(db, "products"), where("storeId", "==", storeData.id));
+    const unsub = onSnapshot(qProducts, (snap) => {
       setProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       setLoading(false);
     });
-    getDocs(collection(db, "sessions")).then((snap) =>
+
+    // 🌟 MAGIA 2: El panel admin AHORA SOLO CARGA las sesiones (carpetas) de la tienda actual
+    const qSessions = query(collection(db, "sessions"), where("storeId", "==", storeData.id));
+    getDocs(qSessions).then((snap) =>
       setSessions(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
+
     return unsub;
-  }, []);
+  }, [storeData?.id]); // Recarga si cambia la tienda
 
   const deleteProduct = async (id, e) => {
     e.stopPropagation(); 
@@ -361,7 +381,7 @@ export default function AdminProducts() {
                 {searchTerm ? "🕵️‍♂️" : "📁"}
               </span>
               <p className="text-gray-500 text-sm font-semibold">
-                {searchTerm ? `No se encontraron productos para "${searchTerm}"` : "Crea una categoría y agrega productos."}
+                {searchTerm ? `No se encontraron productos para "${searchTerm}"` : "Tu inventario está vacío. ¡Sube tu primer producto!"}
               </p>
             </div>
           ) : (
@@ -387,7 +407,6 @@ export default function AdminProducts() {
                   </div>
                 </button>
 
-                {/* 🌟 LA MAGIA DE CSS GRID: Adiós saltos y cortes 🌟 */}
                 <div 
                   className={`grid transition-all duration-500 ease-in-out ${
                     isExpanded(group.id) ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
@@ -446,6 +465,7 @@ export default function AdminProducts() {
         <ProductForm
           sessions={sessions}
           product={formProduct}
+          storeData={storeData} // 🌟 PASAMOS LA TIENDA AL FORMULARIO
           onClose={() => { setShowForm(false); setFormProduct(null); }}
         />
       )}

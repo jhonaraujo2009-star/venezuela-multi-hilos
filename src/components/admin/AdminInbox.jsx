@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import {
-  collection, onSnapshot, query, orderBy, updateDoc, doc, getDocs, runTransaction, deleteDoc
+  collection, onSnapshot, query, where, updateDoc, doc, getDocs, runTransaction, deleteDoc
 } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import toast from "react-hot-toast";
+import { useApp } from "../../context/AppContext"; // 🌟 INYECTAMOS LA TIENDA
 
 function ReplyBox({ value, onChange, onSubmit, saving }) {
   return (
@@ -32,25 +33,43 @@ export default function AdminInbox() {
   const [replyText, setReplyText] = useState({});
   const [saving, setSaving] = useState({});
   const [orders, setOrders] = useState([]);
+  
+  const { storeData } = useApp(); // 🌟 SABER DE QUIÉN ES LA TIENDA
 
   useEffect(() => {
-    const unsubQ = onSnapshot(query(collection(db, "questions"), orderBy("createdAt", "desc")), (snap) => {
-      setQuestions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    if (!storeData?.id) return;
+
+    // 🌟 FILTRAMOS LAS PREGUNTAS POR TIENDA Y LAS ORDENAMOS EN MEMORIA PARA EVITAR ERRORES
+    const unsubQ = onSnapshot(query(collection(db, "questions"), where("storeId", "==", storeData.id)), (snap) => {
+      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      data.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+      setQuestions(data);
     });
-    const unsubO = onSnapshot(query(collection(db, "orders"), orderBy("createdAt", "desc")), (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+
+    // 🌟 FILTRAMOS LOS PEDIDOS POR TIENDA
+    const unsubO = onSnapshot(query(collection(db, "orders"), where("storeId", "==", storeData.id)), (snap) => {
+      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      data.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+      setOrders(data);
     });
-    getDocs(collection(db, "products")).then((snap) => {
+
+    // 🌟 FILTRAMOS LOS PRODUCTOS POR TIENDA PARA LOS COMENTARIOS
+    getDocs(query(collection(db, "products"), where("storeId", "==", storeData.id))).then((snap) => {
       setProducts(snap.docs.map((d) => ({ id: d.id, name: d.data().name })));
     });
+
     return () => { unsubQ(); unsubO(); };
-  }, []);
+  }, [storeData?.id]);
 
   useEffect(() => {
     if (!selectedProduct) return;
     const unsub = onSnapshot(
-      query(collection(db, "products", selectedProduct, "comments"), orderBy("createdAt", "desc")),
-      (snap) => setComments(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      collection(db, "products", selectedProduct, "comments"),
+      (snap) => {
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        data.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+        setComments(data);
+      }
     );
     return unsub;
   }, [selectedProduct]);
@@ -96,7 +115,6 @@ export default function AdminInbox() {
             const currentData = producto.doc.data();
             let updateData = {};
 
-            // CORRECCIÓN: Busca la variante sin importar si viene como texto u objeto
             if (currentData.variants && currentData.variants.length > 0 && producto.item.variant) {
               const labelABuscar = typeof producto.item.variant === 'object' 
                 ? producto.item.variant.label 
