@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, onSnapshot } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../context/AuthContext";
@@ -17,8 +17,29 @@ export default function Header({ onProductClick, onFilter }) {
   const menuRef = useRef(null);
   const { itemCount, setIsOpen } = useCart();
   const { user } = useAuth();
+  
   const { storeData } = useApp(); 
   const navigate = useNavigate();
+
+  // 🌟 ESTADO PARA EL BRANDING MATRIZ EN TIEMPO REAL
+  const [globalBranding, setGlobalBranding] = useState({
+    name: "Nuestra Empresa",
+    logo: null
+  });
+
+  // 🌟 ESCUCHAMOS DIRECTAMENTE AL SUPER ADMIN (settings/global)
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "settings", "global"), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setGlobalBranding({
+          name: data.companyName || "Nuestra Empresa",
+          logo: data.companyLogo || null
+        });
+      }
+    });
+    return () => unsub(); 
+  }, []);
 
   // MANTENEMOS LA LÓGICA INTACTA
   useEffect(() => {
@@ -78,13 +99,12 @@ export default function Header({ onProductClick, onFilter }) {
 
   return (
     <>
-      {/* 🌟 1. BUSCADOR PANTALLA COMPLETA (SEARCH OVERLAY PREMIUM) 🌟 */}
+      {/* 🌟 BUSCADOR PANTALLA COMPLETA */}
       <div 
         className={`fixed inset-0 z-[100] bg-white/95 backdrop-blur-3xl flex flex-col transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${
           searchOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-12'
         }`}
       >
-        {/* Barra de Búsqueda Gigante */}
         <div className="flex items-center px-6 py-6 sm:py-10 border-b border-gray-100 max-w-4xl mx-auto w-full">
           <svg className="w-8 h-8 text-gray-400 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -104,7 +124,6 @@ export default function Header({ onProductClick, onFilter }) {
           </button>
         </div>
 
-        {/* Resultados del Buscador */}
         <div className="flex-1 overflow-y-auto px-6 py-8 max-w-4xl mx-auto w-full">
           {searchQuery && (searchResults.length > 0 || searching) && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -136,7 +155,6 @@ export default function Header({ onProductClick, onFilter }) {
             </div>
           )}
           
-          {/* Mensaje si no hay resultados ni está buscando */}
           {searchQuery && !searching && searchResults.length === 0 && (
              <div className="text-center py-20 text-gray-400">
                <span className="text-4xl block mb-4">🔍</span>
@@ -146,43 +164,40 @@ export default function Header({ onProductClick, onFilter }) {
         </div>
       </div>
 
-      {/* 🌟 2. CABECERA PRINCIPAL (HEADER NORMAL) 🌟 */}
+      {/* 🌟 CABECERA PRINCIPAL (HEADER NORMAL) */}
       <header className="fixed top-0 left-0 right-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100 h-14 transition-all duration-300">
         <div className="max-w-md mx-auto px-4 h-full flex items-center justify-between gap-3">
           
-          {/* Logo Dinámico con Placa de Verificación PRO */}
+          {/* 🌟 LOGO O NOMBRE ENCHAPADO EN ORO (ESTILO EK EMPIRE) 🌟 */}
           <div 
             className="flex-shrink-0 cursor-pointer flex items-center gap-1.5" 
             onClick={() => { 
+              // 1. Resetea filtros por seguridad
               if(onFilter) onFilter("all"); 
+              // 2. Sube la pantalla arriba
               window.scrollTo(0, 0); 
+              // 3. 🌟 MAGIA: Te envía al INDEX PRINCIPAL DE LA PLATAFORMA (/)
+              navigate("/");
             }}
           >
-            <span className="text-xl font-black tracking-tighter uppercase flex items-center gap-1.5" style={{ color: "var(--primary)" }}>
-              ✨ {storeData?.nombre || storeData?.id || "Mi Tienda"}
-              
-              {storeData?.verification?.status === "verified" ? (
-                <div className="relative flex items-center justify-center ml-1" title="Tienda Verificada Oficialmente">
-                  <span className="absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-20 animate-ping"></span>
-                  <svg className="relative w-5 h-5 text-blue-500 drop-shadow-[0_0_6px_rgba(59,130,246,0.6)]" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
-                  </svg>
-                </div>
-              ) : (
-                <div className="ml-1.5 px-2.5 py-1 text-[8px] font-black bg-gradient-to-r from-gray-50 to-gray-100 text-gray-500 rounded-full border border-gray-200/60 flex items-center gap-1.5 tracking-widest uppercase shadow-[0_2px_8px_rgba(0,0,0,0.04)]" title="Solicita tu verificación en el Panel Admin">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-gray-400"></span>
-                  </span>
-                  No Verificado
-                </div>
-              )}
-            </span>
+            {globalBranding.logo ? (
+              <img src={globalBranding.logo} alt="Empresa Matriz" className="h-8 w-auto object-contain drop-shadow-sm" />
+            ) : (
+              <span 
+                className="text-xl sm:text-[22px] font-black tracking-tighter uppercase text-transparent bg-clip-text"
+                style={{
+                  backgroundImage: "linear-gradient(to right, #462523 0%, #cb9b51 22%, #f6e27a 45%, #ffffff 50%, #f6e27a 55%, #cb9b51 78%, #462523 100%)",
+                  filter: "drop-shadow(0px 2px 2px rgba(0,0,0,0.4))",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent"
+                }}
+              >
+                {globalBranding.name}
+              </span>
+            )}
           </div>
 
-          {/* Botonera */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            
             <button 
               onClick={() => setSearchOpen(true)} 
               className="p-2.5 rounded-full hover:bg-gray-50 transition-colors active:scale-90 text-gray-800"
@@ -196,6 +211,7 @@ export default function Header({ onProductClick, onFilter }) {
               onClick={() => { 
                 if(onFilter) onFilter("wishlist"); 
                 window.scrollTo(0, 0); 
+                if(storeData?.id) navigate(`/${storeData.id}`);
               }} 
               className="p-2.5 rounded-full hover:bg-pink-50 hover:text-pink-500 transition-colors active:scale-90 text-gray-800"
             >
@@ -204,7 +220,6 @@ export default function Header({ onProductClick, onFilter }) {
               </svg>
             </button>
 
-            {/* 🌟 3. NUEVO ICONO DE CARRITO DE COMPRAS 🌟 */}
             <button 
               onClick={() => setIsOpen(true)} 
               className="relative p-2.5 rounded-full hover:bg-gray-50 transition-colors active:scale-90 text-gray-800"
@@ -222,7 +237,6 @@ export default function Header({ onProductClick, onFilter }) {
               )}
             </button>
 
-            {/* 🌟 4. MENÚ DE 3 PUNTOS LIMPIO (SOLO ADMIN) 🌟 */}
             <div className="relative" ref={menuRef}>
               <button 
                 onClick={() => setMenuOpen(!menuOpen)} 
