@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, getDoc, updateDoc, increment } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import { useCart } from "../../context/CartContext";
 import { useApp } from "../../context/AppContext";
@@ -13,13 +13,12 @@ export default function CartDrawer() {
   const [checkingCoupon, setCheckingCoupon] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [selectedPayment, setSelectedPayment] = useState(null);
-  const [step, setStep] = useState(1); // 1: Bolsa, 2: Checkout
+  const [step, setStep] = useState(1); 
   const [customer, setCustomer] = useState({ name: "", phone: "" });
 
   const freeShippingProgress = Math.min(100, (total / settings.freeShippingGoal) * 100);
   const remaining = Math.max(0, settings.freeShippingGoal - total);
 
-  // 🌟 MAGIA: Cargar métodos de pago SOLO de la tienda actual
   useEffect(() => {
     if (isOpen && storeData?.id) {
       const loadPayments = async () => {
@@ -29,11 +28,10 @@ export default function CartDrawer() {
       };
       loadPayments();
     } else if (!isOpen) {
-      setStep(1); // Resetear al cerrar
+      setStep(1); 
     }
   }, [isOpen, storeData?.id]);
 
-  // 🌟 MAGIA: Buscar cupones SOLO de la tienda actual
   const applyCoupon = async () => {
     if (!couponCode.trim() || !storeData?.id) return;
     setCheckingCoupon(true);
@@ -62,20 +60,49 @@ export default function CartDrawer() {
     if (!selectedPayment) return toast.error("Elige cómo vas a pagar");
     if (!customer.name || !customer.phone) return toast.error("Dinos tu nombre y teléfono");
 
-    // 🌟 MAGIA LÁSER: Nuevo orden de prioridad para el WhatsApp 🌟
-    // 1. Teléfono del Método de Pago
-    // 2. Número de WhatsApp VIP del dueño
-    // 3. Teléfono viejo de la tienda
-    // 4. Teléfono global de la plataforma
     const targetPhone = selectedPayment?.phone || storeData?.whatsappWidget?.number || storeData?.telefono || settings.whatsappNumber;
 
     try {
       const orderData = { ...customer, paymentId: selectedPayment.id, total };
-      await createOrder(orderData);
+      await createOrder(orderData); 
+
+      // 🌟 MAGIA FINANCIERA: LECTURA DEL RADAR Y LLAVE MAESTRA 🌟
+      try {
+        const globalSnap = await getDoc(doc(db, "settings", "global"));
+        const isCommissionActive = globalSnap.exists() ? globalSnap.data().isCommissionActive : false;
+        
+        // LEEMOS EL RADAR DEL NAVEGADOR
+        const origenVenta = sessionStorage.getItem("origenVenta");
+
+        if (storeData?.id) {
+          // SOLO COBRA SI LA LLAVE ESTÁ ENCENDIDA *Y* EL CLIENTE VINO DEL INDEX
+          if (isCommissionActive && origenVenta === "index_super_admin") {
+            const commissionRate = storeData.comision_porcentaje || 5; 
+            const commissionAmount = (total * commissionRate) / 100;
+            
+            await updateDoc(doc(db, "stores", storeData.id), {
+              deuda_comision: increment(commissionAmount),
+              ventas_consolidadas: increment(1)
+            });
+
+            // Limpiamos el radar para que si mañana compra directo, no le cobre
+            sessionStorage.removeItem("origenVenta"); 
+            
+          } else {
+            // SI VINO DIRECTO AL LINK DEL VENDEDOR (O LA LLAVE ESTÁ APAGADA): NO COBRA
+            await updateDoc(doc(db, "stores", storeData.id), {
+              ventas_consolidadas: increment(1)
+            });
+          }
+        }
+      } catch(e) { 
+        console.error("Error financiero silencioso:", e); 
+      }
+      // ------------------------------------------------------------------
 
       const itemLines = items.map((i) => `• ${i.product.name}${i.variant ? ` [${i.variant.label}]` : ""} (x${i.quantity})`).join("\n");
       
-      const message = `🛍️ *NUEVA ORDEN - ${storeData?.nombre ? storeData.nombre.toUpperCase() : "LUCKATHYS SHOP"}*\n\n` +
+      const message = `🛍️ *NUEVA ORDEN - ${storeData?.nombre ? storeData.nombre.toUpperCase() : "TIENDA"}*\n\n` +
                       `👤 *Cliente:* ${customer.name}\n` +
                       `📞 *Teléfono:* ${customer.phone}\n\n` +
                       `📦 *Pedido:*\n${itemLines}\n\n` +
@@ -104,7 +131,6 @@ export default function CartDrawer() {
       
       <div className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-white z-50 flex flex-col shadow-2xl animate-in slide-in-from-right duration-500 overflow-hidden">
         
-        {/* HEADER VIP */}
         <div className="px-6 py-6 border-b border-gray-50 flex items-center justify-between bg-white/80 backdrop-blur-md sticky top-0 z-10">
           <div>
             <h2 className="text-xl font-black text-gray-900 tracking-tight uppercase">
@@ -117,12 +143,10 @@ export default function CartDrawer() {
           <button onClick={() => setIsOpen(false)} className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-pink-50 hover:text-pink-500 transition-all">✕</button>
         </div>
 
-        {/* CONTENIDO SCROLLABLE */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
           
           {step === 1 ? (
             <>
-              {/* VISTA 1: BOLSA DE PRODUCTOS */}
               {items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
                   <span className="text-6xl mb-4">🛍️</span>
@@ -156,7 +180,6 @@ export default function CartDrawer() {
               )}
             </>
           ) : (
-            /* VISTA 2: FORMULARIO DE PAGO */
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
               <div className="space-y-3">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Información de Entrega</label>
@@ -175,10 +198,8 @@ export default function CartDrawer() {
                       onClick={() => setSelectedPayment(pm)}
                       className={`w-full flex flex-col p-4 rounded-[1.8rem] border-2 transition-all text-left ${selectedPayment?.id === pm.id ? "border-pink-500 bg-pink-50 shadow-md scale-[1.02]" : "border-gray-50 bg-gray-50/50 opacity-70 hover:opacity-100 hover:bg-white"}`}
                     >
-                      {/* Cabecera del Banco */}
                       <div className="flex items-center gap-4 w-full">
                         <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-2xl shadow-sm overflow-hidden flex-shrink-0">
-                          {/* 🌟 MAGIA: Si hay logo lo muestra, si no el emoji */}
                           {pm.logo ? (
                             <img src={pm.logo} alt={pm.bankName} className="w-full h-full object-contain p-1" />
                           ) : (
@@ -192,7 +213,6 @@ export default function CartDrawer() {
                         {selectedPayment?.id === pm.id && <div className="text-pink-500 font-bold text-xl">✔</div>}
                       </div>
 
-                      {/* 🌟 MAGIA: Acordeón con los Datos (Solo se muestra si está seleccionado) */}
                       {selectedPayment?.id === pm.id && (
                         <div className="mt-4 pt-4 border-t border-pink-200/50 w-full space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
                           {pm.idNumber && (
@@ -218,11 +238,9 @@ export default function CartDrawer() {
           )}
         </div>
 
-        {/* FOOTER: TOTALES Y ACCIONES */}
         {items.length > 0 && (
           <div className="px-8 py-8 bg-white border-t border-gray-50 space-y-5 shadow-[0_-10px_40px_rgba(0,0,0,0.03)]">
             
-            {/* BARRA DE ENVÍO GRATIS (Solo en Paso 1) */}
             {step === 1 && (
               <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100">
                 <div className="flex justify-between items-center mb-2">
@@ -235,7 +253,6 @@ export default function CartDrawer() {
               </div>
             )}
 
-            {/* CUPONES (Solo en Paso 1) */}
             {step === 1 && !coupon && (
               <div className="flex gap-2">
                 <input 
@@ -254,7 +271,6 @@ export default function CartDrawer() {
               </div>
             )}
 
-            {/* RESUMEN DE PRECIOS */}
             <div className="space-y-2">
               <div className="flex justify-between text-xs font-bold text-gray-400"><span>SUBTOTAL</span><span>${subtotal.toFixed(2)}</span></div>
               {discount > 0 && <div className="flex justify-between text-xs font-bold text-green-500"><span>DESCUENTO</span><span>-${discount.toFixed(2)}</span></div>}
@@ -268,7 +284,6 @@ export default function CartDrawer() {
               </div>
             </div>
 
-            {/* BOTONES DE ACCIÓN */}
             <div className="flex flex-col gap-3">
               {step === 1 ? (
                 <button 

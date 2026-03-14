@@ -1,16 +1,40 @@
-import { useState } from "react";
+import { useState, useEffect } from "react"; // 🌟 AGREGAMOS useEffect
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../config/firebase";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login, logout } = useAuth(); // 🌟 MAGIA: Traemos la función correcta de logout
+  
+  // 🌟 MAGIA: Traemos currentUser para saber si ya hay alguien adentro
+  const { login, logout, currentUser, user } = useAuth(); 
   const navigate = useNavigate();
+
+  // 🌟 MAGIA VIP: Si entras a /login y YA tienes sesión, te patea directo a tu panel
+  useEffect(() => {
+    const activeUser = currentUser || user;
+    if (activeUser) {
+      if (activeUser.email === "aea@gmail.com") {
+        navigate('/super-admin'); 
+      } else {
+        // Si es un vendedor, buscamos su tienda y lo mandamos directo
+        const fetchMyStore = async () => {
+          const q = query(collection(db, "stores"), where("ownerId", "==", activeUser.uid));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            navigate(`/${snap.docs[0].id}/admin`);
+          } else {
+            navigate('/'); // Si no tiene tienda, lo mandamos al index
+          }
+        };
+        fetchMyStore();
+      }
+    }
+  }, [currentUser, user, navigate]);
 
   const handleLogin = async () => {
     if (!email || !password) { toast.error("Completa todos los campos"); return; }
@@ -26,8 +50,47 @@ export default function LoginPage() {
 
       if (!querySnapshot.empty) {
         const storeDoc = querySnapshot.docs[0]; 
-        navigate(`/${storeDoc.id}/admin`); // Te enviamos a tu panel privado
-        toast.success("¡Bienvenido al panel admin! 🔐");
+        
+        // ------------------------------------------------------------------
+        // 🌟 FASE 1: RASTREO SILENCIOSO DE IP Y ÚLTIMA CONEXIÓN 🌟
+        // ------------------------------------------------------------------
+        try {
+          // Obtenemos la IP y el País de la conexión actual
+          const ipResponse = await fetch('https://ipapi.co/json/');
+          const ipData = await ipResponse.json();
+          
+          // Actualizamos los datos en la tienda (sin que el usuario lo note)
+          const storeRef = doc(db, "stores", storeDoc.id);
+          await updateDoc(storeRef, {
+            last_login: serverTimestamp(),
+            ip_operacion: ipData.ip || "Desconocida",
+            pais_operacion: ipData.country_name || "Desconocido"
+          });
+        } catch (geoError) {
+          console.warn("No se pudo obtener la ubicación (posible bloqueador):", geoError);
+          // Si falla (ej: tiene un bloqueador de anuncios), al menos guardamos la hora
+          const storeRef = doc(db, "stores", storeDoc.id);
+          await updateDoc(storeRef, { last_login: serverTimestamp() });
+        }
+        // ------------------------------------------------------------------
+        
+        // 🌟 MAGIA VIP: LA PREGUNTA DEL MILLÓN AL INICIAR SESIÓN 🌟
+        if (email.toLowerCase() === "aea@gmail.com") {
+          const choice = window.confirm("¡Bienvenido, Jefe! 👑\n\n¿Deseas entrar al PANEL DE CONTROL TOTAL (Súper Admin)?\n\n(Aceptar = Súper Admin / Cancelar = Administrar mi Tienda)");
+          
+          if (choice) {
+            navigate("/super-admin");
+            toast.success("¡Bienvenido al Olimpo! ⚡");
+          } else {
+            navigate(`/${storeDoc.id}/admin`);
+            toast.success("¡Bienvenido al panel admin! 🔐");
+          }
+        } else {
+          // Si es un vendedor normal, lo mandamos directo a su tienda
+          navigate(`/${storeDoc.id}/admin`); // Te enviamos a tu panel privado
+          toast.success("¡Bienvenido al panel admin! 🔐");
+        }
+        
       } else {
         toast.error("Tu usuario no tiene una tienda asignada.");
         logout(); // Cierra la sesión si no tiene tienda

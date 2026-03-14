@@ -5,7 +5,7 @@ import { doc, setDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
 
 export default function AdminSettings() {
-  const { settings, storeData } = useApp(); // 🌟 YA NO usamos updateSettings global
+  const { settings, storeData } = useApp(); 
   
   const [form, setForm] = useState({
     exchangeRate: storeData?.exchangeRate ?? settings.exchangeRate ?? "",
@@ -27,7 +27,6 @@ export default function AdminSettings() {
     socialLinks: storeData?.socialLinks ?? settings.socialLinks ?? { instagram: "", tiktok: "", whatsapp: "" },
     customIcons: storeData?.customIcons ?? settings.customIcons ?? { whatsapp: "", instagram: "", tiktok: "" },
     shippingLogos: storeData?.shippingLogos ?? settings.shippingLogos ?? { mrw: "", tealca: "", zoom: "" },
-    // 🌟 AGREGADO: Logos para la App Instalable (PWA)
     appLogos: storeData?.appLogos ?? settings.appLogos ?? { icon192: "", icon512: "" },
     whatsappWidget: storeData?.whatsappWidget ?? settings.whatsappWidget ?? {
       active: true,
@@ -39,7 +38,6 @@ export default function AdminSettings() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(null);
 
-  // Carga los datos apenas reconoce qué tienda es
   useEffect(() => {
     if (storeData) {
       setForm((prev) => ({
@@ -51,27 +49,29 @@ export default function AdminSettings() {
         socialLinks: storeData.socialLinks || prev.socialLinks,
         customIcons: storeData.customIcons || prev.customIcons,
         shippingLogos: storeData.shippingLogos || prev.shippingLogos,
-        appLogos: storeData.appLogos || prev.appLogos, // 🌟 AGREGADO
+        appLogos: storeData.appLogos || prev.appLogos, 
         whatsappWidget: storeData.whatsappWidget || prev.whatsappWidget,
         verification: { ...prev.verification, ...storeData.verification },
       }));
     }
   }, [storeData]);
 
-  const updateButton = (id, field, value) => {
-    setForm(prev => ({
-      ...prev,
-      quickButtons: prev.quickButtons.map(b => b.id === id ? { ...b, [field]: value } : b)
-    }));
-  };
-
   const handleUpload = async (e, type, category) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    if (!storeData?.id) {
+      toast.error("Error: No se detectó tu tienda.");
+      return;
+    }
+
     setUploading(type);
     const formData = new FormData();
     formData.append("file", file);
     formData.append("upload_preset", "tienda_maquillaje"); 
+
+    formData.append("folder", `tienda_maquillaje/${storeData.id}`);
+
     try {
       const res = await fetch("https://api.cloudinary.com/v1_1/dp3abweme/image/upload", { method: "POST", body: formData });
       const data = await res.json();
@@ -98,7 +98,6 @@ export default function AdminSettings() {
         newStatus = "pending";
       }
 
-      // 🌟 MAGIA: Construimos el paquete de datos solo para ESTA tienda
       const storeUpdates = {
         nombre: form.storeName,
         primaryColor: form.primaryColor,
@@ -107,7 +106,7 @@ export default function AdminSettings() {
         socialLinks: form.socialLinks,
         customIcons: form.customIcons,
         shippingLogos: form.shippingLogos,
-        appLogos: form.appLogos, // 🌟 AGREGADO
+        appLogos: form.appLogos, 
         whatsappWidget: form.whatsappWidget,
         verification: {
           ...form.verification,
@@ -115,7 +114,6 @@ export default function AdminSettings() {
         }
       };
 
-      // 🌟 MAGIA: Guardamos en stores/oscar (por ejemplo)
       await setDoc(doc(db, "stores", storeData.id), storeUpdates, { merge: true });
 
       toast.success("Ajustes de tu tienda guardados ✅");
@@ -253,19 +251,6 @@ export default function AdminSettings() {
             </div>
           </div>
         )}
-      </div>
-      
-      {/* BOTONES VIP */}
-      <div className="bg-white/90 backdrop-blur-xl rounded-[2.5rem] p-7 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white">
-        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-5">Botones de Categoría</h3>
-        <div className="space-y-4">
-          {form.quickButtons.map((btn) => (
-            <div key={btn.id} className="flex gap-3 bg-gray-50/50 p-3 rounded-3xl border border-gray-100">
-              <input value={btn.icon} onChange={(e) => updateButton(btn.id, 'icon', e.target.value)} className="w-14 text-2xl text-center bg-white rounded-2xl shadow-sm outline-none" />
-              <input value={btn.label} onChange={(e) => updateButton(btn.id, 'label', e.target.value)} className="flex-1 bg-transparent px-2 text-sm font-bold text-gray-800 outline-none uppercase tracking-wider" />
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* MEDIA Y REDES */}

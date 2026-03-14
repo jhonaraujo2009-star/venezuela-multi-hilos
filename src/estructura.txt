@@ -1,54 +1,59 @@
 Listado de rutas de carpetas
 El número de serie del volumen es AA44-525E
 C:.
-¦   App.jsx
-¦   estructura.txt
-¦   index.css
-¦   main.jsx
-¦   Nuevo Documento de texto.txt
-¦   
+|   App.jsx
+|   estructura.txt
+|   index.css
+|   InstallButton.jsx
+|   main.jsx
+|   
 +---components
-¦   +---admin
-¦   ¦       AdminInbox.jsx
-¦   ¦       AdminInterface.jsx
-¦   ¦       AdminLogistics.jsx
-¦   ¦       AdminPayments.jsx
-¦   ¦       AdminProducts.jsx
-¦   ¦       AdminSessions.jsx
-¦   ¦       AdminSettings.jsx
-¦   ¦       
-¦   +---cart
-¦   ¦       CartDrawer.jsx
-¦   ¦       
-¦   +---layout
-¦   ¦       AnnouncementBar.jsx
-¦   ¦       Footer.jsx
-¦   ¦       HappyCustomers.jsx
-¦   ¦       Header.jsx
-¦   ¦       HeroBanner.jsx
-¦   ¦       QuickButtons.jsx
-¦   ¦       
-¦   +---product
-¦   ¦       ProductCard.jsx
-¦   ¦       ProductCatalog.jsx
-¦   ¦       ProductModal.jsx
-¦   ¦       
-¦   +---shared
-¦           ProtectedRoute.jsx
-¦           
+|   +---admin
+|   |       AdminInbox.jsx
+|   |       AdminInterface.jsx
+|   |       AdminLogistics.jsx
+|   |       AdminPayments.jsx
+|   |       AdminProducts.jsx
+|   |       AdminSessions.jsx
+|   |       AdminSettings.jsx
+|   |       
+|   +---cart
+|   |       CartDrawer.jsx
+|   |       
+|   +---layout
+|   |       AnnouncementBar.jsx
+|   |       Footer.jsx
+|   |       HappyCustomers.jsx
+|   |       Header.jsx
+|   |       HeroBanner.jsx
+|   |       QuickButtons.jsx
+|   |       WhatsAppVIP.jsx
+|   |       
+|   +---product
+|   |       ProductCard.jsx
+|   |       ProductCatalog.jsx
+|   |       ProductModal.jsx
+|   |       
+|   \---shared
+|           ProtectedRoute.jsx
+|           
 +---config
-¦       firebase.js
-¦       schema.js
-¦       seedFirestore.js
-¦       
+|       firebase.js
+|       schema.js
+|       seedFirestore.js
+|       
 +---context
-¦       AppContext.jsx
-¦       AuthContext.jsx
-¦       CartContext.jsx
-¦       
-+---pages
+|       AppContext.jsx
+|       AuthContext.jsx
+|       CartContext.jsx
+|       
+\---pages
         AdminPage.jsx
+        HomePage.jsx
         LoginPage.jsx
+        Nuevo Documento de texto.txt
         QuestionsPage.jsx
+        RegisterStorePage.jsx
         StorePage.jsx
+        SuperAdminPage.jsx
         

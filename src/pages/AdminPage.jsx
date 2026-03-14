@@ -1,7 +1,12 @@
 import { useState } from "react";
-import { Routes, Route, NavLink, useNavigate, useParams } from "react-router-dom"; // 🌟 Añadido useParams
+import { Routes, Route, NavLink, useNavigate, useParams } from "react-router-dom"; 
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
+
+// 🌟 NUEVAS IMPORTACIONES PARA EL MEGÁFONO
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "../config/firebase";
+import { useApp } from "../context/AppContext";
 
 // Admin sub-panels
 import AdminSettings from "../components/admin/AdminSettings";
@@ -10,27 +15,46 @@ import AdminSessions from "../components/admin/AdminSessions";
 import AdminProducts from "../components/admin/AdminProducts";
 import AdminInbox from "../components/admin/AdminInbox";
 import AdminPayments from "../components/admin/AdminPayments";
+import AdminOrders from "../components/admin/AdminOrders"; 
+// 🌟 MAGIA: Importamos el nuevo Panel de Wall Street
+import AdminStatistics from "../components/admin/AdminStatistics";
 
 export default function AdminPage() {
   const { logout } = useAuth();
   const navigate = useNavigate();
-  const { storeId } = useParams(); // 🌟 MAGIA: Extraemos el nombre de la franquicia actual
+  const { storeId } = useParams(); 
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  // 🌟 EXTRAEMOS LOS DATOS DE LA TIENDA PARA LEER EL MENSAJE DEL SÚPER ADMIN
+  const { storeData } = useApp(); 
 
-  // 🌟 MAGIA: Ahora los botones del menú saben a qué tienda pertenecen
   const NAV_ITEMS = [
     { path: `/${storeId}/admin`, label: "⚙️ Ajustes", end: true },
     { path: `/${storeId}/admin/interfaz`, label: "🎨 Interfaz" },
     { path: `/${storeId}/admin/sesiones`, label: "📂 Sesiones" },
     { path: `/${storeId}/admin/productos`, label: "📦 Productos" },
+    { path: `/${storeId}/admin/pedidos`, label: "🛒 Pedidos" },
+    // 🌟 MAGIA: Agregamos "Estadísticas" a tu menú lateral
+    { path: `/${storeId}/admin/estadisticas`, label: "📊 Estadísticas" },
     { path: `/${storeId}/admin/inbox`, label: "💬 Mensajería" },
     { path: `/${storeId}/admin/pagos`, label: "🏦 Pagos" },
   ];
 
   const handleLogout = async () => {
     await logout();
-    navigate(`/${storeId}`); // 🌟 MAGIA: Al cerrar sesión te manda a TU tienda, no a la genérica
+    navigate(`/${storeId}`); 
     toast.success("Sesión cerrada");
+  };
+
+  // 🌟 LÓGICA PARA ELIMINAR EL MENSAJE DEL MEGÁFONO
+  const dismissMessage = async () => {
+    if (!storeData?.id) return;
+    try {
+      await updateDoc(doc(db, "stores", storeData.id), { systemMessage: "" });
+      toast.success("Mensaje descartado ✅");
+    } catch (error) {
+      toast.error("Error al descartar el mensaje");
+    }
   };
 
   return (
@@ -63,7 +87,6 @@ export default function AdminPage() {
         </nav>
 
         <div className="p-4 border-t border-gray-100 space-y-2">
-          {/* 🌟 MAGIA: El botón de "Ver tienda" te lleva a TU franquicia */}
           <NavLink to={`/${storeId}`} className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-500 hover:bg-gray-50">
             🏠 Ver tienda
           </NavLink>
@@ -83,12 +106,36 @@ export default function AdminPage() {
           <span className="font-bold text-gray-900">Admin Panel</span>
         </div>
 
+        {/* ==========================================
+            🌟 ALERTA DEL MEGÁFONO (SÚPER ADMIN) 🌟
+        ========================================== */}
+        {storeData?.systemMessage && (
+          <div className="m-4 lg:mx-8 lg:mt-8 p-4 sm:p-5 bg-red-50 border border-red-100 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1.5 h-full bg-red-500"></div>
+            <div className="pl-2">
+              <h4 className="text-red-800 font-black text-xs sm:text-sm uppercase tracking-widest mb-1 flex items-center gap-2">
+                <span className="text-lg animate-pulse">📢</span> Aviso del Sistema
+              </h4>
+              <p className="text-red-600 text-sm font-semibold">{storeData.systemMessage}</p>
+            </div>
+            <button 
+              onClick={dismissMessage} 
+              className="whitespace-nowrap bg-white hover:bg-red-100 text-red-600 border border-red-200 font-bold px-4 py-2.5 rounded-xl transition-colors text-xs shadow-sm"
+            >
+              Entendido ✕
+            </button>
+          </div>
+        )}
+
         <div className="p-4 lg:p-8 max-w-3xl">
           <Routes>
             <Route index element={<AdminSettings />} />
             <Route path="interfaz" element={<AdminInterface />} />
             <Route path="sesiones" element={<AdminSessions />} />
             <Route path="productos" element={<AdminProducts />} />
+            <Route path="pedidos" element={<AdminOrders />} />
+            {/* 🌟 MAGIA: Le enseñamos al sistema dónde mostrar las Estadísticas */}
+            <Route path="estadisticas" element={<AdminStatistics />} />
             <Route path="inbox" element={<AdminInbox />} />
             <Route path="pagos" element={<AdminPayments />} />
           </Routes>

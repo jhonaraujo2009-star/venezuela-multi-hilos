@@ -76,6 +76,13 @@ function ProductForm({ sessions, product, onClose, storeData }) {
   const handleImages = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
+
+    // 🌟 Validación de seguridad: Asegurarnos de tener la tienda
+    if (!storeData?.id) {
+      toast.error("Error: No se detectó la tienda para guardar la imagen.");
+      return;
+    }
+
     setUploading(true);
     
     try {
@@ -84,6 +91,9 @@ function ProductForm({ sessions, product, onClose, storeData }) {
           const formData = new FormData();
           formData.append("file", f);
           formData.append("upload_preset", "tienda_maquillaje"); 
+
+          // 🌟 MAGIA CLOUDINARY: Le decimos que cree una sub-carpeta con el ID de la tienda
+          formData.append("folder", `tienda_maquillaje/${storeData.id}`);
 
           const res = await fetch(
             "https://api.cloudinary.com/v1_1/dp3abweme/image/upload", 

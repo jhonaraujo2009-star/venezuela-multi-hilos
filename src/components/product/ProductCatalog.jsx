@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import ProductCard from "./ProductCard";
 import { useApp } from "../../context/AppContext"; 
+import { motion, AnimatePresence } from "framer-motion"; // 🌟 MAGIA: Importamos framer-motion para las animaciones Premium
 
 export default function ProductCatalog({ activeFilter, onProductClick, onFilter }) {
   const [sessions, setSessions] = useState([]);
@@ -137,7 +138,6 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
     });
 
   } else if (isWishlist) {
-    // 🌟 MAGIA: Ahora busca la lista privada de esta tienda
     const likedKey = `userLikes_${storeData?.id || "global"}`;
     const likedItems = JSON.parse(localStorage.getItem(likedKey) || "{}");
     filtered = products.filter(p => likedItems[p.id]);
@@ -146,9 +146,28 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
     filtered = products.filter(p => p.sessionId === activeFilter);
   }
 
+  // 🌟 DEFINIMOS LAS ANIMACIONES PARA LAS TARJETAS 🌟
+  // containerVariants: Controla el efecto dominó (stagger) de toda la grilla
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1 // 🌟 MAGIA: Cada tarjeta entra 0.1s después de la anterior
+      }
+    }
+  };
+
+  // itemVariants: Controla cómo entra y sale cada tarjeta individualmente
+  const itemVariants = {
+    hidden: { opacity: 0, y: 30, scale: 0.95 },
+    show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 100, damping: 15 } },
+    exit: { opacity: 0, y: -20, scale: 0.95, transition: { duration: 0.2 } }
+  };
+
   if (!activeFilter || activeFilter === "all") {
     return (
-      <div className="px-4 pb-24 space-y-10 animate-in fade-in duration-500">
+      <div className="px-4 pb-24 space-y-10">
         <div className="py-8 text-center">
           <h2 className="text-[10px] font-black tracking-[0.5em] text-gray-400 uppercase mb-2 text-center">
             Exclusividad
@@ -158,7 +177,13 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
           </h1>
         </div>
         
-        <div className="grid grid-cols-1 gap-8">
+        {/* 🌟 APLICAMOS ANIMACIÓN A LA VISTA DE COLECCIONES */}
+        <motion.div 
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-1 gap-8"
+        >
           {sessions.map((session) => {
             const sessionProducts = products.filter(p => p.sessionId === session.id);
             if (sessionProducts.length === 0) return null;
@@ -166,7 +191,8 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
             const img = sessionProducts[0]?.image || sessionProducts[0]?.images?.[0];
             
             return (
-              <div 
+              <motion.div 
+                variants={itemVariants}
                 key={session.id} 
                 onClick={() => onFilter(session.id)} 
                 className="group relative h-[420px] w-full rounded-[3rem] overflow-hidden shadow-2xl transition-all active:scale-95 cursor-pointer"
@@ -188,10 +214,10 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
                     Explorar
                   </button>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
-        </div>
+        </motion.div>
       </div>
     );
   }
@@ -199,7 +225,7 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
   const visibleProducts = filtered.slice(0, visibleCount);
 
   return (
-    <div className="px-4 pb-24 animate-in fade-in duration-500">
+    <div className="px-4 pb-24">
       <div className="flex flex-col items-center py-12">
         <h2 className="text-2xl font-light tracking-[0.2em] text-gray-900 uppercase text-center flex items-center gap-2">
           {isTopTen ? "🏆 Ranking Top 10" : 
@@ -216,32 +242,50 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
         </button>
       </div>
 
-      {filtered.length === 0 ? (
-        <div className="text-center py-20 animate-in zoom-in-95 duration-500">
-          <span className="text-6xl block mb-4 grayscale opacity-40">
-            {isWishlist ? "💔" : "👗"}
-          </span>
-          <p className="text-gray-400 font-bold text-sm uppercase tracking-widest">
-            {isWishlist ? "Aún no tienes favoritos." : "Cargando catálogo..."}
-          </p>
-          {isWishlist && (
-            <p className="text-[10px] text-gray-400 mt-2">
-              ¡Explora y enamórate de nuestras prendas!
+      {/* 🌟 AnimatePresence permite animar elementos cuando son eliminados del DOM */}
+      <AnimatePresence mode="wait"> 
+        {filtered.length === 0 ? (
+          <motion.div 
+            key="empty-state"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="text-center py-20"
+          >
+            <span className="text-6xl block mb-4 grayscale opacity-40">
+              {isWishlist ? "💔" : "👗"}
+            </span>
+            <p className="text-gray-400 font-bold text-sm uppercase tracking-widest">
+              {isWishlist ? "Aún no tienes favoritos." : "Catálogo vacío..."}
             </p>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-x-4 gap-y-12">
-          {visibleProducts.map((p, index) => (
-            <ProductCard 
-              key={p.id} 
-              product={p} 
-              onClick={onProductClick} 
-              rank={isTopTen ? index + 1 : null} 
-            />
-          ))}
-        </div>
-      )}
+            {isWishlist && (
+              <p className="text-[10px] text-gray-400 mt-2">
+                ¡Explora y enamórate de nuestras prendas!
+              </p>
+            )}
+          </motion.div>
+        ) : (
+          /* 🌟 APLICAMOS ANIMACIÓN EN CASCADA A LA GRILLA DE PRODUCTOS */
+          <motion.div 
+            key={activeFilter} // 🌟 Importante: El key cambia con el filtro, forzando la re-animación
+            variants={containerVariants}
+            initial="hidden"
+            animate="show"
+            exit="hidden"
+            className="grid grid-cols-2 gap-x-4 gap-y-12"
+          >
+            {visibleProducts.map((p, index) => (
+              <motion.div variants={itemVariants} key={p.id}>
+                <ProductCard 
+                  product={p} 
+                  onClick={onProductClick} 
+                  rank={isTopTen ? index + 1 : null} 
+                />
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {visibleCount < filtered.length && (
         <div className="flex justify-center mt-16">

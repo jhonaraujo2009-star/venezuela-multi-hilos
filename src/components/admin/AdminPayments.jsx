@@ -23,11 +23,21 @@ function PaymentForm({ payment, onClose, storeData }) {
   const handleLogoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // 🌟 VALIDACIÓN VIP: Verificamos que exista la tienda
+    if (!storeData?.id) {
+      toast.error("Error: No se detectó tu tienda.");
+      return;
+    }
+
     setUploading(true);
     
     const formData = new FormData();
     formData.append("file", file);
     formData.append("upload_preset", "tienda_maquillaje"); // Tu carpeta de Cloudinary
+
+    // 🌟 MAGIA CLOUDINARY: Le decimos que cree una sub-carpeta con el ID de la tienda
+    formData.append("folder", `tienda_maquillaje/${storeData.id}`);
 
     try {
       const res = await fetch("https://api.cloudinary.com/v1_1/dp3abweme/image/upload", { 

@@ -2,17 +2,20 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, query, limit } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext"; // 🌟 MAGIA: Importamos tu sesión
 
 export default function HomePage() {
   const [stores, setStores] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // 🌟 NUEVO ESTADO: Controlador del menú móvil
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
 
-  // 🌟 Efecto para bloquear el fondo cuando el menú móvil está abierto
+  // 🌟 MAGIA: Obtenemos al usuario logueado actual
+  const { currentUser, user, logout } = useAuth();
+  const activeUser = currentUser || user;
+
   useEffect(() => {
     if (isMobileMenuOpen) {
       document.body.style.overflow = "hidden";
@@ -25,11 +28,23 @@ export default function HomePage() {
   useEffect(() => {
     const fetchGlobalData = async () => {
       try {
-        const storesSnap = await getDocs(query(collection(db, "stores"), limit(8)));
-        setStores(storesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        // 🌟 MAGIA 1: Traemos las tiendas y filtramos solo las ACTIVAS (Kill Switch)
+        const storesSnap = await getDocs(collection(db, "stores"));
+        const allStores = storesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        
+        const activeStores = allStores.filter(s => s.isActive !== false);
+        setStores(activeStores.slice(0, 8)); // Top 8 tiendas activas
 
-        const prodSnap = await getDocs(query(collection(db, "products"), limit(12)));
-        setProducts(prodSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const activeStoreIds = activeStores.map(s => s.id);
+
+        // 🌟 MAGIA 2: Traemos productos y ocultamos los que sean de tiendas inhabilitadas
+        const prodSnap = await getDocs(query(collection(db, "products"), limit(50)));
+        const activeProducts = prodSnap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter(p => activeStoreIds.includes(p.storeId))
+          .slice(0, 10); // Mostramos 10 productos seguros
+          
+        setProducts(activeProducts);
       } catch (error) {
         console.error("Error cargando marketplace:", error);
       } finally {
@@ -38,6 +53,23 @@ export default function HomePage() {
     };
     fetchGlobalData();
   }, []);
+
+  // 🌟 MAGIA 3: Inyectamos el Radar en el navegador del cliente antes de enviarlo a la tienda
+  const goToStoreWithRadar = (storeId) => {
+    sessionStorage.setItem("origenVenta", "index_super_admin");
+    navigate(`/${storeId}?ref=index`);
+  };
+
+  // 🌟 MAGIA: Función para salir
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setIsMobileMenuOpen(false);
+      navigate('/');
+    } catch (error) {
+      console.error("Error al cerrar sesión", error);
+    }
+  };
 
   const categories = ["🔥 Novedades", "⭐ Más Vendidos", "👗 Moda", "💻 Tecnología", "⚡ Ofertas Flash"];
 
@@ -67,17 +99,34 @@ export default function HomePage() {
           </div>
 
           <div className="p-6 flex-1 overflow-y-auto space-y-8">
-            {/* Botones de Acción Primarios */}
-            <div className="space-y-3">
-              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/login'); }} className="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-900 font-bold py-3.5 rounded-2xl transition-colors">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                Iniciar Sesión
-              </button>
-              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/registro-vendedor'); }} className="w-full flex items-center justify-center gap-2 bg-pink-500 hover:bg-pink-600 text-white font-bold py-3.5 rounded-2xl transition-colors shadow-lg shadow-pink-500/20">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                Vender en la plataforma
-              </button>
-            </div>
+            
+            {/* 🌟 MAGIA: BOTONES DEL MENÚ MÓVIL (CONDICIONALES) */}
+            {activeUser ? (
+              <div className="bg-pink-50 rounded-2xl p-4 border border-pink-100 text-center space-y-3 shadow-inner">
+                <p className="text-[10px] font-black text-pink-500 uppercase tracking-widest">Sesión Iniciada</p>
+                <p className="text-sm font-bold text-gray-900 truncate">{activeUser.email}</p>
+                
+                <div className="flex gap-2">
+                  <button onClick={() => { setIsMobileMenuOpen(false); navigate('/login'); }} className="flex-1 bg-gray-900 hover:bg-black text-white font-bold py-2.5 rounded-xl transition-colors text-xs shadow-sm">
+                    Mi Panel
+                  </button>
+                  <button onClick={handleLogout} className="flex-1 bg-white border border-red-200 hover:bg-red-50 text-red-500 font-bold py-2.5 rounded-xl transition-colors text-xs shadow-sm">
+                    Salir
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <button onClick={() => { setIsMobileMenuOpen(false); navigate('/login'); }} className="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-900 font-bold py-3.5 rounded-2xl transition-colors">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                  Iniciar Sesión
+                </button>
+                <button onClick={() => { setIsMobileMenuOpen(false); navigate('/registro-vendedor'); }} className="w-full flex items-center justify-center gap-2 bg-pink-500 hover:bg-pink-600 text-white font-bold py-3.5 rounded-2xl transition-colors shadow-lg shadow-pink-500/20">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                  Vender en la plataforma
+                </button>
+              </div>
+            )}
 
             {/* Lista de Categorías */}
             <div>
@@ -135,17 +184,37 @@ export default function HomePage() {
 
             {/* Iconos Derecha */}
             <div className="flex items-center gap-1 sm:gap-4 shrink-0">
-              <button onClick={() => navigate('/login')} className="hidden md:flex items-center gap-2 text-gray-600 hover:text-gray-900 font-bold px-4 py-2 rounded-full hover:bg-gray-50 transition-colors text-sm">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                Acceder
-              </button>
+              
+              {/* 🌟 MAGIA: BOTONES DE CABECERA (CONDICIONALES PC) */}
+              {activeUser ? (
+                <div className="hidden md:flex items-center gap-3 bg-gray-50 border border-gray-100 px-2 py-1.5 rounded-full pr-4">
+                  <div className="w-8 h-8 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center font-black text-sm uppercase">
+                    {activeUser.email.charAt(0)}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">En línea</span>
+                    <span className="text-xs font-bold text-gray-800 max-w-[100px] truncate">{activeUser.email}</span>
+                  </div>
+                  <div className="w-px h-6 bg-gray-200 mx-1"></div>
+                  <button onClick={() => navigate('/login')} className="text-xs font-bold text-pink-600 hover:text-pink-800 transition-colors">
+                    Panel
+                  </button>
+                  <button onClick={handleLogout} className="text-xs font-bold text-red-400 hover:text-red-600 transition-colors ml-1" title="Cerrar sesión">
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => navigate('/login')} className="hidden md:flex items-center gap-2 text-gray-600 hover:text-gray-900 font-bold px-4 py-2 rounded-full hover:bg-gray-50 transition-colors text-sm">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                  Acceder
+                </button>
+              )}
               
               <button className="relative p-2 text-gray-600 hover:text-pink-600 transition-colors">
                 <svg className="w-6 h-6 sm:w-7 sm:h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
                 <span className="absolute 0 right-0 bg-pink-500 text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">0</span>
               </button>
 
-              {/* 🌟 NUEVO: Botón Menú Hamburguesa (Móvil) 🌟 */}
               <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-gray-900 md:hidden hover:bg-gray-50 rounded-full transition-colors">
                 <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -173,8 +242,12 @@ export default function HomePage() {
             <button className="flex items-center gap-1 text-pink-600 shrink-0"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg> Departamentos</button>
             <span className="w-px h-4 bg-gray-300 shrink-0"></span>
             {categories.map((cat, i) => <a key={i} href="#" className="hover:text-gray-900 shrink-0">{cat}</a>)}
-            <span className="w-px h-4 bg-gray-300 shrink-0"></span>
-            <a href="/registro-vendedor" className="text-pink-500 hover:text-pink-700 shrink-0">Vender en la plataforma</a>
+            {!activeUser && ( // 🌟 OCULTAMOS ESTO SI YA ESTÁ LOGUEADO
+              <>
+                <span className="w-px h-4 bg-gray-300 shrink-0"></span>
+                <a href="/registro-vendedor" className="text-pink-500 hover:text-pink-700 shrink-0">Vender en la plataforma</a>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -245,7 +318,7 @@ export default function HomePage() {
               {stores.map(store => (
                 <button 
                   key={store.id} 
-                  onClick={() => navigate(`/${store.id}`)}
+                  onClick={() => goToStoreWithRadar(store.id)} // 🌟 AQUÍ INYECTAMOS EL RADAR
                   className="snap-start shrink-0 flex flex-col items-center gap-2 sm:gap-3 group w-20 sm:w-24 md:w-32"
                 >
                   <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-28 md:h-28 rounded-full overflow-hidden bg-white border border-gray-200 shadow-sm group-hover:border-pink-500 group-hover:shadow-xl group-hover:-translate-y-1 transition-all duration-300 relative">
@@ -275,7 +348,7 @@ export default function HomePage() {
             
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-6">
               {products.map(p => (
-                <div key={p.id} onClick={() => navigate(`/${p.storeId}`)} className="group bg-white rounded-2xl sm:rounded-3xl p-2.5 sm:p-3 shadow-sm hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] border border-gray-100 transition-all duration-300 cursor-pointer flex flex-col h-full hover:-translate-y-1">
+                <div key={p.id} onClick={() => goToStoreWithRadar(p.storeId)} className="group bg-white rounded-2xl sm:rounded-3xl p-2.5 sm:p-3 shadow-sm hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] border border-gray-100 transition-all duration-300 cursor-pointer flex flex-col h-full hover:-translate-y-1">
                   
                   <div className="aspect-[4/5] bg-[#F3F4F6] rounded-xl sm:rounded-2xl relative overflow-hidden mb-3 sm:mb-4">
                     {p.images?.[0] ? (
@@ -315,16 +388,18 @@ export default function HomePage() {
             </div>
           </section>
 
-          <div className="mt-12 sm:mt-16 bg-gray-900 rounded-[2rem] sm:rounded-[3rem] p-6 sm:p-10 md:p-16 text-center shadow-2xl overflow-hidden relative">
-            <div className="absolute top-0 right-0 w-40 sm:w-64 h-40 sm:h-64 bg-pink-500/20 rounded-full blur-[60px] sm:blur-[80px]"></div>
-            <div className="relative z-10 max-w-2xl mx-auto">
-              <h2 className="text-2xl sm:text-3xl md:text-5xl font-black text-white mb-4 sm:mb-6 leading-tight">Empieza a vender hoy.</h2>
-              <p className="text-gray-400 text-sm sm:text-lg mb-6 sm:mb-8 px-4 sm:px-0">Crea tu tienda online en minutos, sube tus productos y llega a miles de clientes en nuestra plataforma.</p>
-              <button onClick={() => navigate('/registro-vendedor')} className="w-full sm:w-auto bg-pink-500 text-white px-8 sm:px-10 py-3.5 sm:py-4 rounded-full font-black tracking-widest uppercase text-xs sm:text-sm hover:bg-pink-600 active:scale-95 transition-all shadow-xl">
-                Registrar Mi Tienda
-              </button>
+          {!activeUser && ( // 🌟 OCULTAMOS EL BANNER DE VENTA SI ESTÁS LOGUEADO
+            <div className="mt-12 sm:mt-16 bg-gray-900 rounded-[2rem] sm:rounded-[3rem] p-6 sm:p-10 md:p-16 text-center shadow-2xl overflow-hidden relative">
+              <div className="absolute top-0 right-0 w-40 sm:w-64 h-40 sm:h-64 bg-pink-500/20 rounded-full blur-[60px] sm:blur-[80px]"></div>
+              <div className="relative z-10 max-w-2xl mx-auto">
+                <h2 className="text-2xl sm:text-3xl md:text-5xl font-black text-white mb-4 sm:mb-6 leading-tight">Empieza a vender hoy.</h2>
+                <p className="text-gray-400 text-sm sm:text-lg mb-6 sm:mb-8 px-4 sm:px-0">Crea tu tienda online en minutos, sube tus productos y llega a miles de clientes en nuestra plataforma.</p>
+                <button onClick={() => navigate('/registro-vendedor')} className="w-full sm:w-auto bg-pink-500 text-white px-8 sm:px-10 py-3.5 sm:py-4 rounded-full font-black tracking-widest uppercase text-xs sm:text-sm hover:bg-pink-600 active:scale-95 transition-all shadow-xl">
+                  Registrar Mi Tienda
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
       )}

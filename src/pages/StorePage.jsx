@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react"; 
 import AnnouncementBar from "../components/layout/AnnouncementBar";
 import Header from "../components/layout/Header";
 import HeroBanner from "../components/layout/HeroBanner";
@@ -18,15 +18,59 @@ export default function StorePage() {
   const [activeFilter, setActiveFilter] = useState("all");
 
   const { itemCount, total, setIsOpen, isOpen } = useCart();
-  const { bsPrice } = useApp();
+  
+  // 🌟 EXTRAEMOS storeData (Esto lo agregué yo para leer las deudas y el logo)
+  const { bsPrice, storeData } = useApp(); 
 
   const showFloatingElements = !isOpen && !selectedProduct;
 
+  // 🌟 MAGIA 1: EL COBRADOR VIRTUAL (BLOQUEO POR DEUDA MAYOR A $20)
+  const isBlockedByDebt = storeData?.deuda_comision > 20;
+
+  // 🌟 MAGIA 2: SEO DE WHATSAPP (ESTO HACE QUE EL LINK SE VEA BONITO)
+  useEffect(() => {
+    if (storeData) {
+      document.title = storeData.nombre || "Tienda Online";
+      
+      const setMetaTag = (property, content) => {
+        let el = document.querySelector(`meta[property="${property}"]`) || document.querySelector(`meta[name="${property}"]`);
+        if (!el) {
+          el = document.createElement('meta');
+          el.setAttribute(property.includes(':') ? 'property' : 'name', property);
+          document.head.appendChild(el);
+        }
+        el.setAttribute('content', content);
+      };
+      
+      setMetaTag('og:title', storeData.heroTitle || storeData.nombre || "Nuestra Tienda");
+      setMetaTag('og:description', storeData.heroDescription || "Descubre nuestro catálogo de productos exclusivos.");
+      setMetaTag('og:image', storeData.profileImage || storeData.appLogos?.icon512 || "");
+    }
+  }, [storeData]);
+
+  // 🌟 SI DEBE DINERO, LE MOSTRAMOS ESTA PANTALLA EN LUGAR DE LA TIENDA
+  if (isBlockedByDebt) {
+    return (
+      <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-6">
+        <div className="bg-white max-w-md w-full rounded-[2.5rem] shadow-[0_20px_40px_rgba(0,0,0,0.04)] p-10 text-center border border-gray-100 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-red-500"></div>
+          <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl">
+            🛑
+          </div>
+          <h1 className="text-2xl font-black text-gray-900 mb-3 tracking-tight">Tienda en Mantenimiento</h1>
+          <p className="text-gray-500 text-sm leading-relaxed mb-6 font-medium">
+            Lo sentimos, esta tienda se encuentra temporalmente inactiva realizando labores administrativas. Por favor, regresa más tarde.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // 🌟 SI NO DEBE DINERO, CARGA TU TIENDA NORMALMENTE (NADA FUE BORRADO AQUÍ)
   return (
     <div className="min-h-screen bg-white pb-32">
       <div className="fixed top-0 left-0 right-0 z-40">
         <AnnouncementBar />
-        {/* 🌟 MAGIA: Le pasamos 'onFilter' al Header para abrir Favoritos */}
         <Header onProductClick={setSelectedProduct} onFilter={setActiveFilter} />
       </div>
 

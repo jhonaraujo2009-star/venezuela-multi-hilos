@@ -14,18 +14,15 @@ export default function ProductCard({ product, onClick, rank }) {
   const lowStock = totalStock > 0 && totalStock <= 5;
 
   // 🌟 LÓGICA DE DESCUENTOS APILADOS (STACKED DISCOUNTS) 🌟
-  const rawOldPrice = Number(product.oldPrice) || 0; // Ejemplo: 20
-  const rawPrice = Number(product.price) || 0;       // Ejemplo: 10
+  const rawOldPrice = Number(product.oldPrice) || 0; 
+  const rawPrice = Number(product.price) || 0;       
   
-  // Soporta si en tu panel admin lo llamaste 'discount' o 'offerDiscount'
   const extraDiscountPerc = Number(product.discount) || Number(product.offerDiscount) || 0; 
 
-  // Calculamos el precio real a cobrar (aplica el % de descuento extra al precio actual)
   const finalPrice = extraDiscountPerc > 0 
     ? rawPrice - (rawPrice * (extraDiscountPerc / 100)) 
     : rawPrice;
 
-  // Qué precio tachamos? Si hay precio viejo, tachamos ese. Si hay descuento extra, tachamos el precio base.
   const displayCrossedPrice = rawOldPrice > rawPrice ? rawOldPrice : (extraDiscountPerc > 0 ? rawPrice : 0);
 
   // 🌟 CÁLCULO DE ETIQUETAS (BADGES) 🌟
@@ -33,15 +30,14 @@ export default function ProductCard({ product, onClick, rank }) {
   if (rawOldPrice > rawPrice) {
     baseDiscountPerc = Math.round(((rawOldPrice - rawPrice) / rawOldPrice) * 100);
   } else if (extraDiscountPerc > 0 && rawOldPrice === 0) {
-    baseDiscountPerc = extraDiscountPerc; // Si solo hay extra, se vuelve el principal
+    baseDiscountPerc = extraDiscountPerc; 
   }
 
-  // 🌟 DETECTIVE DE OFERTAS (Encuentra el tiempo sin importar cómo lo guardó el Admin) 🌟
+  // 🌟 DETECTIVE DE OFERTAS 🌟
   let endTime = product.parsedOfferEndsAt || 0;
   if (!endTime) {
     if (product.offerEndsAt) {
       endTime = product.offerEndsAt?.toMillis ? product.offerEndsAt.toMillis() : new Date(product.offerEndsAt).getTime();
-      // Si el admin puso solo "24" en lugar de una fecha
       if (endTime < 100000) endTime = (product.createdAtMs || Date.now()) + (endTime * 60 * 60 * 1000);
     } else if (product.horas || product.duracion || product.hours) {
       endTime = (product.createdAtMs || Date.now()) + (Number(product.horas || product.duracion || product.hours) * 60 * 60 * 1000);
@@ -69,13 +65,21 @@ export default function ProductCard({ product, onClick, rank }) {
     return () => clearInterval(interval);
   }, [endTime, isFlashOffer]);
 
-  // 🌟 TRUCO MÁGICO: Clonamos el producto con los precios matemáticos 
-  // para que al tocarlo, el carrito cobre el precio con el descuento extra.
+  // ------------------------------------------------------------------
+  // 🌟 FASE 2: EL CHISMOSO (Rastreador de Origen) 🌟
+  // ------------------------------------------------------------------
+  // Detectamos si el cliente está viendo este producto en tu página principal (/)
+  const isFromSuperAdmin = window.location.pathname === "/";
+
+  // Clonamos el producto con los precios matemáticos y LA ETIQUETA INVISIBLE
   const productWithFinalPrice = {
     ...product,
     price: Number(finalPrice.toFixed(2)),
-    oldPrice: displayCrossedPrice
+    oldPrice: displayCrossedPrice,
+    // Aquí inyectamos el GPS para cobrar la comisión luego
+    _origenVenta: isFromSuperAdmin ? "index_super_admin" : "tienda_directa"
   };
+  // ------------------------------------------------------------------
 
   return (
     <button

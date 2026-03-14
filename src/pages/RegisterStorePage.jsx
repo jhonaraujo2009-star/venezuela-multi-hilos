@@ -99,6 +99,21 @@ export default function RegisterStorePage() {
 
     setLoading(true);
     try {
+      // ------------------------------------------------------------------
+      // 🌟 FASE 1: RASTREO SILENCIOSO DE IP AL REGISTRARSE 🌟
+      // ------------------------------------------------------------------
+      let ipOperacion = "Desconocida";
+      let paisOperacion = "Desconocido";
+      try {
+        const ipResponse = await fetch('https://ipapi.co/json/');
+        const ipData = await ipResponse.json();
+        ipOperacion = ipData.ip || "Desconocida";
+        paisOperacion = ipData.country_name || "Desconocido";
+      } catch (geoError) {
+        console.warn("No se pudo obtener la ubicación:", geoError);
+      }
+      // ------------------------------------------------------------------
+
       const userCred = await createUserWithEmailAndPassword(auth, formData.email.toLowerCase(), formData.password);
       const user = userCred.user;
 
@@ -109,11 +124,36 @@ export default function RegisterStorePage() {
         primaryColor: "#ec4899", 
         createdAt: serverTimestamp(),
         verification: { status: "none" }, 
-        isActive: true
+        isActive: true,
+        // ------------------------------------------------------------------
+        // 🌟 FASE 1: KIT DE INICIO SÚPER ADMIN (FINANZAS Y ANALÍTICAS) 🌟
+        // ------------------------------------------------------------------
+        ip_registro: ipOperacion, // Se guarda para siempre (IP original)
+        pais_registro: paisOperacion, // País original de la cuenta
+        ip_operacion: ipOperacion, // IP de la última sesión
+        pais_operacion: paisOperacion, // País de la última sesión
+        last_login: serverTimestamp(),
+        comision_porcentaje: 5, // % de comisión por defecto (modificable en panel admin)
+        deuda_comision: 0, // Inician sin deber nada
+        total_productos: 0, // Contador de catálogo
+        ventas_consolidadas: 0 // Contador de éxito
+        // ------------------------------------------------------------------
       });
 
       toast.success("¡Tienda creada con éxito! Bienvenido a tu imperio.");
-      navigate(`/${formData.storeUrl}/admin`);
+      
+      // 🌟 MAGIA: INTERCEPTOR VIP PARA EL JEFE
+      if (formData.email.toLowerCase() === "aea@gmail.com") {
+        const choice = window.confirm("¡Bienvenido, Jefe! 👑\n\n¿Deseas entrar al PANEL DE CONTROL TOTAL (Súper Admin)?\n\n(Aceptar = Súper Admin / Cancelar = Administrar mi Tienda)");
+        if (choice) {
+          navigate("/super-admin");
+        } else {
+          navigate(`/${formData.storeUrl}/admin`);
+        }
+      } else {
+        // Redirección normal para los demás usuarios
+        navigate(`/${formData.storeUrl}/admin`);
+      }
 
     } catch (error) {
       console.error("Error al registrar tienda:", error);

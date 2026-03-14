@@ -1,9 +1,8 @@
 import { useApp } from "../../context/AppContext";
 
 export default function QuickButtons({ onFilter }) {
-  const { settings, storeData } = useApp(); // 🌟 Agregamos storeData
+  const { settings, storeData } = useApp();
   
-  // ESTRUCTURA MAESTRA DE ALTA GAMA
   const defaultButtons = [
     { id: 'cat', label: 'Catálogo', icon: '🛍️', filter: 'all' },
     { id: 'ofertas', label: 'Ofertas', icon: '🔥', filter: 'ofertas' },
@@ -11,32 +10,32 @@ export default function QuickButtons({ onFilter }) {
     { id: 'new', label: 'Lo Último', icon: '✨', filter: 'new' }
   ];
 
-  // 🌟 MAGIA: Leemos los botones que el dueño personalizó en su panel
   const currentButtons = storeData?.quickButtons || settings?.quickButtons;
   const savedButtons = Array.isArray(currentButtons) ? currentButtons : [];
   
-  // LÓGICA DE SEGURIDAD
   const isValid = savedButtons.some(b => b.filter === 'top') && savedButtons.some(b => b.filter === 'new');
   const buttons = isValid ? savedButtons : defaultButtons;
 
   return (
-    <div className="grid grid-cols-4 gap-3 px-4 mb-8">
+    // 🌟 DISEÑO ELEVADO: Margen negativo top (-mt-4) para que "suba" y se pegue al Hero
+    <div className="relative z-20 max-w-[800px] mx-auto grid grid-cols-4 gap-2 sm:gap-4 px-4 sm:px-6 -mt-2 sm:-mt-4 pb-10">
       {buttons.map((btn) => (
         <button
           key={btn.id}
           onClick={() => onFilter(btn.filter)}
-          className="group relative flex flex-col items-center justify-center gap-2 bg-white/80 backdrop-blur-2xl border border-white/40 rounded-[2rem] py-4 px-2 shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:shadow-[0_20px_40px_rgb(236,72,153,0.15)] active:scale-90 transition-all duration-500 overflow-hidden"
+          // 🌟 MAGIA VISUAL: Sombras dinámicas, bordes rosas al hacer hover y efecto de hundimiento al hacer click
+          className="group relative flex flex-col items-center justify-center gap-3 bg-white border border-gray-100 rounded-[1.5rem] sm:rounded-[2rem] py-5 sm:py-6 px-2 shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_10px_30px_rgba(236,72,153,0.15)] hover:border-pink-200 hover:-translate-y-1.5 active:scale-90 active:bg-pink-50 transition-all duration-300 overflow-hidden"
         >
-          {/* Efecto de iluminación de fondo Premium */}
-          <div className="absolute inset-0 bg-gradient-to-br from-pink-50/80 to-purple-50/80 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          {/* 🌟 Efecto Hover Premium (Brillo interno) */}
+          <div className="absolute inset-0 bg-pink-50/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
           
-          {/* Icono con animación flotante */}
-          <span className="text-3xl relative z-10 transform group-hover:-translate-y-1.5 transition-transform duration-500 drop-shadow-sm">
+          {/* Icono a todo color con animación de salto */}
+          <span className="text-2xl sm:text-3xl relative z-10 transform group-hover:scale-110 group-hover:-translate-y-1 transition-all duration-300 drop-shadow-sm">
             {btn.icon}
           </span>
           
-          {/* Texto de alta legibilidad */}
-          <span className="text-[9px] font-black text-gray-800 tracking-[0.15em] text-center uppercase relative z-10">
+          {/* Texto Minimalista */}
+          <span className="text-[8px] sm:text-[10px] font-black text-gray-500 group-hover:text-pink-600 tracking-[0.15em] sm:tracking-[0.2em] text-center uppercase relative z-10 transition-colors duration-300">
             {btn.label}
           </span>
         </button>
