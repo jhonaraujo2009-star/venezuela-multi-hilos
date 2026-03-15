@@ -19,11 +19,9 @@ export function useBackButton(isOpen, onClose) {
     return () => {
       window.removeEventListener("popstate", handlePopState);
 
-      // Si el componente se desmonta o isOpen pasa a false por otra vía (ej. clic en la X)
-      // necesitamos limpiar la entrada del historial si sigue ahí, para no romper la navegación real de React Router.
-      if (window.history.state?.isModalOpen) {
-        window.history.back();
-      }
+      // NOTA: Quitar el window.history.back() aquí porque provocaba
+      // un bug de renderizado que cerraba el modal inmediatamente en algunos dispositivos
+      // o corrompe el historial de React Router al desmontar rápido.
     };
   }, [isOpen, onClose]);
 }

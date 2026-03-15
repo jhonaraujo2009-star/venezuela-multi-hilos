@@ -15,9 +15,8 @@ import AdminSessions from "../components/admin/AdminSessions";
 import AdminProducts from "../components/admin/AdminProducts";
 import AdminInbox from "../components/admin/AdminInbox";
 import AdminPayments from "../components/admin/AdminPayments";
-import AdminOrders from "../components/admin/AdminOrders"; 
-// 🌟 MAGIA: Importamos el nuevo Panel de Wall Street
 import AdminStatistics from "../components/admin/AdminStatistics";
+import AdminPOS from "../components/admin/AdminPOS"; // 🌟 Importamos el nuevo POS
 
 export default function AdminPage() {
   const { logout } = useAuth();
@@ -30,11 +29,11 @@ export default function AdminPage() {
 
   const NAV_ITEMS = [
     { path: `/${storeId}/admin`, label: "⚙️ Ajustes", end: true },
+    { path: `/${storeId}/admin/pos`, label: "🏪 Punto Venta" }, // 🌟 Link del POS añadido como segundo ítem para agilidad
     { path: `/${storeId}/admin/interfaz`, label: "🎨 Interfaz" },
     { path: `/${storeId}/admin/sesiones`, label: "📂 Sesiones" },
     { path: `/${storeId}/admin/productos`, label: "📦 Productos" },
-    { path: `/${storeId}/admin/pedidos`, label: "🛒 Pedidos" },
-    // 🌟 MAGIA: Agregamos "Estadísticas" a tu menú lateral
+    // Eliminado botón de "Pedidos" a petición
     { path: `/${storeId}/admin/estadisticas`, label: "📊 Estadísticas" },
     { path: `/${storeId}/admin/inbox`, label: "💬 Mensajería" },
     { path: `/${storeId}/admin/pagos`, label: "🏦 Pagos" },
@@ -130,11 +129,11 @@ export default function AdminPage() {
         <div className="p-4 lg:p-8 max-w-3xl">
           <Routes>
             <Route index element={<AdminSettings />} />
+            <Route path="pos" element={<AdminPOS />} /> {/* 🌟 Conexión del TPV/POS */}
             <Route path="interfaz" element={<AdminInterface />} />
             <Route path="sesiones" element={<AdminSessions />} />
             <Route path="productos" element={<AdminProducts />} />
-            <Route path="pedidos" element={<AdminOrders />} />
-            {/* 🌟 MAGIA: Le enseñamos al sistema dónde mostrar las Estadísticas */}
+            {/* Eliminada la ruta de pedidos */}
             <Route path="estadisticas" element={<AdminStatistics />} />
             <Route path="inbox" element={<AdminInbox />} />
             <Route path="pagos" element={<AdminPayments />} />
