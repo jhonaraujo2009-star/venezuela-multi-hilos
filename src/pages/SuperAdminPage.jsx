@@ -18,9 +18,10 @@ export default function SuperAdminPage() {
   // 🌟 ESTADO DE LA LLAVE MAESTRA
   const [isCommissionActive, setIsCommissionActive] = useState(false);
 
-  // 🌟 ESTADOS PARA EL BRANDING GLOBAL MATRIZ (NUEVO)
+  // 🌟 ESTADOS PARA EL BRANDING GLOBAL MATRIZ (NUEVO) Y PIXEL
   const [globalCompanyName, setGlobalCompanyName] = useState("");
   const [globalCompanyLogo, setGlobalCompanyLogo] = useState("");
+  const [facebookPixel, setFacebookPixel] = useState("");
   const [uploadingLogo, setUploadingLogo] = useState(false);
   
   const navigate = useNavigate();
@@ -49,6 +50,7 @@ export default function SuperAdminPage() {
           // 🌟 LEEMOS EL BRANDING MATRIZ DE LA BASE DE DATOS
           setGlobalCompanyName(snap.data().companyName || "");
           setGlobalCompanyLogo(snap.data().companyLogo || "");
+          setFacebookPixel(snap.data().facebookPixel || "");
         }
       } catch (error) {
         console.error("Error leyendo configuración global", error);
@@ -82,13 +84,16 @@ export default function SuperAdminPage() {
     }
   };
 
-  // 🌟 FUNCIÓN PARA GUARDAR EL NOMBRE DE LA EMPRESA MATRIZ
+  // 🌟 FUNCIÓN PARA GUARDAR EL NOMBRE DE LA EMPRESA MATRIZ Y PIXEL
   const saveGlobalBranding = async () => {
     try {
-      await setDoc(doc(db, "settings", "global"), { companyName: globalCompanyName }, { merge: true });
-      toast.success("Nombre de Empresa Matriz guardado ✅");
+      await setDoc(doc(db, "settings", "global"), { 
+        companyName: globalCompanyName,
+        facebookPixel: facebookPixel 
+      }, { merge: true });
+      toast.success("Configuraciones Guardadas ✅");
     } catch (error) {
-      toast.error("Error al guardar el nombre.");
+      toast.error("Error al guardar configuraciones.");
     }
   };
 
@@ -325,7 +330,7 @@ export default function SuperAdminPage() {
           ))}
         </div>
 
-        {/* 🌟 PESTAÑA 1: DASHBOARD (NUEVA ZONA DE BRANDING) */}
+        {/* 🌟 PESTAÑA 1: DASHBOARD (NUEVA ZONA DE BRANDING Y PIXEL) */}
         {activeTab === "dashboard" && (
           <div className="space-y-6">
             
@@ -335,19 +340,33 @@ export default function SuperAdminPage() {
               <p className="text-sm text-gray-500 mb-6">Este nombre o logo aparecerá en la barra superior de TODAS las tiendas (Header).</p>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Texto Enchapado */}
-                <div className="space-y-3">
-                  <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Nombre de la Empresa</label>
-                  <div className="flex gap-2">
+                {/* Texto Enchapado y Pixel */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Nombre de la Empresa</label>
                     <input 
                       type="text" 
                       value={globalCompanyName} 
                       onChange={(e) => setGlobalCompanyName(e.target.value)}
                       placeholder="Ej: GLOBAL MARKET CORP"
-                      className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-yellow-500 focus:bg-white text-sm font-bold text-gray-900" 
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-yellow-500 focus:bg-white text-sm font-bold text-gray-900" 
                     />
-                    <button onClick={saveGlobalBranding} className="bg-gray-900 text-white px-5 py-3 rounded-xl font-bold hover:bg-black transition-colors">Guardar</button>
                   </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-gray-400 flex items-center gap-2">
+                      <span className="text-blue-500 text-lg">📈</span> ID Pixel de Facebook (Opcional)
+                    </label>
+                    <input 
+                      type="text" 
+                      value={facebookPixel} 
+                      onChange={(e) => setFacebookPixel(e.target.value)}
+                      placeholder="Ej: 123456789012345"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-blue-500 focus:bg-white text-sm font-bold text-gray-900" 
+                    />
+                  </div>
+                  
+                  <button onClick={saveGlobalBranding} className="w-full bg-gray-900 text-white px-5 py-3 rounded-xl font-bold hover:bg-black transition-colors mt-2">Guardar Configuraciones</button>
                   <p className="text-[10px] text-gray-400">Si no subes un logo, este texto se mostrará con un <span className="bg-gradient-to-r from-yellow-600 via-yellow-400 to-yellow-600 text-transparent bg-clip-text font-black">Efecto de Enchapado en Oro</span>.</p>
                 </div>
 
