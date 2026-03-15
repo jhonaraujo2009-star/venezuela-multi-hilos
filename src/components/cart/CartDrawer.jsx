@@ -3,6 +3,7 @@ import { collection, getDocs, query, where, doc, getDoc, updateDoc, increment } 
 import { db } from "../../config/firebase";
 import { useCart } from "../../context/CartContext";
 import { useApp } from "../../context/AppContext";
+import { useBackButton } from "../../hooks/useBackButton";
 import toast from "react-hot-toast";
 
 export default function CartDrawer() {
@@ -15,6 +16,9 @@ export default function CartDrawer() {
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [step, setStep] = useState(1); 
   const [customer, setCustomer] = useState({ name: "", phone: "" });
+
+  // 🌟 ESCUCHANDO BOTÓN ATRÁS DE ANDROID PARA CERRAR EL CARRITO
+  useBackButton(isOpen, () => setIsOpen(false));
 
   const freeShippingProgress = Math.min(100, (total / settings.freeShippingGoal) * 100);
   const remaining = Math.max(0, settings.freeShippingGoal - total);

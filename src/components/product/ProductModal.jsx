@@ -3,6 +3,7 @@ import { doc, updateDoc, increment, setDoc, onSnapshot, collection, query, where
 import { db } from "../../config/firebase";
 import { useApp } from "../../context/AppContext";
 import { useCart } from "../../context/CartContext";
+import { useBackButton } from "../../hooks/useBackButton";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -21,6 +22,9 @@ export default function ProductModal({ product: initialProduct, onClose }) {
   
   // 🌟 NUEVO ESTADO: Para el Acordeón de Descripción
   const [showDescription, setShowDescription] = useState(false);
+
+  // 🌟 ESCUCHANDO BOTÓN ATRÁS DE ANDROID PARA CERRAR EL MODAL
+  useBackButton(true, onClose);
 
   const primaryColor = storeData?.primaryColor || settings?.primaryColor || "#000000";
   const likedKey = `userLikes_${storeData?.id || "global"}`;
