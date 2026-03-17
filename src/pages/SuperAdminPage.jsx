@@ -18,11 +18,20 @@ export default function SuperAdminPage() {
   // 🌟 ESTADO DE LA LLAVE MAESTRA
   const [isCommissionActive, setIsCommissionActive] = useState(false);
 
-  // 🌟 ESTADOS PARA EL BRANDING GLOBAL MATRIZ (NUEVO) Y PIXEL
+  // 🌟 ESTADOS PARA EL BRANDING GLOBAL MATRIZ Y PIXEL
   const [globalCompanyName, setGlobalCompanyName] = useState("");
   const [globalCompanyLogo, setGlobalCompanyLogo] = useState("");
   const [facebookPixel, setFacebookPixel] = useState("");
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  
+  // 🌟 SECCIONES DEL HOMEPAGE
+  const [homepageSections, setHomepageSections] = useState({
+    topStores: true,
+    randomProducts: true,
+    bestSellers: true,
+    offers: true,
+    dailyTop: true
+  });
   
   const navigate = useNavigate();
 
@@ -51,6 +60,7 @@ export default function SuperAdminPage() {
           setGlobalCompanyName(snap.data().companyName || "");
           setGlobalCompanyLogo(snap.data().companyLogo || "");
           setFacebookPixel(snap.data().facebookPixel || "");
+          if (snap.data().homepageSections) setHomepageSections(snap.data().homepageSections);
         }
       } catch (error) {
         console.error("Error leyendo configuración global", error);
@@ -94,6 +104,18 @@ export default function SuperAdminPage() {
       toast.success("Configuraciones Guardadas ✅");
     } catch (error) {
       toast.error("Error al guardar configuraciones.");
+    }
+  };
+
+  const toggleSection = async (sectionKey) => {
+    const updatedSections = { ...homepageSections, [sectionKey]: !homepageSections[sectionKey] };
+    setHomepageSections(updatedSections);
+    try {
+      await setDoc(doc(db, "settings", "global"), { homepageSections: updatedSections }, { merge: true });
+      toast.success("Vista actualizada en vivo 👁️");
+    } catch (e) {
+      toast.error("Error al actualizar la sección");
+      setHomepageSections(homepageSections); // reverts if error
     }
   };
 
@@ -300,9 +322,28 @@ export default function SuperAdminPage() {
               <p className="text-xs text-pink-400 font-bold uppercase tracking-widest">Nivel de Acceso: Dios</p>
             </div>
           </div>
-          <button onClick={() => navigate('/')} className="text-sm font-bold text-gray-400 hover:text-white transition-colors">
-            Volver a la tienda →
-          </button>
+          
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => navigate('/')} 
+              className="hidden sm:flex items-center gap-2 text-xs font-black bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl transition-colors tracking-widest uppercase border border-white/10"
+              title="Ir a la página principal MegaStore"
+            >
+              <span>🏪</span> Catálogo Principal
+            </button>
+            
+            <button 
+              onClick={() => navigate('/admin')} 
+              className="hidden sm:flex items-center gap-2 text-xs font-black bg-pink-500/20 hover:bg-pink-500/40 text-pink-400 px-4 py-2 rounded-xl transition-colors tracking-widest uppercase border border-pink-500/30"
+              title="Ir al panel de administrador normal de tu tienda"
+            >
+              <span>🛍️</span> Mi Panel Admin
+            </button>
+
+            <button onClick={() => navigate('/')} className="text-sm font-bold text-gray-400 hover:text-white transition-colors ml-2">
+              Salir →
+            </button>
+          </div>
         </div>
       </header>
 
@@ -312,6 +353,7 @@ export default function SuperAdminPage() {
         <div className="flex overflow-x-auto gap-2 mb-8 hide-scrollbar">
           {[
             { id: "dashboard", icon: "📊", label: "Dashboard" },
+            { id: "secciones", icon: "🧩", label: "Tiendas/Secciones" },
             { id: "directorio", icon: "🏪", label: "Directorio" },
             { id: "finanzas", icon: "💰", label: "Finanzas" },
             { id: "verificacion", icon: "🛡️", label: "Verificación" },
@@ -418,6 +460,43 @@ export default function SuperAdminPage() {
                 <p className="text-4xl font-black text-gray-900 mt-1">{stores.length - activeStoresCount}</p>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* 🌟 PESTAÑA: SECCIONES / HOMEPAGE */}
+        {activeTab === "secciones" && (
+          <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm max-w-4xl mx-auto">
+             <div className="text-center mb-8">
+                <span className="text-5xl block mb-4">🧩</span>
+                <h2 className="text-2xl font-black text-gray-900">Módulos de la Página Principal</h2>
+                <p className="text-gray-500 text-sm mt-2">Enciende o apaga las secciones que quieres mostrar a los clientes al entrar a la web.</p>
+             </div>
+             
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  { key: 'randomProducts', title: 'Productos Aleatorios', desc: 'Muestra productos al azar independientemente de si la tienda está verificada o no.', icon: '🎲' },
+                  { key: 'bestSellers', title: 'Los Más Vendidos', desc: 'Top de productos con más ventas globales.', icon: '🔥' },
+                  { key: 'offers', title: 'Ofertas Destacadas', desc: 'Sugerencias de promociones y descuentos rápidos.', icon: '⚡' },
+                  { key: 'dailyTop', title: 'Tendencias del Día', desc: 'Los artículos que son tendencia hoy.', icon: '📈' },
+                  { key: 'topStores', title: 'Tiendas Oficiales', desc: 'Muestra las tiendas verificadas en la cabecera.', icon: '🏪' }
+                ].map((s) => (
+                  <div key={s.key} className="flex items-center justify-between p-5 border border-gray-100 rounded-2xl hover:shadow-md transition-shadow bg-gray-50/50">
+                     <div className="flex items-center gap-4">
+                        <div className="text-2xl bg-white w-12 h-12 rounded-full flex items-center justify-center shadow-sm">{s.icon}</div>
+                        <div>
+                           <h3 className="font-bold text-gray-900">{s.title}</h3>
+                           <p className="text-[11px] text-gray-500 leading-tight mt-1">{s.desc}</p>
+                        </div>
+                     </div>
+                     <button 
+                       onClick={() => toggleSection(s.key)}
+                       className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors ${homepageSections[s.key] ? 'bg-green-500' : 'bg-gray-300'}`}
+                     >
+                       <span className={`inline-block h-5 w-5 bg-white rounded-full transition-transform shadow-sm transform ${homepageSections[s.key] ? 'translate-x-6' : 'translate-x-1'}`} />
+                     </button>
+                  </div>
+                ))}
+             </div>
           </div>
         )}
 

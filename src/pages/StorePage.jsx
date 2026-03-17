@@ -1,4 +1,8 @@
 import { useState, useEffect } from "react"; 
+import { useSearchParams } from "react-router-dom";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../config/firebase";
+
 import AnnouncementBar from "../components/layout/AnnouncementBar";
 import Header from "../components/layout/Header";
 import HeroBanner from "../components/layout/HeroBanner";
@@ -14,6 +18,7 @@ import { useCart } from "../context/CartContext";
 import { useApp } from "../context/AppContext";
 
 export default function StorePage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [activeFilter, setActiveFilter] = useState("all");
 
@@ -25,6 +30,51 @@ export default function StorePage() {
   // 🌟 BLOQUEO DOBLE: Por deuda o porque el Súper Admin la apagó
   const isBlockedByDebt = storeData?.deuda_comision > 20;
   const isStoreDisabled = storeData?.isActive === false;
+
+  // 🌟 MAGIA: DETECTAR Y MARCAR ORIGEN DEL TRÁFICO
+  useEffect(() => {
+    if (storeData?.id) {
+      // Si el visitante entra desde la página principal de MegaStore, debe haber una cookie/session marcando index_super_admin.
+      // Si entra usando el link directo /oscar y NO tiene un rastro de index_super_admin, lo mandamos como tienda_directa.
+      const currentOrigin = sessionStorage.getItem("origenVenta");
+      if (!currentOrigin) {
+        // Entró directo (ej. link de Instagram o WhatsApp a la tienda /oscar)
+        sessionStorage.setItem("origenVenta", "tienda_directa");
+      }
+    }
+  }, [storeData?.id]);
+
+  // 🌟 MAGIA: ESCUCHADOR DE ENLACES PROFUNDOS (DEEP-LINKS)
+  useEffect(() => {
+    const productId = searchParams.get('product');
+    
+    // Si viene en la URL un producto y ya cargó la info de la tienda...
+    if (productId && storeData?.id) {
+      const fetchDirectProduct = async () => {
+        try {
+          const productSnap = await getDoc(doc(db, "products", productId));
+          if (productSnap.exists()) {
+            const data = { id: productSnap.id, ...productSnap.data() };
+            // Doble Seguridad: Confirmamos que el producto que intentan abrir realmente le pertenezca a este vendedor
+            if (data.storeId === storeData.id) {
+               
+               // Inyectar firma en el producto para que mantenga el rastreo exacto
+               const sourceOrigin = sessionStorage.getItem("origenVenta") || "tienda_directa";
+               data._origenVenta = sourceOrigin;
+
+               setSelectedProduct(data);
+               // Limpiar URL para que si cierran y recargan, no vuelva a abrir (Mejora la UX)
+               setSearchParams({}); 
+            }
+          }
+        } catch (error) {
+          console.error("No se pudo cargar producto directo:", error);
+        }
+      };
+      
+      fetchDirectProduct();
+    }
+  }, [searchParams, storeData?.id, setSearchParams]);
 
   // 🌟 MAGIA: SEO DE WHATSAPP Y REDES SOCIALES (TARJETAS VISUALES)
   useEffect(() => {

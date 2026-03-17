@@ -70,39 +70,8 @@ export default function CartDrawer() {
       const orderData = { ...customer, paymentId: selectedPayment.id, total };
       await createOrder(orderData); 
 
-      // 🌟 MAGIA FINANCIERA: LECTURA DEL RADAR Y LLAVE MAESTRA 🌟
-      try {
-        const globalSnap = await getDoc(doc(db, "settings", "global"));
-        const isCommissionActive = globalSnap.exists() ? globalSnap.data().isCommissionActive : false;
-        
-        // LEEMOS EL RADAR DEL NAVEGADOR
-        const origenVenta = sessionStorage.getItem("origenVenta");
-
-        if (storeData?.id) {
-          // SOLO COBRA SI LA LLAVE ESTÁ ENCENDIDA *Y* EL CLIENTE VINO DEL INDEX
-          if (isCommissionActive && origenVenta === "index_super_admin") {
-            const commissionRate = storeData.comision_porcentaje || 5; 
-            const commissionAmount = (total * commissionRate) / 100;
-            
-            await updateDoc(doc(db, "stores", storeData.id), {
-              deuda_comision: increment(commissionAmount),
-              ventas_consolidadas: increment(1)
-            });
-
-            // Limpiamos el radar para que si mañana compra directo, no le cobre
-            sessionStorage.removeItem("origenVenta"); 
-            
-          } else {
-            // SI VINO DIRECTO AL LINK DEL VENDEDOR (O LA LLAVE ESTÁ APAGADA): NO COBRA
-            await updateDoc(doc(db, "stores", storeData.id), {
-              ventas_consolidadas: increment(1)
-            });
-          }
-        }
-      } catch(e) { 
-        console.error("Error financiero silencioso:", e); 
-      }
-      // ------------------------------------------------------------------
+      // La orden ya tiene la firma del SuperAdmin (origenVenta).
+      // Serán cobradas ÚNICAMENTE si el vendedor aprueba la orden en el AdminInbox.
 
       const itemLines = items.map((i) => `• ${i.product.name}${i.variant ? ` [${i.variant.label}]` : ""} (x${i.quantity})`).join("\n");
       

@@ -17,6 +17,7 @@ import AdminInbox from "../components/admin/AdminInbox";
 import AdminPayments from "../components/admin/AdminPayments";
 import AdminStatistics from "../components/admin/AdminStatistics";
 import AdminPOS from "../components/admin/AdminPOS"; // 🌟 Importamos el nuevo POS
+import AdminSalesHistory from "../components/admin/AdminSalesHistory"; // 🌟 Importamos el nuevo Historial de Ventas
 
 export default function AdminPage() {
   const { logout } = useAuth();
@@ -30,12 +31,12 @@ export default function AdminPage() {
   const NAV_ITEMS = [
     { path: `/${storeId}/admin`, label: "⚙️ Ajustes", end: true },
     { path: `/${storeId}/admin/pos`, label: "🏪 Punto Venta" }, // 🌟 Link del POS añadido como segundo ítem para agilidad
+    { path: `/${storeId}/admin/pedidos`, label: "🛒 Historial de Ventas" }, // 🌟 Renombrado a petición
     { path: `/${storeId}/admin/interfaz`, label: "🎨 Interfaz" },
     { path: `/${storeId}/admin/sesiones`, label: "📂 Sesiones" },
     { path: `/${storeId}/admin/productos`, label: "📦 Productos" },
-    // Eliminado botón de "Pedidos" a petición
     { path: `/${storeId}/admin/estadisticas`, label: "📊 Estadísticas" },
-    { path: `/${storeId}/admin/inbox`, label: "💬 Mensajería" },
+    { path: `/${storeId}/admin/inbox`, label: "📦 Pedidos por Confirmar" }, // 🌟 Renombrado Inbox
     { path: `/${storeId}/admin/pagos`, label: "🏦 Pagos" },
   ];
 
@@ -130,10 +131,10 @@ export default function AdminPage() {
           <Routes>
             <Route index element={<AdminSettings />} />
             <Route path="pos" element={<AdminPOS />} /> {/* 🌟 Conexión del TPV/POS */}
+            <Route path="pedidos" element={<AdminSalesHistory />} /> {/* 🌟 Conexión del Historial de Ventas */}
             <Route path="interfaz" element={<AdminInterface />} />
             <Route path="sesiones" element={<AdminSessions />} />
             <Route path="productos" element={<AdminProducts />} />
-            {/* Eliminada la ruta de pedidos */}
             <Route path="estadisticas" element={<AdminStatistics />} />
             <Route path="inbox" element={<AdminInbox />} />
             <Route path="pagos" element={<AdminPayments />} />

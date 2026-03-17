@@ -45,7 +45,7 @@ export function AppProvider({ children }) {
     const pathParts = location.pathname.split('/').filter(Boolean);
     
     // 🌟 MAGIA: Rutas seguras completas
-    const reservedPaths = ['admin', 'login', 'registro-vendedor', 'super-admin']; 
+    const reservedPaths = ['admin', 'login', 'registro-vendedor', 'super-admin', 'search', 'ofertas']; 
     
     let storeId = null; 
     

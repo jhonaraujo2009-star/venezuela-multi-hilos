@@ -172,7 +172,15 @@ export default function ProductModal({ product: initialProduct, onClose }) {
 
   if (!currentProduct) return null;
 
-  const images = currentProduct.images?.length > 0 ? currentProduct.images : (currentProduct.image ? [currentProduct.image] : []);
+  const getImagesArray = () => {
+    let raw = currentProduct;
+    if (Array.isArray(raw.images) && raw.images.length > 0 && raw.images[0]) return raw.images;
+    if (raw.image) return [raw.image];
+    if (raw.imageUrl) return [raw.imageUrl];
+    return [];
+  };
+
+  const images = getImagesArray();
   const hasMultipleImages = images.length > 1;
 
   const paginate = (newDirection) => {

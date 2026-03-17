@@ -22,6 +22,10 @@ const RegisterStorePage = lazy(() => import("./pages/RegisterStorePage"));
 const SuperAdminPage = lazy(() => import("./pages/SuperAdminPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
+// Nuevas Páginas Premium
+const SearchPage = lazy(() => import("./pages/SearchPage"));
+const FlashOffersPage = lazy(() => import("./pages/FlashOffersPage"));
+
 // Indicador de carga global durante transiciones
 const GlobalLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white via-slate-50/60 to-pink-50/20">
@@ -56,6 +60,9 @@ export default function App() {
                 <Suspense fallback={<GlobalLoader />}>
                   <Routes>
                     <Route path="/" element={<HomePage />} />
+                    <Route path="/search" element={<SearchPage />} />
+                    <Route path="/ofertas" element={<FlashOffersPage />} />
+                    
                     <Route path="/:storeId/preguntas" element={<QuestionsPage />} />
                     
                     <Route path="/login" element={<LoginPage />} />

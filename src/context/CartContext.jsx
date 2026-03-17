@@ -37,6 +37,9 @@ export function CartProvider({ children }) {
   }, [items, storeData?.id]);
 
   const addItem = useCallback((product, variant, quantity) => {
+    // 🌟 RASTREADOR DE COMISIONES: Leemos de dónde vino el cliente
+    const origenVentaActual = sessionStorage.getItem("origenVenta") || null;
+
     setItems((prev) => {
       const key = `${product.id}-${variant?.id || "default"}`;
       const existing = prev.find((i) => i.key === key);
@@ -53,6 +56,7 @@ export function CartProvider({ children }) {
           variant,
           quantity,
           price: product.price,
+          _origenVenta: origenVentaActual // Guardamos la firma del SuperAdmin en la bolsa
         },
       ];
     });
@@ -76,6 +80,9 @@ export function CartProvider({ children }) {
 
   const createOrder = async (customerData) => {
     try {
+      // Determinamos el origen dominante (si vino de la mega página, cuenta. Si vino de tienda directa, no)
+      const primaryOrigin = items.find(i => i._origenVenta === "index_super_admin") ? "index_super_admin" : "tienda_directa";
+
       const orderData = {
         customerName: customerData.name,
         customerPhone: customerData.phone,
@@ -84,12 +91,14 @@ export function CartProvider({ children }) {
           name: i.product.name,
           qty: i.quantity,
           price: i.price,
-          variant: i.variant?.label || null 
+          variant: i.variant?.label || null,
+          _origenVenta: i._origenVenta || i.product._origenVenta || primaryOrigin
         })),
         totalAmount: total,
         status: "pending",
         createdAt: serverTimestamp(),
-        storeId: storeData?.id // 🌟 MAGIA: Le pegamos la etiqueta de la tienda a la orden para que el dueño correcto lo reciba
+        storeId: storeData?.id, // 🌟 MAGIA: Le pegamos la etiqueta de la tienda a la orden para que el dueño correcto lo reciba
+        _origenVenta: primaryOrigin // 🌟 Guardamos a nivel de orden para búsquedas más fáciles
       };
       const docRef = await addDoc(collection(db, "orders"), orderData);
       return docRef.id;

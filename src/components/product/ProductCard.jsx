@@ -1,11 +1,20 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
+import { useCart } from "../../context/CartContext";
 
 export default function ProductCard({ product, onClick, rank }) {
   const { bsPrice } = useApp();
+  const { addItem, setIsOpen } = useCart();
   const [timeLeft, setTimeLeft] = useState("");
 
-  const productThumbnail = product.image || (product.images && product.images[0]) || product.imageUrl;
+  const getThumbnail = () => {
+    if (product.image) return product.image;
+    if (product.imageUrl) return product.imageUrl;
+    if (Array.isArray(product.images) && product.images.length > 0 && product.images[0]) return product.images[0];
+    return null;
+  };
+  const productThumbnail = getThumbnail();
+
   const totalStock = product.variants?.length
     ? product.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
     : (product.totalStock ?? 0);
@@ -81,10 +90,34 @@ export default function ProductCard({ product, onClick, rank }) {
   };
   // ------------------------------------------------------------------
 
+  // 🌟 FUNCIÓN DE AGREGADO RÁPIDO
+  const handleDirectAdd = (e) => {
+    e.stopPropagation(); // Evitar que se abra la tarjeta
+    
+    if (productWithFinalPrice.variants && productWithFinalPrice.variants.length > 0) {
+      // Si tiene variantes (tallas, colores), forzamos a abrir el modal
+      onClick(productWithFinalPrice);
+    } else {
+      // Si no tiene variantes, lo mandamos directo a la bolsa con animación
+      addItem(productWithFinalPrice, null, 1);
+      
+      // Feedback visual
+      const btn = e.currentTarget;
+      btn.classList.add("scale-125", "bg-pink-500", "text-white");
+      btn.classList.remove("bg-white", "text-gray-900");
+      
+      setTimeout(() => {
+        btn.classList.remove("scale-125", "bg-pink-500", "text-white");
+        btn.classList.add("bg-white", "text-gray-900");
+        // setIsOpen(true); -> El usuario solicitó NO abrir la bolsa automáticamente.
+      }, 400);
+    }
+  };
+
   return (
     <button
       onClick={() => !isSoldOut && onClick(productWithFinalPrice)}
-      className={`relative text-left bg-white/80 backdrop-blur-sm rounded-[2.5rem] overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-500 active:scale-95 border border-white w-full group ${isSoldOut ? "opacity-70 cursor-default" : "cursor-pointer"}`}
+      className={`relative text-left bg-white/80 backdrop-blur-sm rounded-[2.5rem] overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-500 border border-white w-full group ${isSoldOut ? "opacity-70 cursor-default" : "cursor-pointer"}`}
     >
       {rank && (
         <div className="absolute top-3 right-3 z-30 flex flex-col items-center">
@@ -149,10 +182,27 @@ export default function ProductCard({ product, onClick, rank }) {
             <span className="bg-white text-black text-[10px] font-black px-4 py-2 rounded-full uppercase tracking-widest shadow-2xl">Agotado</span>
           </div>
         )}
+
+        {/* 🌟 BOTÓN DE AGREGADO DIRECTO (Aparece en hover) 🌟 */}
+        {!isSoldOut && (
+          <div 
+            onClick={handleDirectAdd}
+            className="absolute bottom-3 right-3 z-30 w-10 h-10 bg-white text-gray-900 rounded-full shadow-2xl border border-gray-100 flex items-center justify-center translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 active:scale-95"
+            title="Añadir a la bolsa rápido"
+          >
+            <svg className="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {productWithFinalPrice.variants && productWithFinalPrice.variants.length > 0 ? (
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /> // Plus
+              ) : (
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /> // Bag
+              )}
+            </svg>
+          </div>
+        )}
       </div>
 
       <div className="p-4 bg-transparent">
-        <h3 className="text-[13px] font-bold text-gray-800 leading-tight line-clamp-2 h-9 mb-1 group-hover:text-pink-600 transition-colors uppercase">
+        <h3 className="text-[13px] font-bold text-gray-800 leading-tight truncate w-full block mb-1 group-hover:text-pink-600 transition-colors uppercase">
           {product.name}
         </h3>
         

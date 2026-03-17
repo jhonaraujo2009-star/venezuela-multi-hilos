@@ -253,23 +253,6 @@ export default function AdminSettings() {
         )}
       </div>
 
-      {/* MEDIA Y REDES */}
-      <div className="bg-white/90 backdrop-blur-xl rounded-[2.5rem] p-7 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white space-y-8">
-        <div>
-          <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-5">Iconos Redes Sociales</h3>
-          <div className="grid grid-cols-3 gap-3">
-            {['whatsapp', 'instagram', 'tiktok'].map((social) => (
-              <label key={social} className="group flex flex-col items-center gap-3 cursor-pointer bg-gray-50/50 p-3 rounded-3xl border border-gray-100 hover:bg-pink-50/30 transition-all">
-                <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center overflow-hidden shadow-sm group-hover:scale-110 transition-transform">
-                  {form.customIcons[social] ? <img src={form.customIcons[social]} className="w-full h-full object-contain" /> : <span className="text-xl">📸</span>}
-                </div>
-                <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">{uploading === social ? "..." : social}</span>
-                <input type="file" className="hidden" onChange={(e) => handleUpload(e, social, 'customIcons')} />
-              </label>
-            ))}
-          </div>
-        </div>
-      </div>
 
       {/* ENLACES Y DATOS BÁSICOS */}
       <div className="bg-white/90 backdrop-blur-xl rounded-[2.5rem] p-7 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white space-y-4">
@@ -279,21 +262,6 @@ export default function AdminSettings() {
         <input type="text" value={form.socialLinks.tiktok} onChange={(e) => setForm({...form, socialLinks: {...form.socialLinks, tiktok: e.target.value}})} placeholder="Link TikTok" className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm outline-none" />
       </div>
 
-      {/* 🌟 NUEVO: AGENCIAS DE ENVÍO */}
-      <div className="bg-white/90 backdrop-blur-xl rounded-[2.5rem] p-7 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white">
-        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-5">Logos de Agencias de Envío</h3>
-        <div className="grid grid-cols-3 gap-3">
-          {['mrw', 'tealca', 'zoom'].map((agency) => (
-            <label key={agency} className="group flex flex-col items-center gap-3 cursor-pointer bg-gray-50/50 p-3 rounded-3xl border border-gray-100 hover:bg-pink-50/30 transition-all">
-              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center overflow-hidden shadow-sm group-hover:scale-110 transition-transform p-2">
-                {form.shippingLogos?.[agency] ? <img src={form.shippingLogos[agency]} className="w-full h-full object-contain" /> : <span className="text-xl opacity-30">🚚</span>}
-              </div>
-              <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">{uploading === agency ? "..." : agency}</span>
-              <input type="file" className="hidden" onChange={(e) => handleUpload(e, agency, 'shippingLogos')} />
-            </label>
-          ))}
-        </div>
-      </div>
 
       {/* 🌟 NUEVO: LOGOS DE LA APLICACIÓN INSTALABLE (PWA) */}
       <div className="bg-white/90 backdrop-blur-xl rounded-[2.5rem] p-7 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white">

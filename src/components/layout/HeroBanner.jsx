@@ -19,7 +19,7 @@ export default function HeroBanner({ activeFilter }) {
     >
       <div className={`max-w-[1200px] mx-auto transition-all duration-500 transform ${isExpanded ? "translate-y-0 opacity-100" : "-translate-y-8 opacity-0"}`}>
         
-        <div className="flex flex-col md:flex-row items-center md:items-center gap-6 md:gap-10 px-4 sm:px-6 py-6 sm:py-10">
+        <div className="flex flex-col items-center gap-6 px-4 sm:px-6 py-6 sm:py-10">
           
           {/* LOGO GIGANTE Y AURA */}
           <div className="shrink-0 relative z-10 flex items-center justify-center p-2">
@@ -41,20 +41,20 @@ export default function HeroBanner({ activeFilter }) {
             </div>
           </div>
 
-          {/* TEXTO ELEGANTE */}
-          <div className="flex-1 min-w-0 text-center md:text-left flex flex-col justify-center w-full">
+          {/* TEXTO ELEGANTE (SIEMPRE CENTRADO) */}
+          <div className="flex-1 min-w-0 text-center flex flex-col justify-center w-full">
             
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 tracking-tight flex flex-col md:flex-row items-center md:items-center justify-center md:justify-start gap-2.5 mb-3">
-              <span className="break-words line-clamp-2">{heroTitle}</span>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 tracking-tight flex flex-col items-center justify-center gap-2.5 mb-3 w-full">
+              <span className="truncate w-full max-w-full text-center">{heroTitle}</span>
               
               {isVerified && (
-                <span className="shrink-0 flex items-center justify-center w-6 h-6 bg-blue-500 text-white rounded-full text-xs shadow-md shadow-blue-500/20 border-2 border-white mt-1 md:mt-0">
+                <span className="shrink-0 flex items-center justify-center w-6 h-6 bg-blue-500 text-white rounded-full text-xs shadow-md shadow-blue-500/20 border-2 border-white mt-1">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
                 </span>
               )}
             </h1>
             
-            <p className="text-sm sm:text-[15px] text-gray-500 leading-relaxed font-medium line-clamp-3 md:line-clamp-4 max-w-lg mx-auto md:mx-0">
+            <p className="text-sm sm:text-[15px] text-gray-500 leading-relaxed font-medium line-clamp-3 w-full max-w-lg mx-auto break-words">
               {heroDescription || "Explora nuestra colección exclusiva y encuentra los mejores productos seleccionados para ti."}
             </p>
 
