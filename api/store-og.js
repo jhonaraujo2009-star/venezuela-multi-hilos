@@ -1,18 +1,10 @@
 // api/store-og.js
 // Vercel Serverless Function: inyecta OG tags dinámicos por tienda para WhatsApp, Facebook, Telegram, etc.
+// Se accede como: /api/store-og?storeId=oscar
+// WhatsApp/Facebook leen los OG tags → humanos son redirigidos automáticamente al SPA
 
 const FIREBASE_PROJECT = "tiendavenezuela-768d2";
 const FIREBASE_API_KEY = "AIzaSyA-W2oLOdc_lhG8_oygYRjn2Uynhld74uU";
-
-// Rutas del SPA que NO son storeIds
-const RESERVED_PATHS = new Set([
-  "admin", "login", "registro-vendedor", "super-admin", "search", "ofertas", "api"
-]);
-
-// Detectar si la petición viene de un bot (WhatsApp, Facebook, Telegram, Twitter, etc.)
-function isBot(userAgent = "") {
-  return /WhatsApp|facebookexternalhit|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Snapchat/i.test(userAgent);
-}
 
 // Leer un campo string de la respuesta de la Firestore REST API
 function getStr(fields, key, fallback = "") {
@@ -31,12 +23,11 @@ function escapeHtml(text) {
 export default async function handler(req, res) {
   const { storeId } = req.query;
 
-  // Seguridad: ignorar rutas reservadas o storeIds vacíos
-  if (!storeId || RESERVED_PATHS.has(storeId)) {
+  // Si no hay storeId, redirigir a la página principal
+  if (!storeId) {
     return res.redirect(302, "/");
   }
 
-  const ua = req.headers["user-agent"] || "";
   const protocol = req.headers["x-forwarded-proto"] || "https";
   const host = req.headers["host"];
   const storeUrl = `${protocol}://${host}/${storeId}`;
@@ -48,7 +39,6 @@ export default async function handler(req, res) {
 
   // ---------- CONSULTAR FIRESTORE REST API ----------
   try {
-    // Un solo fetch al documento de la tienda (nombre, heroDescription, profileImage, appLogos)
     const storeRes = await fetch(
       `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT}/databases/(default)/documents/stores/${storeId}?key=${FIREBASE_API_KEY}`
     );
@@ -65,21 +55,12 @@ export default async function handler(req, res) {
       else if (appLogo192) storeImage = appLogo192;
     }
   } catch (err) {
-    // Si Firestore falla, usamos los valores por defecto (no rompemos la página)
     console.error("[store-og] Error al consultar Firestore:", err.message);
   }
 
-  // ---------- ¿ES UN BOT? ----------
-  // Bots: devolvemos HTML mínimo con OG tags (no ejecutan JS, solo leen meta tags)
-  // Humanos: los enviamos al SPA normalmente con una redirección
-  if (!isBot(ua)) {
-    // Para usuarios reales, redirigir al SPA (el rewrite de vercel.json maneja el resto)
-    // Usamos 302 temporal para que no se cachee
-    res.setHeader("Cache-Control", "no-store");
-    return res.redirect(302, `/${storeId}`);
-  }
-
-  // ---------- HTML CON OG TAGS PARA BOTS ----------
+  // ---------- SIEMPRE DEVOLVER HTML CON OG TAGS ----------
+  // Los bots (WhatsApp, Facebook) leen las meta tags
+  // Los humanos son redirigidos al SPA tras 0 segundos vía meta refresh
   const safeTitle = escapeHtml(storeName);
   const safeDesc  = escapeHtml(storeDescription);
   const safeUrl   = escapeHtml(storeUrl);
@@ -107,7 +88,7 @@ export default async function handler(req, res) {
   <meta name="twitter:description" content="${safeDesc}" />
   <meta name="twitter:image"       content="${safeImage}" />
 
-  <!-- Redirige al humano que por casualidad llegue aquí -->
+  <!-- Redirige a la tienda real automáticamente (humanos) -->
   <meta http-equiv="refresh" content="0;url=/${storeId}" />
 </head>
 <body>
@@ -116,7 +97,7 @@ export default async function handler(req, res) {
 </html>`;
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-  // Cache de 5 minutos en el edge (bots no necesitan datos en tiempo real)
+  // Cache en el edge por 5 min para no consultar Firestore en cada hit
   res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=60");
   res.status(200).send(html);
 }

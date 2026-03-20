@@ -1,17 +1,6 @@
 {
   "rewrites": [
-    {
-      "source": "/:storeId",
-      "has": [
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": ".*(WhatsApp|facebookexternalhit|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot).*"
-        }
-      ],
-      "destination": "/api/store-og?storeId=:storeId"
-    },
+    { "source": "/api/store-og", "destination": "/api/store-og" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
-

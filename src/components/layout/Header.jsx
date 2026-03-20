@@ -227,7 +227,7 @@ export default function Header({ onProductClick, onFilter }) {
                   const shareData = {
                     title: `¡Visita ${storeData.nombre || "mi tienda"}!`,
                     text: storeData.heroDescription || `Te invito a ver mi catálogo interactivo en línea.`,
-                    url: `${window.location.origin}/${storeData.id}`
+                    url: `${window.location.origin}/api/store-og?storeId=${storeData.id}`
                   };
                   
                   try {

@@ -165,7 +165,7 @@ export default function ProductModal({ product: initialProduct, onClose }) {
 
   const handleShareWhatsApp = () => {
     const text = `¡Mira lo que encontré en ${storeData?.nombre || 'la tienda'}! 😍\n*${currentProduct?.name}* por solo *$${currentPrice}*\n\nMíralo aquí:`;
-    const url = window.location.href; 
+    const url = `${window.location.origin}/api/store-og?storeId=${storeData?.id || ''}`; 
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text + "\n" + url)}`;
     window.open(whatsappUrl, '_blank');
   };
