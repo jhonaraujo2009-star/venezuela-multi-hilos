@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 
 export default function SuperAdminPage() {
   const [stores, setStores] = useState([]);
+  const [adminStoreId, setAdminStoreId] = useState("");
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -74,6 +75,9 @@ export default function SuperAdminPage() {
       const querySnapshot = await getDocs(collection(db, "stores"));
       const storesList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setStores(storesList);
+      // Buscar el storeId que pertenece al Super Admin
+      const myStore = storesList.find(s => s.ownerEmail === MASTER_EMAIL);
+      if (myStore) setAdminStoreId(myStore.id);
     } catch (error) {
       toast.error("Error al cargar la base de datos de tiendas.");
     } finally {
@@ -333,11 +337,11 @@ export default function SuperAdminPage() {
             </button>
             
             <button 
-              onClick={() => navigate('/admin')} 
+              onClick={() => adminStoreId ? navigate(`/${adminStoreId}/admin`) : toast.error("No se encontró tu tienda. Verifica que tu email esté registrado como dueño.")}
               className="hidden sm:flex items-center gap-2 text-xs font-black bg-pink-500/20 hover:bg-pink-500/40 text-pink-400 px-4 py-2 rounded-xl transition-colors tracking-widest uppercase border border-pink-500/30"
-              title="Ir al panel de administrador normal de tu tienda"
+              title={adminStoreId ? `Ir a /${adminStoreId}/admin` : "Buscando tu tienda..."}
             >
-              <span>🛍️</span> Mi Panel Admin
+              <span>🛍️</span> {adminStoreId ? `Mi Tienda (${adminStoreId})` : "Mi Panel Admin"}
             </button>
 
             <button onClick={() => navigate('/')} className="text-sm font-bold text-gray-400 hover:text-white transition-colors ml-2">
