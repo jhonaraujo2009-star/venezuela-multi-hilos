@@ -5,6 +5,7 @@ import {
 import { db } from "../../config/firebase";
 import toast from "react-hot-toast";
 import { useApp } from "../../context/AppContext"; // 🌟 INYECTAMOS EL CEREBRO
+import JSZip from "jszip";
 
 // ==========================================
 // 1. VARIANT MANAGER
@@ -382,81 +383,75 @@ export default function AdminProducts() {
     }
   };
 
-  // 🌟 Forzar URL de calidad original en Cloudinary (quita transformaciones de compresión)
+  // 🌟 Forzar URL de calidad original en Cloudinary
   const getOriginalQualityUrl = (url) => {
     if (!url.includes('cloudinary.com')) return url;
-    // Si la URL tiene transformaciones (ej: /f_auto,q_auto/), reemplazarlas por calidad máxima
-    // Formato típico: https://res.cloudinary.com/xxx/image/upload/v1234/folder/file.jpg
-    // Con transforms: https://res.cloudinary.com/xxx/image/upload/f_auto,q_auto/v1234/folder/file.jpg
     return url.replace(/\/upload\/([^v])/, '/upload/q_100/$1');
   };
 
-  const downloadSingleImage = async (url, filename) => {
+  // 🌟 DESCARGAR COMO ZIP (UN SOLO ARCHIVO)
+  const downloadAsZip = async (imagesToDownload) => {
+    if (imagesToDownload.length === 0) return toast.error("No hay imágenes para descargar");
+    setDownloading(true);
+    const toastId = toast.loading(`Empaquetando ${imagesToDownload.length} foto(s) en ZIP...`);
+    
     try {
-      // 🌟 Descargar siempre en calidad original máxima
-      const originalUrl = getOriginalQualityUrl(url);
-      const res = await fetch(originalUrl);
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
+      const zip = new JSZip();
+      const folder = zip.folder("galeria_productos");
+      
+      let completed = 0;
+      for (const img of imagesToDownload) {
+        try {
+          const originalUrl = getOriginalQualityUrl(img.url);
+          const res = await fetch(originalUrl);
+          const blob = await res.blob();
+          
+          // Determinar extensión real del archivo
+          const mimeToExt = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
+          const ext = mimeToExt[blob.type] || img.url.split('.').pop()?.split('?')[0] || 'jpg';
+          const safeName = img.productName.replace(/[^a-zA-Z0-9_\- ]/g, '_').substring(0, 40);
+          const fileName = `${safeName}_${img.index + 1}.${ext}`;
+          
+          folder.file(fileName, blob);
+          completed++;
+          toast.loading(`Empaquetando... ${completed}/${imagesToDownload.length}`, { id: toastId });
+        } catch (err) {
+          console.error(`Error descargando ${img.url}:`, err);
+        }
+      }
+      
+      // Generar y descargar el ZIP
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const blobUrl = URL.createObjectURL(zipBlob);
       const a = document.createElement('a');
       a.href = blobUrl;
-      a.download = filename;
+      a.download = `Galeria_Productos_${new Date().toLocaleDateString('es-VE').replace(/\//g, '-')}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
-    } catch {
-      // fallback: abrir en nueva pestaña la URL original
-      window.open(url, '_blank');
-    }
-  };
-
-  const downloadSelectedImages = async () => {
-    if (selectedImages.size === 0) return toast.error("Selecciona al menos una imagen");
-    setDownloading(true);
-    const toastId = toast.loading(`Descargando ${selectedImages.size} imagen(es)...`);
-    try {
-      const allImgs = getAllImages();
-      let count = 0;
-      for (const img of allImgs) {
-        if (selectedImages.has(img.url)) {
-          const ext = img.url.split('.').pop()?.split('?')[0] || 'jpg';
-          const safeName = img.productName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
-          await downloadSingleImage(img.url, `${safeName}_${img.index + 1}.${ext}`);
-          count++;
-          // Small delay between downloads to avoid browser blocking
-          if (count < selectedImages.size) await new Promise(r => setTimeout(r, 400));
-        }
-      }
-      toast.success(`${count} imagen(es) descargada(s) ✅`, { id: toastId });
-    } catch {
-      toast.error("Error al descargar", { id: toastId });
+      
+      toast.success(`✅ ${completed} foto(s) descargadas en un ZIP`, { id: toastId });
+    } catch (err) {
+      console.error(err);
+      toast.error("Error al crear el ZIP", { id: toastId });
     } finally {
       setDownloading(false);
     }
   };
 
-  const downloadAllImages = async () => {
+  const downloadSelectedImages = () => {
+    if (selectedImages.size === 0) return toast.error("Selecciona al menos una imagen");
+    const allImgs = getAllImages();
+    const selected = allImgs.filter(img => selectedImages.has(img.url));
+    downloadAsZip(selected);
+  };
+
+  const downloadAllImages = () => {
     const allImgs = getAllImages();
     if (allImgs.length === 0) return toast.error("No hay imágenes para descargar");
     setSelectedImages(new Set(allImgs.map(i => i.url)));
-    setDownloading(true);
-    const toastId = toast.loading(`Descargando ${allImgs.length} imagen(es)...`);
-    try {
-      let count = 0;
-      for (const img of allImgs) {
-        const ext = img.url.split('.').pop()?.split('?')[0] || 'jpg';
-        const safeName = img.productName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
-        await downloadSingleImage(img.url, `${safeName}_${img.index + 1}.${ext}`);
-        count++;
-        if (count < allImgs.length) await new Promise(r => setTimeout(r, 400));
-      }
-      toast.success(`${count} imagen(es) descargada(s) ✅`, { id: toastId });
-    } catch {
-      toast.error("Error al descargar", { id: toastId });
-    } finally {
-      setDownloading(false);
-    }
+    downloadAsZip(allImgs);
   };
 
   return (
