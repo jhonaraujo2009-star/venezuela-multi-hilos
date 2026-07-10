@@ -100,6 +100,7 @@ function ProductForm({ sessions, product, onClose, storeData }) {
             { method: "POST", body: formData }
           );
           const data = await res.json();
+          // 🌟 Usamos la URL original sin transformaciones para preservar calidad máxima
           return data.secure_url;
         })
       );
@@ -285,6 +286,11 @@ export default function AdminProducts() {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedSessionId, setExpandedSessionId] = useState(null);
 
+  // 🌟 ESTADOS PARA DESCARGA DE GALERíA
+  const [downloadMode, setDownloadMode] = useState(false);
+  const [selectedImages, setSelectedImages] = useState(new Set());
+  const [downloading, setDownloading] = useState(false);
+
   useEffect(() => {
     if (!storeData?.id) return; // Esperar a tener el ID de la tienda
 
@@ -345,17 +351,171 @@ export default function AdminProducts() {
     return expandedSessionId === groupId; 
   };
 
+  // 🌟 FUNCIONES DE DESCARGA DE GALERÍA
+  const getAllImages = () => {
+    const imgs = [];
+    products.forEach(p => {
+      if (p.images?.length) {
+        p.images.forEach((url, i) => {
+          imgs.push({ url, productName: p.name, index: i });
+        });
+      }
+    });
+    return imgs;
+  };
+
+  const toggleImageSelection = (url) => {
+    setSelectedImages(prev => {
+      const next = new Set(prev);
+      if (next.has(url)) next.delete(url);
+      else next.add(url);
+      return next;
+    });
+  };
+
+  const selectAllImages = () => {
+    const allImgs = getAllImages();
+    if (selectedImages.size === allImgs.length) {
+      setSelectedImages(new Set());
+    } else {
+      setSelectedImages(new Set(allImgs.map(i => i.url)));
+    }
+  };
+
+  // 🌟 Forzar URL de calidad original en Cloudinary (quita transformaciones de compresión)
+  const getOriginalQualityUrl = (url) => {
+    if (!url.includes('cloudinary.com')) return url;
+    // Si la URL tiene transformaciones (ej: /f_auto,q_auto/), reemplazarlas por calidad máxima
+    // Formato típico: https://res.cloudinary.com/xxx/image/upload/v1234/folder/file.jpg
+    // Con transforms: https://res.cloudinary.com/xxx/image/upload/f_auto,q_auto/v1234/folder/file.jpg
+    return url.replace(/\/upload\/([^v])/, '/upload/q_100/$1');
+  };
+
+  const downloadSingleImage = async (url, filename) => {
+    try {
+      // 🌟 Descargar siempre en calidad original máxima
+      const originalUrl = getOriginalQualityUrl(url);
+      const res = await fetch(originalUrl);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      // fallback: abrir en nueva pestaña la URL original
+      window.open(url, '_blank');
+    }
+  };
+
+  const downloadSelectedImages = async () => {
+    if (selectedImages.size === 0) return toast.error("Selecciona al menos una imagen");
+    setDownloading(true);
+    const toastId = toast.loading(`Descargando ${selectedImages.size} imagen(es)...`);
+    try {
+      const allImgs = getAllImages();
+      let count = 0;
+      for (const img of allImgs) {
+        if (selectedImages.has(img.url)) {
+          const ext = img.url.split('.').pop()?.split('?')[0] || 'jpg';
+          const safeName = img.productName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
+          await downloadSingleImage(img.url, `${safeName}_${img.index + 1}.${ext}`);
+          count++;
+          // Small delay between downloads to avoid browser blocking
+          if (count < selectedImages.size) await new Promise(r => setTimeout(r, 400));
+        }
+      }
+      toast.success(`${count} imagen(es) descargada(s) ✅`, { id: toastId });
+    } catch {
+      toast.error("Error al descargar", { id: toastId });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const downloadAllImages = async () => {
+    const allImgs = getAllImages();
+    if (allImgs.length === 0) return toast.error("No hay imágenes para descargar");
+    setSelectedImages(new Set(allImgs.map(i => i.url)));
+    setDownloading(true);
+    const toastId = toast.loading(`Descargando ${allImgs.length} imagen(es)...`);
+    try {
+      let count = 0;
+      for (const img of allImgs) {
+        const ext = img.url.split('.').pop()?.split('?')[0] || 'jpg';
+        const safeName = img.productName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
+        await downloadSingleImage(img.url, `${safeName}_${img.index + 1}.${ext}`);
+        count++;
+        if (count < allImgs.length) await new Promise(r => setTimeout(r, 400));
+      }
+      toast.success(`${count} imagen(es) descargada(s) ✅`, { id: toastId });
+    } catch {
+      toast.error("Error al descargar", { id: toastId });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">📦 Inventario</h2>
-        <button
-          onClick={() => { setFormProduct(null); setShowForm(true); }}
-          className="px-5 py-2.5 rounded-2xl text-white text-sm font-black shadow-lg hover:scale-105 transition-transform"
-          style={{ background: "var(--primary)" }}>
-          + Agregar_Productos
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setDownloadMode(!downloadMode); setSelectedImages(new Set()); }}
+            className={`px-4 py-2.5 rounded-2xl text-sm font-black transition-all ${
+              downloadMode 
+                ? 'bg-gray-900 text-white shadow-lg' 
+                : 'bg-gray-100 text-gray-500 hover:bg-gray-200 border border-gray-200'
+            }`}
+          >
+            {downloadMode ? '✖ Cancelar' : '📷 Descargar Fotos'}
+          </button>
+          <button
+            onClick={() => { setFormProduct(null); setShowForm(true); }}
+            className="px-5 py-2.5 rounded-2xl text-white text-sm font-black shadow-lg hover:scale-105 transition-transform"
+            style={{ background: "var(--primary)" }}>
+            + Agregar_Productos
+          </button>
+        </div>
       </div>
+
+      {/* 🌟 BARRA DE DESCARGA DE GALERÍA */}
+      {downloadMode && (
+        <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg animate-in slide-in-from-top-2 duration-300">
+          <div className="flex items-center gap-3">
+            <span className="text-white text-sm font-bold">📷 Modo descarga</span>
+            <span className="bg-white/10 text-white/80 text-xs font-bold px-3 py-1 rounded-full">
+              {selectedImages.size} seleccionada(s)
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={selectAllImages}
+              className="px-4 py-2 rounded-xl text-xs font-black bg-white/10 hover:bg-white/20 text-white transition-colors border border-white/10"
+            >
+              {selectedImages.size === getAllImages().length ? '✖ Deseleccionar todo' : '✔ Seleccionar todo'}
+            </button>
+            <button 
+              onClick={downloadSelectedImages}
+              disabled={downloading || selectedImages.size === 0}
+              className="px-4 py-2 rounded-xl text-xs font-black bg-emerald-500 hover:bg-emerald-600 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
+            >
+              {downloading ? 'Descargando...' : `⬇ Descargar (${selectedImages.size})`}
+            </button>
+            <button 
+              onClick={downloadAllImages}
+              disabled={downloading}
+              className="px-4 py-2 rounded-xl text-xs font-black bg-pink-500 hover:bg-pink-600 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-pink-500/20"
+            >
+              {downloading ? 'Descargando...' : '📥 Toda la Galería'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 🌟 BARRA DE BÚSQUEDA VIP 🌟 */}
       <div className="relative">
@@ -436,7 +596,7 @@ export default function AdminProducts() {
                             <div key={p.id} className="flex items-center gap-4 px-6 py-4 hover:bg-pink-50/30 transition-colors group/item">
                               <div className="w-4 border-b-2 border-l-2 border-gray-100 h-8 -mt-8 ml-2 rounded-bl-lg absolute" />
                               
-                              <div className="ml-8 w-12 h-12 rounded-xl overflow-hidden bg-gray-50 shadow-sm flex-shrink-0">
+                              <div className="ml-8 w-12 h-12 rounded-xl overflow-hidden bg-gray-50 shadow-sm flex-shrink-0 relative">
                                 {p.images?.[0] ? <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover" /> : <span className="flex items-center justify-center h-full text-gray-300">🖼️</span>}
                               </div>
                               
@@ -454,6 +614,28 @@ export default function AdminProducts() {
                               </div>
 
                               <div className="flex gap-2 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                                {downloadMode && p.images?.length > 0 && (
+                                  <div className="flex items-center gap-1">
+                                    {p.images.map((imgUrl, imgIdx) => (
+                                      <button 
+                                        key={imgIdx}
+                                        onClick={(e) => { e.stopPropagation(); toggleImageSelection(imgUrl); }}
+                                        className={`w-8 h-8 rounded-lg border-2 overflow-hidden transition-all relative ${
+                                          selectedImages.has(imgUrl) 
+                                            ? 'border-emerald-500 ring-2 ring-emerald-200 scale-110' 
+                                            : 'border-gray-200 hover:border-gray-400 opacity-60 hover:opacity-100'
+                                        }`}
+                                      >
+                                        <img src={imgUrl} alt="" className="w-full h-full object-cover" />
+                                        {selectedImages.has(imgUrl) && (
+                                          <div className="absolute inset-0 bg-emerald-500/40 flex items-center justify-center">
+                                            <span className="text-white text-xs font-black">✔</span>
+                                          </div>
+                                        )}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
                                 <button onClick={(e) => editProduct(p, e)} className="p-2 rounded-xl bg-white shadow-sm border border-gray-100 text-gray-500 hover:text-pink-500 hover:border-pink-200 transition-all text-sm">✏️</button>
                                 <button onClick={(e) => deleteProduct(p.id, e)} className="p-2 rounded-xl bg-white shadow-sm border border-gray-100 text-gray-500 hover:text-red-500 hover:border-red-200 transition-all text-sm">🗑️</button>
                               </div>

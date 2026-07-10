@@ -337,11 +337,19 @@ export default function SuperAdminPage() {
             </button>
             
             <button 
+              onClick={() => adminStoreId ? navigate(`/${adminStoreId}`) : toast.error("No se encontró tu tienda.")}
+              className="hidden sm:flex items-center gap-2 text-xs font-black bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-400 px-4 py-2 rounded-xl transition-colors tracking-widest uppercase border border-emerald-500/30"
+              title={adminStoreId ? `Ver tienda /${adminStoreId}` : "Buscando tu tienda..."}
+            >
+              <span>🏠</span> Ver Mi Tienda
+            </button>
+
+            <button 
               onClick={() => adminStoreId ? navigate(`/${adminStoreId}/admin`) : toast.error("No se encontró tu tienda. Verifica que tu email esté registrado como dueño.")}
               className="hidden sm:flex items-center gap-2 text-xs font-black bg-pink-500/20 hover:bg-pink-500/40 text-pink-400 px-4 py-2 rounded-xl transition-colors tracking-widest uppercase border border-pink-500/30"
               title={adminStoreId ? `Ir a /${adminStoreId}/admin` : "Buscando tu tienda..."}
             >
-              <span>🛍️</span> {adminStoreId ? `Mi Tienda (${adminStoreId})` : "Mi Panel Admin"}
+              <span>🛍️</span> Mi Panel Admin
             </button>
 
             <button onClick={() => navigate('/')} className="text-sm font-bold text-gray-400 hover:text-white transition-colors ml-2">
