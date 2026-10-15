@@ -262,7 +262,7 @@ export default function HomePage() {
       {/* =========================================
           🌟 MENÚ MÓVIL (DRAWER)
       ========================================= */}
-      <div className={`fixed inset-0 z-[100] transition-opacity duration-300 lg:hidden ${isMobileMenuOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+      <div className={`fixed inset-0 z-[100] transition-opacity duration-300 ${isMobileMenuOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>
         
         <div className={`absolute top-0 left-0 bottom-0 w-[85%] max-w-sm bg-white shadow-2xl flex flex-col transition-transform duration-500 ease-out ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}>
@@ -397,7 +397,7 @@ export default function HomePage() {
                 </div>
               )}
 
-              <button onClick={() => setIsMobileMenuOpen(true)} className="p-1 text-gray-900 md:hidden hover:bg-gray-100 rounded-md transition-colors">
+              <button onClick={() => setIsMobileMenuOpen(true)} className="p-1 text-gray-900 hover:bg-gray-100 rounded-md transition-colors active:scale-90">
                 <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>

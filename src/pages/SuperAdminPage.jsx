@@ -316,18 +316,20 @@ export default function SuperAdminPage() {
       
       {/* HEADER SUPER ADMIN */}
       <header className="bg-gray-900 text-white sticky top-0 z-50 shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+        {/* Fila 1: Logo + Salir (siempre visible) */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-pink-500 rounded-lg flex items-center justify-center shadow-lg shadow-pink-500/30">
-              <span className="text-white font-black text-xl">👑</span>
+            <div className="w-9 h-9 sm:w-10 sm:h-10 bg-pink-500 rounded-lg flex items-center justify-center shadow-lg shadow-pink-500/30">
+              <span className="text-white font-black text-lg sm:text-xl">👑</span>
             </div>
             <div>
-              <h1 className="text-xl font-black tracking-tight leading-tight">Panel Súper Admin</h1>
-              <p className="text-xs text-pink-400 font-bold uppercase tracking-widest">Nivel de Acceso: Dios</p>
+              <h1 className="text-base sm:text-xl font-black tracking-tight leading-tight">Panel Súper Admin</h1>
+              <p className="text-[10px] sm:text-xs text-pink-400 font-bold uppercase tracking-widest">Nivel de Acceso: Dios</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Botones con texto completo en pantallas grandes */}
             <button 
               onClick={() => navigate('/')} 
               className="hidden sm:flex items-center gap-2 text-xs font-black bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl transition-colors tracking-widest uppercase border border-white/10"
@@ -352,10 +354,34 @@ export default function SuperAdminPage() {
               <span>🛍️</span> Mi Panel Admin
             </button>
 
-            <button onClick={() => navigate('/')} className="text-sm font-bold text-gray-400 hover:text-white transition-colors ml-2">
+            <button onClick={() => navigate('/')} className="text-sm font-bold text-gray-400 hover:text-white transition-colors">
               Salir →
             </button>
           </div>
+        </div>
+
+        {/* Fila 2 SOLO en móvil: botones de acceso rápido */}
+        <div className="sm:hidden border-t border-white/10 px-4 py-2 flex items-center gap-2 overflow-x-auto hide-scrollbar">
+          <button 
+            onClick={() => navigate('/')} 
+            className="flex items-center gap-1.5 text-[11px] font-bold bg-white/10 active:bg-white/20 text-white px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap border border-white/10"
+          >
+            🏪 Catálogo
+          </button>
+          
+          <button 
+            onClick={() => adminStoreId ? navigate(`/${adminStoreId}`) : toast.error("No se encontró tu tienda.")}
+            className="flex items-center gap-1.5 text-[11px] font-bold bg-emerald-500/20 active:bg-emerald-500/40 text-emerald-400 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap border border-emerald-500/30"
+          >
+            🏠 Ver Mi Tienda
+          </button>
+
+          <button 
+            onClick={() => adminStoreId ? navigate(`/${adminStoreId}/admin`) : toast.error("No se encontró tu tienda.")}
+            className="flex items-center gap-1.5 text-[11px] font-bold bg-pink-500/20 active:bg-pink-500/40 text-pink-400 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap border border-pink-500/30"
+          >
+            🛍️ Mi Panel Admin
+          </button>
         </div>
       </header>
 
