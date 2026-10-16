@@ -3,6 +3,7 @@ import { Navigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
+import { SUPER_ADMIN_EMAIL } from "../../config/constants";
 
 export default function ProtectedRoute({ children }) {
   const { user, authLoading } = useAuth();
@@ -13,15 +14,37 @@ export default function ProtectedRoute({ children }) {
     const checkAccess = async () => {
       if (user && storeId) {
         try {
+          // 👑 1. Si es Super Admin, tiene acceso total a cualquier tienda
+          if (
+            user.email &&
+            SUPER_ADMIN_EMAIL &&
+            user.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
+          ) {
+            setIsAuthorized(true);
+            return;
+          }
+
           const storeRef = doc(db, "stores", storeId);
           const storeSnap = await getDoc(storeRef);
 
-          if (storeSnap.exists() && storeSnap.data().ownerId === user.uid) {
-            setIsAuthorized(true); // Es el dueño correcto
-          } else {
-            setIsAuthorized(false); // No es su tienda
+          if (storeSnap.exists()) {
+            const data = storeSnap.data();
+            // 2. Es el dueño si coincide su UID o su correo
+            const isOwner =
+              (data.ownerId && data.ownerId === user.uid) ||
+              (data.ownerEmail &&
+                user.email &&
+                data.ownerEmail.toLowerCase() === user.email.toLowerCase());
+
+            if (isOwner) {
+              setIsAuthorized(true);
+              return;
+            }
           }
+          
+          setIsAuthorized(false);
         } catch (error) {
+          console.error("Error comprobando acceso a tienda:", error);
           setIsAuthorized(false);
         }
       } else if (!user) {
@@ -30,7 +53,7 @@ export default function ProtectedRoute({ children }) {
     };
     
     if (!authLoading) {
-        checkAccess();
+      checkAccess();
     }
   }, [user, storeId, authLoading]);
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Routes, Route, NavLink, useNavigate, useParams } from "react-router-dom"; 
 import { useAuth } from "../context/AuthContext";
+import { SUPER_ADMIN_EMAIL } from "../config/constants";
 import toast from "react-hot-toast";
 
 // 🌟 NUEVAS IMPORTACIONES PARA EL MEGÁFONO
@@ -20,7 +21,7 @@ import AdminPOS from "../components/admin/AdminPOS"; // 🌟 Importamos el nuevo
 import AdminSalesHistory from "../components/admin/AdminSalesHistory"; // 🌟 Importamos el nuevo Historial de Ventas
 
 export default function AdminPage() {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
   const { storeId } = useParams(); 
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -87,6 +88,11 @@ export default function AdminPage() {
         </nav>
 
         <div className="p-4 border-t border-gray-100 space-y-2">
+          {user && SUPER_ADMIN_EMAIL && user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() && (
+            <NavLink to="/super-admin" className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-black text-pink-600 hover:bg-pink-50 transition-colors">
+              👑 Súper Admin Global
+            </NavLink>
+          )}
           <NavLink to={`/${storeId}`} className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-500 hover:bg-gray-50">
             🏠 Ver tienda
           </NavLink>

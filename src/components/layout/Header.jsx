@@ -4,7 +4,8 @@ import { collection, query, where, getDocs, doc, onSnapshot } from "firebase/fir
 import { db } from "../../config/firebase";
 import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../context/AuthContext";
-import { useApp } from "../../context/AppContext"; 
+import { useApp } from "../../context/AppContext";
+import { SUPER_ADMIN_EMAIL } from "../../config/constants"; 
 
 export default function Header({ onProductClick, onFilter }) {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -307,8 +308,17 @@ export default function Header({ onProductClick, onFilter }) {
                     className="w-full text-left px-4 py-3 text-xs font-black uppercase tracking-widest hover:bg-gray-50 text-gray-800 flex items-center gap-3 rounded-xl transition-colors"
                   >
                     <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-                    Panel Admin
+                    Panel Admin Tienda
                   </button>
+                  {user && SUPER_ADMIN_EMAIL && user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() && (
+                    <button
+                      onClick={() => { navigate("/super-admin"); setMenuOpen(false); }}
+                      className="w-full text-left px-4 py-3 text-xs font-black uppercase tracking-widest hover:bg-pink-50 text-pink-600 flex items-center gap-3 rounded-xl transition-colors"
+                    >
+                      <span className="text-sm">👑</span>
+                      Súper Admin
+                    </button>
+                  )}
                 </div>
               )}
             </div>
