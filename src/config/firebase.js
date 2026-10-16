@@ -3,22 +3,24 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Configuración de TU nueva tienda (Venezuela Multi Hilos)
+// ✅ SEGURO: Las credenciales se leen desde variables de entorno (.env.local)
+// El archivo .env.local NO se sube a GitHub (está en .gitignore)
+// En producción (Vercel) se configuran desde el panel de Environment Variables
 const firebaseConfig = {
-  apiKey: "AIzaSyA-W2oLOdc_lhG8_oygYRjn2Uynhld74uU",
-  authDomain: "tiendavenezuela-768d2.firebaseapp.com",
-  projectId: "tiendavenezuela-768d2",
-  storageBucket: "tiendavenezuela-768d2.firebasestorage.app",
-  messagingSenderId: "777137123854",
-  appId: "1:777137123854:web:d04920f244b8b0c917825f"
+  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 // Inicializar Firebase
 const app = initializeApp(firebaseConfig);
 
-// Exportar servicios (Esto es lo que hace que el clon funcione)
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app); 
+// Exportar servicios
+export const auth    = getAuth(app);
+export const db      = getFirestore(app);
+export const storage = getStorage(app);
 
 export default app;

@@ -3,17 +3,19 @@
 // Se accede como: /api/store-og?storeId=oscar
 // WhatsApp/Facebook leen los OG tags → humanos son redirigidos automáticamente al SPA
 
-const FIREBASE_PROJECT = "tiendavenezuela-768d2";
-const FIREBASE_API_KEY = "AIzaSyA-W2oLOdc_lhG8_oygYRjn2Uynhld74uU";
+// ✅ SEGURO: Las credenciales se leen desde variables de entorno de Vercel
+// Configúralas en: Vercel Dashboard → Tu Proyecto → Settings → Environment Variables
+const FIREBASE_PROJECT = process.env.VITE_FIREBASE_PROJECT_ID;
+const FIREBASE_API_KEY = process.env.VITE_FIREBASE_API_KEY;
 
 // Leer un campo string de la respuesta de la Firestore REST API
 function getStr(fields, key, fallback = "") {
   return fields?.[key]?.stringValue || fallback;
 }
 
-// Escapar caracteres especiales para HTML
+// Escapar caracteres especiales para HTML (previene XSS)
 function escapeHtml(text) {
-  return text
+  return String(text)
     .replace(/&/g, "&amp;")
     .replace(/"/g, "&quot;")
     .replace(/</g, "&lt;")
@@ -21,10 +23,15 @@ function escapeHtml(text) {
 }
 
 export default async function handler(req, res) {
+  // Solo aceptar GET
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
   const { storeId } = req.query;
 
-  // Si no hay storeId, redirigir a la página principal
-  if (!storeId) {
+  // Validar que storeId sea alfanumérico (evitar path traversal / inyección)
+  if (!storeId || !/^[a-z0-9_-]{1,50}$/i.test(storeId)) {
     return res.redirect(302, "/");
   }
 
@@ -48,7 +55,6 @@ export default async function handler(req, res) {
       const f = storeDoc.fields || {};
       storeName        = getStr(f, "nombre",          storeName);
       storeDescription = getStr(f, "heroDescription", storeDescription);
-      // profileImage guardado en el store por AdminInterface.jsx
       const profileImg = getStr(f, "profileImage", "");
       const appLogo192 = f?.appLogos?.mapValue?.fields?.icon192?.stringValue || "";
       if (profileImg)      storeImage = profileImg;
@@ -59,8 +65,6 @@ export default async function handler(req, res) {
   }
 
   // ---------- SIEMPRE DEVOLVER HTML CON OG TAGS ----------
-  // Los bots (WhatsApp, Facebook) leen las meta tags
-  // Los humanos son redirigidos al SPA tras 0 segundos vía meta refresh
   const safeTitle = escapeHtml(storeName);
   const safeDesc  = escapeHtml(storeDescription);
   const safeUrl   = escapeHtml(storeUrl);

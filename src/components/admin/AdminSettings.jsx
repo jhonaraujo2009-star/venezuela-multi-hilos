@@ -1,3 +1,4 @@
+import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from "../../config/constants";
 import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import toast from "react-hot-toast";
@@ -69,7 +70,7 @@ export default function AdminSettings() {
     setUploading(type);
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("upload_preset", "tienda_maquillaje"); 
+    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET); 
 
     formData.append("folder", `tienda_maquillaje/${storeData.id}`);
 

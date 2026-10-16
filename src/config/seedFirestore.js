@@ -3,13 +3,15 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, collection, addDoc } from "firebase/firestore";
 
 // Credenciales reales de TiendaJhonAraujo
+// ⚠️ TEMPLATE: Reemplaza con tu configuración real en .env.local
+// NO subas credenciales reales a Git
 const firebaseConfig = {
-  apiKey: "AIzaSyD5_Qv9QJ2u8z-p6mX_v7k6L0N5L-XzY", 
-  authDomain: "tiendajhonaraujo.firebaseapp.com",
-  projectId: "tiendajhonaraujo",
-  storageBucket: "tiendajhonaraujo.appspot.com",
-  messagingSenderId: "105678912345",
-  appId: "1:105678912345:web:a1b2c3d4e5f6g7h8i9j0"
+  apiKey: "TU_API_KEY_AQUI",
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  projectId: "TU_PROYECTO",
+  storageBucket: "TU_PROYECTO.appspot.com",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID"
 };
 
 const app = initializeApp(firebaseConfig);

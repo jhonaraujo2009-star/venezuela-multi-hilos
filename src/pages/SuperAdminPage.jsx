@@ -4,6 +4,7 @@ import { db, auth } from "../config/firebase";
 import { onAuthStateChanged } from "firebase/auth"; 
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import { SUPER_ADMIN_EMAIL } from "../config/constants";
 
 export default function SuperAdminPage() {
   const [stores, setStores] = useState([]);
@@ -37,7 +38,7 @@ export default function SuperAdminPage() {
   
   const navigate = useNavigate();
 
-  const MASTER_EMAIL = "aea@gmail.com"; 
+  const MASTER_EMAIL = SUPER_ADMIN_EMAIL; 
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {

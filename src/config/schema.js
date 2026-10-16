@@ -85,10 +85,10 @@
  * ---------------------------------
  * /payments: {
  *   bankName: "Banco de Venezuela",
- *   holderName: "Jhon Araujo",
- *   idNumber: "V-23493744",
- *   phone: "04120496690",
- *   accountNumber: "",
+ *   holderName: "Nombre del Titular",
+ *   idNumber: "V-XXXXXXXX",
+ *   phone: "04XX-XXXXXXX",
+ *   accountNumber: "XXXXXXXXXXXX",
  *   type: "mobile_payment",
  *   order: 1
  * }
