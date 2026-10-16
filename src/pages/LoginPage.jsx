@@ -22,14 +22,16 @@ export default function LoginPage() {
       if (activeUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL?.toLowerCase()) {
         navigate('/super-admin'); 
       } else {
-        // Si es un vendedor, buscamos su tienda y lo mandamos directo
+        // Si es un vendedor, buscamos su tienda por UID o por correo
         const fetchMyStore = async () => {
-          const q = query(collection(db, "stores"), where("ownerId", "==", activeUser.uid));
-          const snap = await getDocs(q);
+          let snap = await getDocs(query(collection(db, "stores"), where("ownerId", "==", activeUser.uid)));
+          if (snap.empty && activeUser.email) {
+            snap = await getDocs(query(collection(db, "stores"), where("ownerEmail", "==", activeUser.email.toLowerCase())));
+          }
           if (!snap.empty) {
             navigate(`/${snap.docs[0].id}/admin`);
           } else {
-            navigate('/'); // Si no tiene tienda, lo mandamos al index
+            navigate('/');
           }
         };
         fetchMyStore();
@@ -48,9 +50,13 @@ export default function LoginPage() {
       // 🌟 SI ES EL SUPER ADMIN, TIENE PASO LIBRE DIRECTO
       const isSuperAdmin = email.trim().toLowerCase() === SUPER_ADMIN_EMAIL?.trim().toLowerCase();
 
-      // 2. Buscar la tienda que te pertenece
+      // 2. Buscar la tienda que te pertenece (por UID o por correo)
       const q = query(collection(db, "stores"), where("ownerId", "==", userUid));
-      const querySnapshot = await getDocs(q);
+      let querySnapshot = await getDocs(q);
+      if (querySnapshot.empty) {
+        const qEmail = query(collection(db, "stores"), where("ownerEmail", "==", email.trim().toLowerCase()));
+        querySnapshot = await getDocs(qEmail);
+      }
 
       if (!querySnapshot.empty) {
         const storeDoc = querySnapshot.docs[0]; 

@@ -4,6 +4,9 @@ import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs
 import { createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from "firebase/auth";
 import { db, auth } from "../config/firebase";
 import toast from "react-hot-toast";
+import { SUPER_ADMIN_EMAIL } from "../config/constants";
+
+const RESERVED_URLS = ['admin', 'login', 'registro-vendedor', 'super-admin', 'search', 'ofertas', 'preguntas', 'api'];
 
 export default function RegisterStorePage() {
   const [formData, setFormData] = useState({
@@ -143,7 +146,7 @@ export default function RegisterStorePage() {
       toast.success("¡Tienda creada con éxito! Bienvenido a tu imperio.");
       
       // 🌟 MAGIA: INTERCEPTOR VIP PARA EL JEFE
-      if (formData.email.toLowerCase() === "aea@gmail.com") {
+      if (formData.email.toLowerCase() === SUPER_ADMIN_EMAIL?.toLowerCase()) {
         const choice = window.confirm("¡Bienvenido, Jefe! 👑\n\n¿Deseas entrar al PANEL DE CONTROL TOTAL (Súper Admin)?\n\n(Aceptar = Súper Admin / Cancelar = Administrar mi Tienda)");
         if (choice) {
           navigate("/super-admin");

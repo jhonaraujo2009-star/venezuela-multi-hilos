@@ -9,7 +9,6 @@ export default function HeroBanner({ activeFilter }) {
   const heroDescription = storeData?.heroDescription || settings.heroDescription;
   
   const primaryColor = storeData?.primaryColor || settings.primaryColor || "#ec4899";
-  const isVerified = storeData?.verification?.status === "verified";
 
   return (
     <section 
@@ -46,12 +45,6 @@ export default function HeroBanner({ activeFilter }) {
             
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 tracking-tight flex flex-col items-center justify-center gap-2.5 mb-3 w-full">
               <span className="truncate w-full max-w-full text-center">{heroTitle}</span>
-              
-              {isVerified && (
-                <span className="shrink-0 flex items-center justify-center w-6 h-6 bg-blue-500 text-white rounded-full text-xs shadow-md shadow-blue-500/20 border-2 border-white mt-1">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                </span>
-              )}
             </h1>
             
             <p className="text-sm sm:text-[15px] text-gray-500 leading-relaxed font-medium line-clamp-3 w-full max-w-lg mx-auto break-words">
