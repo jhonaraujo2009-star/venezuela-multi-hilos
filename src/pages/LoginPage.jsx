@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
 import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../config/firebase";
+import { SUPER_ADMIN_EMAIL } from "../config/constants";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -18,7 +19,7 @@ export default function LoginPage() {
   useEffect(() => {
     const activeUser = currentUser || user;
     if (activeUser) {
-      if (activeUser.email === "aea@gmail.com") {
+      if (activeUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL?.toLowerCase()) {
         navigate('/super-admin'); 
       } else {
         // Si es un vendedor, buscamos su tienda y lo mandamos directo
@@ -75,7 +76,7 @@ export default function LoginPage() {
         // ------------------------------------------------------------------
         
         // 🌟 MAGIA VIP: LA PREGUNTA DEL MILLÓN AL INICIAR SESIÓN 🌟
-        if (email.toLowerCase() === "aea@gmail.com") {
+        if (email.toLowerCase() === SUPER_ADMIN_EMAIL?.toLowerCase()) {
           const choice = window.confirm("¡Bienvenido, Jefe! 👑\n\n¿Deseas entrar al PANEL DE CONTROL TOTAL (Súper Admin)?\n\n(Aceptar = Súper Admin / Cancelar = Administrar mi Tienda)");
           
           if (choice) {

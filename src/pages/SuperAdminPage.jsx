@@ -42,16 +42,22 @@ export default function SuperAdminPage() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user && user.email === MASTER_EMAIL) {
-        setIsAuthorized(true);
-        fetchAllStores();
+      if (user) {
+        if (user.email?.toLowerCase() === MASTER_EMAIL?.toLowerCase()) {
+          setIsAuthorized(true);
+          fetchAllStores();
+        } else {
+          toast.error("Acceso denegado. Nivel de seguridad insuficiente. 🛑");
+          navigate("/");
+        }
       } else {
-        toast.error("Acceso denegado. Nivel de seguridad insuficiente. 🛑");
-        navigate("/");
+        // Si no hay usuario autenticado
+        toast.error("Debes iniciar sesión primero. 🛑");
+        navigate("/login");
       }
     });
     return () => unsubscribe();
-  }, [navigate]);
+  }, [navigate, MASTER_EMAIL]);
 
   useEffect(() => {
     const fetchGlobalSettings = async () => {
