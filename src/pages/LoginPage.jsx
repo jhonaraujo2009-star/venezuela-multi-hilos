@@ -45,6 +45,9 @@ export default function LoginPage() {
       const userCred = await login(email, password);
       const userUid = userCred.user.uid;
       
+      // 🌟 SI ES EL SUPER ADMIN, TIENE PASO LIBRE DIRECTO
+      const isSuperAdmin = email.trim().toLowerCase() === SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+
       // 2. Buscar la tienda que te pertenece
       const q = query(collection(db, "stores"), where("ownerId", "==", userUid));
       const querySnapshot = await getDocs(q);
@@ -52,15 +55,9 @@ export default function LoginPage() {
       if (!querySnapshot.empty) {
         const storeDoc = querySnapshot.docs[0]; 
         
-        // ------------------------------------------------------------------
-        // 🌟 FASE 1: RASTREO SILENCIOSO DE IP Y ÚLTIMA CONEXIÓN 🌟
-        // ------------------------------------------------------------------
         try {
-          // Obtenemos la IP y el País de la conexión actual
           const ipResponse = await fetch('https://ipapi.co/json/');
           const ipData = await ipResponse.json();
-          
-          // Actualizamos los datos en la tienda (sin que el usuario lo note)
           const storeRef = doc(db, "stores", storeDoc.id);
           await updateDoc(storeRef, {
             last_login: serverTimestamp(),
@@ -68,17 +65,12 @@ export default function LoginPage() {
             pais_operacion: ipData.country_name || "Desconocido"
           });
         } catch (geoError) {
-          console.warn("No se pudo obtener la ubicación (posible bloqueador):", geoError);
-          // Si falla (ej: tiene un bloqueador de anuncios), al menos guardamos la hora
           const storeRef = doc(db, "stores", storeDoc.id);
           await updateDoc(storeRef, { last_login: serverTimestamp() });
         }
-        // ------------------------------------------------------------------
         
-        // 🌟 MAGIA VIP: LA PREGUNTA DEL MILLÓN AL INICIAR SESIÓN 🌟
-        if (email.toLowerCase() === SUPER_ADMIN_EMAIL?.toLowerCase()) {
+        if (isSuperAdmin) {
           const choice = window.confirm("¡Bienvenido, Jefe! 👑\n\n¿Deseas entrar al PANEL DE CONTROL TOTAL (Súper Admin)?\n\n(Aceptar = Súper Admin / Cancelar = Administrar mi Tienda)");
-          
           if (choice) {
             navigate("/super-admin");
             toast.success("¡Bienvenido al Olimpo! ⚡");
@@ -87,14 +79,17 @@ export default function LoginPage() {
             toast.success("¡Bienvenido al panel admin! 🔐");
           }
         } else {
-          // Si es un vendedor normal, lo mandamos directo a su tienda
-          navigate(`/${storeDoc.id}/admin`); // Te enviamos a tu panel privado
+          navigate(`/${storeDoc.id}/admin`);
           toast.success("¡Bienvenido al panel admin! 🔐");
         }
         
+      } else if (isSuperAdmin) {
+        // 🌟 Es Super Admin aunque la búsqueda de tienda no coincida por UID
+        navigate("/super-admin");
+        toast.success("¡Bienvenido al Olimpo! ⚡");
       } else {
         toast.error("Tu usuario no tiene una tienda asignada.");
-        logout(); // Cierra la sesión si no tiene tienda
+        logout();
       }
     } catch (error) {
       console.error("Detalle del error:", error); // 🌟 Ahora sabremos exactamente qué falla
