@@ -36,6 +36,7 @@ export default function AdminSettings() {
   });
 
   const [saving, setSaving] = useState(false);
+  const [requestingVerification, setRequestingVerification] = useState(false);
   const [uploading, setUploading] = useState(null);
 
   useEffect(() => {
@@ -84,6 +85,40 @@ export default function AdminSettings() {
     }
   };
 
+  // ── SOLICITAR VERIFICACIÓN (independiente del guardado general) ──
+  const handleRequestVerification = async () => {
+    if (!storeData?.id) {
+      toast.error("Error: No se detectó tu tienda.");
+      return;
+    }
+    if (!form.verification.cedula.trim()) {
+      toast.error("La cédula es obligatoria para solicitar verificación.");
+      return;
+    }
+    setRequestingVerification(true);
+    try {
+      const verificationData = {
+        cedula: form.verification.cedula.trim(),
+        registroComercio: form.verification.registroComercio.trim(),
+        youtubeLink: form.verification.youtubeLink.trim(),
+        status: "pending",
+        requestedAt: new Date().toISOString(),
+      };
+      await setDoc(doc(db, "stores", storeData.id), { verification: verificationData }, { merge: true });
+      setForm(prev => ({
+        ...prev,
+        verification: { ...prev.verification, ...verificationData },
+      }));
+      toast.success("✅ Solicitud enviada. El equipo la revisará pronto.");
+    } catch (error) {
+      console.error(error);
+      toast.error("Error al enviar la solicitud.");
+    } finally {
+      setRequestingVerification(false);
+    }
+  };
+
+  // ── GUARDAR AJUSTES GENERALES (sin tocar verification) ──
   const handleSave = async () => {
     if (!storeData?.id) {
       toast.error("Error: No se detectó a qué tienda perteneces");
@@ -91,13 +126,6 @@ export default function AdminSettings() {
     }
     setSaving(true);
     try {
-      let newStatus = form.verification.status;
-      const hasAllFields = form.verification.cedula && form.verification.registroComercio && form.verification.youtubeLink;
-      
-      if (hasAllFields && newStatus === "none") {
-        newStatus = "pending";
-      }
-
       const storeUpdates = {
         nombre: form.storeName,
         primaryColor: form.primaryColor,
@@ -108,10 +136,6 @@ export default function AdminSettings() {
         shippingLogos: form.shippingLogos,
         appLogos: form.appLogos, 
         whatsappWidget: form.whatsappWidget,
-        verification: {
-          ...form.verification,
-          status: newStatus
-        }
       };
 
       await setDoc(doc(db, "stores", storeData.id), storeUpdates, { merge: true });
@@ -124,6 +148,8 @@ export default function AdminSettings() {
       setSaving(false);
     }
   };
+
+  const verStatus = form.verification.status;
 
   return (
     <div className="pb-24 space-y-8 max-w-md mx-auto p-4">
@@ -163,53 +189,120 @@ export default function AdminSettings() {
 
       {/* SOLICITUD DE VERIFICACIÓN */}
       <div className="bg-white/90 backdrop-blur-xl rounded-[2.5rem] p-7 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Verificación</h3>
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Verificación de Tienda</h3>
           
-          {form.verification.status === "verified" ? (
-            <span className="bg-blue-100 text-blue-600 text-[9px] font-black px-3 py-1 rounded-full uppercase flex items-center gap-1">
-              Verificado
+          {verStatus === "verified" && (
+            <span className="bg-blue-100 text-blue-600 text-[9px] font-black px-3 py-1.5 rounded-full uppercase flex items-center gap-1">
+              ✅ Verificado
             </span>
-          ) : form.verification.status === "pending" ? (
-            <span className="bg-yellow-100 text-yellow-600 text-[9px] font-black px-3 py-1 rounded-full uppercase">En Revisión</span>
-          ) : (
-            <span className="bg-gray-100 text-gray-400 text-[9px] font-black px-3 py-1 rounded-full uppercase">No Solicitado</span>
+          )}
+          {verStatus === "pending" && (
+            <span className="bg-yellow-100 text-yellow-700 text-[9px] font-black px-3 py-1.5 rounded-full uppercase flex items-center gap-1">
+              ⏳ En Revisión
+            </span>
+          )}
+          {verStatus === "rejected" && (
+            <span className="bg-red-100 text-red-500 text-[9px] font-black px-3 py-1.5 rounded-full uppercase flex items-center gap-1">
+              ❌ Rechazado
+            </span>
+          )}
+          {(verStatus === "none" || !verStatus) && (
+            <span className="bg-gray-100 text-gray-400 text-[9px] font-black px-3 py-1.5 rounded-full uppercase">
+              No Solicitado
+            </span>
           )}
         </div>
 
-        {form.verification.status === "verified" ? (
-          <div className="bg-blue-50/50 rounded-2xl p-4 border border-blue-100 text-sm text-blue-800 font-medium">
-            ¡Felicidades! Tu tienda ha sido verificada. La placa de confianza ya es visible.
+        {/* Estado: VERIFICADO */}
+        {verStatus === "verified" && (
+          <div className="bg-blue-50 rounded-2xl p-5 border border-blue-100 text-center">
+            <p className="text-3xl mb-2">🏆</p>
+            <p className="text-sm font-black text-blue-800">¡Tienda Verificada!</p>
+            <p className="text-xs text-blue-600 mt-1">La placa de confianza ya es visible en tu tienda.</p>
           </div>
-        ) : (
+        )}
+
+        {/* Estado: EN REVISIÓN */}
+        {verStatus === "pending" && (
+          <div className="bg-yellow-50 rounded-2xl p-5 border border-yellow-100 text-center">
+            <p className="text-3xl mb-2">⏳</p>
+            <p className="text-sm font-black text-yellow-800">Solicitud en Revisión</p>
+            <p className="text-xs text-yellow-600 mt-1 leading-relaxed">
+              El equipo está revisando tu información.<br/>Te notificaremos cuando haya una respuesta.
+            </p>
+          </div>
+        )}
+
+        {/* Estado: NINGUNO o RECHAZADO — mostrar formulario */}
+        {(verStatus === "none" || !verStatus || verStatus === "rejected") && (
           <div className="space-y-4">
+
+            {/* Aviso si fue rechazado */}
+            {verStatus === "rejected" && (
+              <div className="bg-red-50 rounded-2xl p-4 border border-red-100">
+                <p className="text-xs font-bold text-red-700">⚠️ Solicitud Rechazada</p>
+                <p className="text-xs text-red-500 mt-1">Revisa tu información, corrígela y vuelve a solicitar.</p>
+              </div>
+            )}
+
             <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-2">Cédula de Identidad / RIF</label>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">
+                Cédula de Identidad / RIF <span className="text-red-400 normal-case font-normal">(requerido)</span>
+              </label>
               <input 
                 type="text" 
                 value={form.verification.cedula} 
                 onChange={(e) => setForm({...form, verification: {...form.verification, cedula: e.target.value}})}
-                className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3 text-sm outline-none"
+                placeholder="Ej: V-12345678"
+                className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-blue-300 focus:bg-white transition-all"
               />
             </div>
+
             <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-2">Registro de Comercio (Nº)</label>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">
+                Registro de Comercio (Nº) <span className="text-gray-300 normal-case font-normal">(opcional)</span>
+              </label>
               <input 
                 type="text" 
                 value={form.verification.registroComercio} 
                 onChange={(e) => setForm({...form, verification: {...form.verification, registroComercio: e.target.value}})}
-                className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3 text-sm outline-none"
+                placeholder="Ej: 12345"
+                className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-blue-300 focus:bg-white transition-all"
               />
             </div>
+
             <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-2">Link de Video (YouTube)</label>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">
+                Link de Video YouTube <span className="text-gray-300 normal-case font-normal">(opcional)</span>
+              </label>
               <input 
                 type="url" 
                 value={form.verification.youtubeLink} 
                 onChange={(e) => setForm({...form, verification: {...form.verification, youtubeLink: e.target.value}})}
-                className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3 text-sm outline-none"
+                placeholder="https://youtube.com/..."
+                className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-blue-300 focus:bg-white transition-all"
               />
             </div>
+
+            {/* BOTÓN SOLICITAR VERIFICACIÓN */}
+            <button
+              onClick={handleRequestVerification}
+              disabled={!form.verification.cedula.trim() || requestingVerification}
+              className={`w-full py-4 rounded-2xl font-black uppercase tracking-[0.15em] text-sm transition-all ${
+                form.verification.cedula.trim()
+                  ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-[0_6px_20px_rgba(59,130,246,0.4)] hover:scale-[1.02] active:scale-95 cursor-pointer"
+                  : "bg-gray-100 text-gray-300 cursor-not-allowed"
+              }`}
+            >
+              {requestingVerification ? "Enviando solicitud..." : "🛡️ Solicitar Verificación"}
+            </button>
+
+            {!form.verification.cedula.trim() && (
+              <p className="text-[10px] text-gray-400 text-center">
+                Ingresa tu cédula para habilitar el botón
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -263,7 +356,7 @@ export default function AdminSettings() {
       </div>
 
 
-      {/* 🌟 NUEVO: LOGOS DE LA APLICACIÓN INSTALABLE (PWA) */}
+      {/* 🌟 LOGOS DE LA APLICACIÓN INSTALABLE (PWA) */}
       <div className="bg-white/90 backdrop-blur-xl rounded-[2.5rem] p-7 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white">
         <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2">Logos de la App (Instalable)</h3>
         <p className="text-xs text-gray-500 mb-5 leading-relaxed">Sube el ícono de tu tienda para cuando tus clientes la instalen en su celular.</p>

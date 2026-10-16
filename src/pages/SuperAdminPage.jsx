@@ -14,6 +14,7 @@ export default function SuperAdminPage() {
   const [activeTab, setActiveTab] = useState("dashboard"); // 🌟 Iniciamos en el nuevo Dashboard
   
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [verFilter, setVerFilter] = useState('pending');
   const [megaphoneMsg, setMegaphoneMsg] = useState("");
   
   // 🌟 ESTADO DE LA LLAVE MAESTRA
@@ -203,7 +204,8 @@ export default function SuperAdminPage() {
     try {
       await updateDoc(doc(db, "stores", storeId), { "verification.status": newStatus });
       setStores(stores.map(s => s.id === storeId ? { ...s, verification: { ...s.verification, status: newStatus } } : s));
-      toast.success(`Tienda ${newStatus === 'verified' ? 'Verificada ✅' : 'Rechazada ❌'}`);
+      const vLabels = { verified: 'Verificada ✅', rejected: 'Rechazada ❌', none: 'Solicitud anulada 🔄', pending: 'En revisión ⏳' };
+      toast.success(`Tienda ${vLabels[newStatus] || newStatus}`);
     } catch (e) {
       toast.error("Error al actualizar estado");
     }
@@ -563,32 +565,127 @@ export default function SuperAdminPage() {
         )}
 
         {/* PESTAÑA: VERIFICACIÓN */}
-        {activeTab === "verificacion" && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-black text-gray-900 mb-4">Solicitudes de Verificación</h2>
-            {pendingVerificationStores.length === 0 ? (
-              <div className="bg-white rounded-[2rem] shadow-sm p-10 text-center border border-gray-100">
-                <span className="text-5xl block mb-4">🛡️</span>
-                <p className="text-gray-500 font-bold">No hay solicitudes pendientes en este momento.</p>
-              </div>
-            ) : (
-              pendingVerificationStores.map(store => (
-                <div key={store.id} className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-6 items-start sm:items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-black text-gray-900">{store.nombre}</h3>
-                    <p className="text-xs text-gray-500 mb-3">Solicitante: {store.ownerEmail}</p>
-                  </div>
-                  <div className="flex gap-2 w-full sm:w-auto">
-                    <button onClick={() => handleVerification(store.id, 'none')} className="px-6 py-3 bg-red-50 text-red-600 font-black rounded-xl text-sm hover:bg-red-100 transition-colors">Rechazar</button>
-                    <button onClick={() => handleVerification(store.id, 'verified')} className="px-6 py-3 bg-blue-500 text-white font-black rounded-xl text-sm hover:bg-blue-600 transition-colors shadow-md">Aprobar Verificación</button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
+        {activeTab === "verificacion" && (() => {
+          const allVerStores = stores.filter(s => s.verification && s.verification.status && s.verification.status !== 'none');
+          const verFilteredStores = verFilter === 'all'
+            ? allVerStores
+            : allVerStores.filter(s => s.verification?.status === verFilter);
 
-        {/* TABLAS DE DATOS: DIRECTORIO, FINANZAS Y MANTENIMIENTO */}
+          const counts = {
+            all: allVerStores.length,
+            pending: stores.filter(s => s.verification?.status === 'pending').length,
+            verified: stores.filter(s => s.verification?.status === 'verified').length,
+            rejected: stores.filter(s => s.verification?.status === 'rejected').length,
+          };
+
+          return (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h2 className="text-xl font-black text-gray-900">🛡️ Gestión de Verificaciones</h2>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: 'pending', label: 'Pendientes', active: 'bg-yellow-500 text-white border-yellow-500', inactive: 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50' },
+                    { key: 'verified', label: 'Verificadas', active: 'bg-blue-500 text-white border-blue-500', inactive: 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50' },
+                    { key: 'rejected', label: 'Rechazadas', active: 'bg-red-500 text-white border-red-500', inactive: 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50' },
+                    { key: 'all', label: 'Todas', active: 'bg-gray-900 text-white border-gray-900', inactive: 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50' },
+                  ].map(f => (
+                    <button
+                      key={f.key}
+                      onClick={() => setVerFilter(f.key)}
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all border ${verFilter === f.key ? f.active + ' shadow-md' : f.inactive}`}
+                    >
+                      {f.label}
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${verFilter === f.key ? 'bg-white/30' : 'bg-gray-100 text-gray-600'}`}>
+                        {counts[f.key]}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {verFilteredStores.length === 0 ? (
+                <div className="bg-white rounded-[2rem] shadow-sm p-10 text-center border border-gray-100">
+                  <span className="text-5xl block mb-4">🛡️</span>
+                  <p className="text-gray-500 font-bold">No hay tiendas con este estado.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {verFilteredStores.map(store => {
+                    const vs = store.verification?.status;
+                    return (
+                      <div key={store.id} className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100">
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <h3 className="text-lg font-black text-gray-900">{store.nombre || 'Sin nombre'}</h3>
+                              {vs === 'verified' && <span className="bg-blue-100 text-blue-600 text-[10px] font-black px-2 py-0.5 rounded-full">✅ Verificada</span>}
+                              {vs === 'pending' && <span className="bg-yellow-100 text-yellow-700 text-[10px] font-black px-2 py-0.5 rounded-full">⏳ Pendiente</span>}
+                              {vs === 'rejected' && <span className="bg-red-100 text-red-600 text-[10px] font-black px-2 py-0.5 rounded-full">❌ Rechazada</span>}
+                            </div>
+                            <p className="text-xs text-gray-400">📧 {store.ownerEmail}</p>
+                            <p className="text-[10px] text-gray-300 font-mono mt-0.5">ID: {store.id}</p>
+                          </div>
+                          {store.verification?.requestedAt && (
+                            <span className="text-[10px] text-gray-400 bg-gray-50 px-3 py-1.5 rounded-xl whitespace-nowrap border border-gray-100 self-start">
+                              Solicitado: {new Date(store.verification.requestedAt).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+                          <div className="bg-gray-50 rounded-2xl p-3 border border-gray-100">
+                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Cédula / RIF</p>
+                            <p className="text-sm font-bold text-gray-900">{store.verification?.cedula || '—'}</p>
+                          </div>
+                          <div className="bg-gray-50 rounded-2xl p-3 border border-gray-100">
+                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Reg. Comercio</p>
+                            <p className="text-sm font-bold text-gray-900">{store.verification?.registroComercio || '—'}</p>
+                          </div>
+                          <div className="bg-gray-50 rounded-2xl p-3 border border-gray-100">
+                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Video YouTube</p>
+                            {store.verification?.youtubeLink
+                              ? <a href={store.verification.youtubeLink} target="_blank" rel="noreferrer" className="text-xs font-bold text-blue-500 hover:underline break-all">Ver video 🔗</a>
+                              : <span className="text-gray-400 text-xs">No enviado</span>
+                            }
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {vs !== 'verified' && vs !== 'rejected' && (
+                            <button
+                              onClick={() => handleVerification(store.id, 'rejected')}
+                              className="flex-1 sm:flex-none px-5 py-2.5 bg-red-50 text-red-600 font-black rounded-xl text-sm hover:bg-red-100 transition-colors border border-red-200"
+                            >
+                              ❌ Rechazar
+                            </button>
+                          )}
+                          {(vs === 'rejected' || vs === 'verified') && (
+                            <button
+                              onClick={() => handleVerification(store.id, 'none')}
+                              className="flex-1 sm:flex-none px-5 py-2.5 bg-gray-100 text-gray-600 font-black rounded-xl text-sm hover:bg-gray-200 transition-colors"
+                            >
+                              🔄 Anular Estado
+                            </button>
+                          )}
+                          {vs !== 'verified' && (
+                            <button
+                              onClick={() => handleVerification(store.id, 'verified')}
+                              className="flex-1 sm:flex-none px-5 py-2.5 bg-blue-500 text-white font-black rounded-xl text-sm hover:bg-blue-600 transition-colors shadow-md"
+                            >
+                              ✅ Aprobar Verificación
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+                {/* TABLAS DE DATOS: DIRECTORIO, FINANZAS Y MANTENIMIENTO */}
         {["directorio", "finanzas", "mantenimiento"].includes(activeTab) && (
           <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden mt-6">
             
