@@ -23,10 +23,45 @@ export default function Header({ onProductClick, onFilter }) {
   const navigate = useNavigate();
 
   // 🌟 ESTADO PARA EL BRANDING MATRIZ EN TIEMPO REAL
-  const [globalBranding, setGlobalBranding] = useState({
-    name: "Nuestra Empresa",
-    logo: null
+  const [globalBranding, setGlobalBranding] = useState(() => {
+    try {
+      const cached = localStorage.getItem("global_branding");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return {
+          name: parsed.companyName || "",
+          logo: parsed.companyLogo || null
+        };
+      }
+    } catch(e) {}
+    return { name: "", logo: null };
   });
+
+  // 🌟 CONTADOR DE ME GUSTA / FAVORITOS EN TIEMPO REAL
+  const [wishlistCount, setWishlistCount] = useState(0);
+
+  useEffect(() => {
+    const updateWishlistCount = () => {
+      try {
+        const likedKey = `userLikes_${storeData?.id || "global"}`;
+        const liked = JSON.parse(localStorage.getItem(likedKey) || "{}");
+        const count = Object.keys(liked).filter((k) => liked[k]).length;
+        setWishlistCount(count);
+      } catch (e) {
+        setWishlistCount(0);
+      }
+    };
+
+    updateWishlistCount();
+    window.addEventListener("likes_updated", updateWishlistCount);
+    window.addEventListener("wishlist_updated", updateWishlistCount);
+    window.addEventListener("storage", updateWishlistCount);
+    return () => {
+      window.removeEventListener("likes_updated", updateWishlistCount);
+      window.removeEventListener("wishlist_updated", updateWishlistCount);
+      window.removeEventListener("storage", updateWishlistCount);
+    };
+  }, [storeData?.id]);
 
   // 🌟 ESCUCHAMOS DIRECTAMENTE AL SUPER ADMIN (settings/global)
   useEffect(() => {
@@ -34,7 +69,7 @@ export default function Header({ onProductClick, onFilter }) {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setGlobalBranding({
-          name: data.companyName || "Nuestra Empresa",
+          name: data.companyName || "",
           logo: data.companyLogo || null
         });
       }
@@ -214,14 +249,27 @@ export default function Header({ onProductClick, onFilter }) {
                 window.scrollTo(0, 0); 
                 if(storeData?.id) navigate(`/${storeData.id}`);
               }} 
-              className="hidden sm:block p-2.5 rounded-full hover:bg-pink-50 hover:text-pink-500 transition-colors active:scale-90 text-gray-800"
+              className="relative p-2 sm:p-2.5 rounded-full hover:bg-pink-50 hover:text-pink-500 transition-colors active:scale-90 text-gray-800"
+              title="Mis Favoritos"
             >
-              <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg 
+                className={`w-5 h-5 sm:w-[22px] sm:h-[22px] transition-colors ${wishlistCount > 0 ? "text-pink-500 fill-pink-500" : ""}`} 
+                fill={wishlistCount > 0 ? "currentColor" : "none"} 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
               </svg>
+              {wishlistCount > 0 && (
+                <span 
+                  className="absolute top-1 right-0 min-w-[16px] h-4 px-1 text-[10px] flex items-center justify-center rounded-full text-white font-black shadow-md border border-white bg-pink-500 animate-in zoom-in-50 duration-200"
+                >
+                  {wishlistCount}
+                </span>
+              )}
             </button>
 
-            {/* 🌟 BOTÓN DE COMPARTIR PERFIL INYECTADO */}
+            {/* 🌟 BOTÓN DE COMPARTIR PERFIL DIRECTO EN HEADER 🌟 */}
             {storeData?.id && (
               <button 
                 onClick={async () => {
@@ -235,7 +283,6 @@ export default function Header({ onProductClick, onFilter }) {
                     if (navigator.share) {
                       await navigator.share(shareData);
                     } else {
-                      // Fallback si están en un navegador de PC viejo que no soporta compartir nativo
                       await navigator.clipboard.writeText(shareData.url);
                       alert("¡Enlace copiado al portapapeles!");
                     }
@@ -243,10 +290,10 @@ export default function Header({ onProductClick, onFilter }) {
                     console.log("Compartir cancelado o error:", err);
                   }
                 }}
-                className="hidden sm:block p-2.5 rounded-full hover:bg-pink-50 hover:text-pink-500 transition-colors active:scale-90 text-gray-800 relative group"
+                className="p-2 sm:p-2.5 rounded-full hover:bg-pink-50 hover:text-pink-500 transition-colors active:scale-90 text-gray-800 relative group"
                 title="Compartir Mi Tienda"
               >
-                <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 sm:w-[22px] sm:h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                 </svg>
               </button>
@@ -254,9 +301,9 @@ export default function Header({ onProductClick, onFilter }) {
 
             <button 
               onClick={() => setIsOpen(true)} 
-              className="relative p-2.5 rounded-full hover:bg-gray-50 transition-colors active:scale-90 text-gray-800"
+              className="relative p-2 sm:p-2.5 rounded-full hover:bg-gray-50 transition-colors active:scale-90 text-gray-800"
             >
-              <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 sm:w-[22px] sm:h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
               {itemCount > 0 && (
@@ -272,9 +319,9 @@ export default function Header({ onProductClick, onFilter }) {
             <div className="relative" ref={menuRef}>
               <button 
                 onClick={() => setMenuOpen(!menuOpen)} 
-                className="p-2.5 rounded-full hover:bg-gray-50 transition-colors active:scale-90 text-gray-800"
+                className="p-2 sm:p-2.5 rounded-full hover:bg-gray-50 transition-colors active:scale-90 text-gray-800"
               >
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 24 24">
                   <circle cx="12" cy="5" r="1.5" />
                   <circle cx="12" cy="12" r="1.5" />
                   <circle cx="12" cy="19" r="1.5" />
@@ -283,26 +330,6 @@ export default function Header({ onProductClick, onFilter }) {
 
               {menuOpen && (
                 <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50 p-2">
-                  {storeData?.id && (
-                    <button
-                      onClick={async () => {
-                        setMenuOpen(false);
-                        const shareData = {
-                          title: `¡Visita ${storeData.nombre || "mi tienda"}!`,
-                          text: storeData.heroDescription || `Te invito a ver mi catálogo interactivo en línea.`,
-                          url: `${window.location.origin}/api/store-og?storeId=${storeData.id}`
-                        };
-                        try {
-                          if (navigator.share) { await navigator.share(shareData); }
-                          else { await navigator.clipboard.writeText(shareData.url); alert("¡Enlace copiado!"); }
-                        } catch (err) { console.log("Compartir cancelado:", err); }
-                      }}
-                      className="w-full text-left px-4 py-3 text-xs font-black uppercase tracking-widest hover:bg-gray-50 text-gray-800 flex items-center gap-3 rounded-xl transition-colors sm:hidden"
-                    >
-                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
-                      Compartir Tienda
-                    </button>
-                  )}
                   <button
                     onClick={() => { navigate(user && storeData?.id ? `/${storeData.id}/admin` : "/login"); setMenuOpen(false); }}
                     className="w-full text-left px-4 py-3 text-xs font-black uppercase tracking-widest hover:bg-gray-50 text-gray-800 flex items-center gap-3 rounded-xl transition-colors"

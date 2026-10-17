@@ -3,9 +3,48 @@ import { useApp } from "../../context/AppContext";
 import { useCart } from "../../context/CartContext";
 
 export default function ProductCard({ product, onClick, rank }) {
-  const { bsPrice } = useApp();
+  const { bsPrice, storeData } = useApp();
   const { addItem, setIsOpen } = useCart();
   const [timeLeft, setTimeLeft] = useState("");
+
+  // 🌟 LÓGICA DE FAVORITOS EN TIEMPO REAL
+  const likedKey = `userLikes_${storeData?.id || product?.storeId || "global"}`;
+  const [isLiked, setIsLiked] = useState(false);
+
+  useEffect(() => {
+    const checkLiked = () => {
+      try {
+        const liked = JSON.parse(localStorage.getItem(likedKey) || "{}");
+        setIsLiked(!!liked[product.id]);
+      } catch(e) {
+        setIsLiked(false);
+      }
+    };
+    checkLiked();
+    window.addEventListener("likes_updated", checkLiked);
+    window.addEventListener("wishlist_updated", checkLiked);
+    return () => {
+      window.removeEventListener("likes_updated", checkLiked);
+      window.removeEventListener("wishlist_updated", checkLiked);
+    };
+  }, [product?.id, likedKey]);
+
+  const handleToggleLike = (e) => {
+    e.stopPropagation();
+    try {
+      const liked = JSON.parse(localStorage.getItem(likedKey) || "{}");
+      const next = !isLiked;
+      setIsLiked(next);
+      if (next) {
+        liked[product.id] = true;
+      } else {
+        delete liked[product.id];
+      }
+      localStorage.setItem(likedKey, JSON.stringify(liked));
+      window.dispatchEvent(new CustomEvent("likes_updated"));
+      window.dispatchEvent(new CustomEvent("wishlist_updated"));
+    } catch(err) {}
+  };
 
   const getThumbnail = () => {
     if (product.image) return product.image;
@@ -145,6 +184,25 @@ export default function ProductCard({ product, onClick, rank }) {
         {productThumbnail && (
           <img src={productThumbnail} alt={product.name} className="w-full h-full object-cover transition-transform duration-[2s] group-hover:scale-110" />
         )}
+
+        {/* 🌟 BOTÓN DE ME GUSTA DIRECTO EN TARJETA 🌟 */}
+        <button
+          type="button"
+          onClick={handleToggleLike}
+          className={`absolute z-30 w-8 h-8 rounded-full bg-white/90 backdrop-blur-md shadow-md border border-white/60 flex items-center justify-center transition-all active:scale-75 hover:scale-110 ${
+            isFlashOffer && timeLeft ? "top-11 left-3" : "top-3 left-3"
+          }`}
+          title={isLiked ? "Quitar de favoritos" : "Guardar en favoritos"}
+        >
+          <svg 
+            className={`w-4 h-4 transition-colors ${isLiked ? "text-pink-500 fill-pink-500" : "text-gray-400 hover:text-pink-400"}`} 
+            fill={isLiked ? "currentColor" : "none"} 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+          </svg>
+        </button>
 
         {!isSoldOut && !isFlashOffer && (
           <div className="absolute top-3 right-3 z-20">

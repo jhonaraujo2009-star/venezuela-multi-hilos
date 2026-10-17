@@ -143,12 +143,16 @@ export default function ProductModal({ product: initialProduct, onClose }) {
       setLikesCount((prev) => Math.max(0, prev - 1));
       delete likedProducts[currentProduct.id]; 
       localStorage.setItem(likedKey, JSON.stringify(likedProducts));
+      window.dispatchEvent(new CustomEvent("likes_updated"));
+      window.dispatchEvent(new CustomEvent("wishlist_updated"));
       try { await updateDoc(productRef, { likes: increment(-1) }); } catch (error) {}
     } else {
       setHasLiked(true);
       setLikesCount((prev) => prev + 1);
       likedProducts[currentProduct.id] = true; 
       localStorage.setItem(likedKey, JSON.stringify(likedProducts));
+      window.dispatchEvent(new CustomEvent("likes_updated"));
+      window.dispatchEvent(new CustomEvent("wishlist_updated"));
       try { await updateDoc(productRef, { likes: increment(1) }); } 
       catch (error) { await setDoc(productRef, { likes: 1 }, { merge: true }); }
     }
