@@ -5,10 +5,12 @@ import { createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from "fire
 import { db, auth } from "../config/firebase";
 import toast from "react-hot-toast";
 import { SUPER_ADMIN_EMAIL } from "../config/constants";
+import { useApp } from "../context/AppContext";
 
 const RESERVED_URLS = ['admin', 'login', 'registro-vendedor', 'super-admin', 'search', 'ofertas', 'preguntas', 'api'];
 
 export default function RegisterStorePage() {
+  const { globalBranding } = useApp() || {};
   const [formData, setFormData] = useState({
     storeName: "",
     storeUrl: "",
@@ -188,8 +190,12 @@ export default function RegisterStorePage() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] bg-violet-500/20 blur-[100px] rounded-full pointer-events-none"></div>
         
         <div className="relative z-10">
-          <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center mb-10 shadow-lg cursor-pointer hover:scale-105 transition-transform" onClick={() => navigate('/')}>
-            <span className="text-gray-900 font-black text-2xl">M</span>
+          <div className="w-fit h-14 px-3 py-1.5 bg-white/95 backdrop-blur-md rounded-2xl flex items-center justify-center mb-10 shadow-lg cursor-pointer hover:scale-105 transition-transform border border-white/20" onClick={() => navigate('/')}>
+            {globalBranding?.companyLogo ? (
+              <img src={globalBranding.companyLogo} alt={globalBranding?.companyName || "Logo"} className="h-full w-auto max-w-[180px] object-contain rounded-lg" />
+            ) : (
+              <span className="text-gray-900 font-black text-2xl">{globalBranding?.companyName ? globalBranding.companyName.charAt(0).toUpperCase() : "🏪"}</span>
+            )}
           </div>
           <h1 className="text-5xl font-black leading-tight mb-6">
             Lleva tu negocio al <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-violet-400">siguiente nivel.</span>
@@ -223,8 +229,12 @@ export default function RegisterStorePage() {
         </div>
 
         {/* 🌟 Logo en móvil */}
-        <div className="lg:hidden w-16 h-16 bg-gray-900 rounded-2xl flex items-center justify-center shadow-lg mb-6 cursor-pointer" onClick={() => navigate('/')}>
-          <span className="text-white font-black text-3xl">M</span>
+        <div className="lg:hidden flex items-center justify-center mb-6 cursor-pointer" onClick={() => navigate('/')}>
+          {globalBranding?.companyLogo ? (
+            <img src={globalBranding.companyLogo} alt={globalBranding?.companyName || "Logo"} className="h-14 max-w-[200px] object-contain rounded-2xl bg-white p-2 shadow-md border border-gray-100" />
+          ) : (
+            <span className="text-white font-black text-3xl">{globalBranding?.companyName ? globalBranding.companyName.charAt(0).toUpperCase() : "🏪"}</span>
+          )}
         </div>
 
         {/* 🌟 Tarjeta del Formulario (Premium Glass en móvil) */}
@@ -258,7 +268,7 @@ export default function RegisterStorePage() {
               </label>
               <div className="flex items-stretch relative">
                 <div className="bg-gray-100 border border-gray-200 border-r-0 rounded-l-2xl px-3 sm:px-4 py-3 sm:py-3.5 flex items-center text-gray-500 text-xs sm:text-sm font-medium select-none">
-                  megastore/
+                  tienda/
                 </div>
                 <input 
                   type="text" 

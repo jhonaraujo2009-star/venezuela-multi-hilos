@@ -8,7 +8,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       devOptions: {
-        enabled: true // 🌟 MAGIA: Esto enciende el botón mientras programamos en localhost
+        enabled: false
       },
       manifest: {
         name: 'Luckathys Shop',
@@ -33,6 +33,10 @@ export default defineConfig({
       }
     })
   ],
+  server: {
+    host: true,
+    port: 5173,
+  },
   build: {
     outDir: "dist",
     sourcemap: false,

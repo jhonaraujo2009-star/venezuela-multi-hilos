@@ -4,6 +4,7 @@ import { db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion"; // 🌟 LÓGICA ULTRA PREMIUM
+import VerifiedBadge from "../components/shared/VerifiedBadge";
 
 const ProductCard = ({ p, onClick, isFlash = false, extraClasses = "" }) => {
   const getThumbnail = () => {
@@ -91,6 +92,8 @@ const HorizontalCarousel = ({ id, children }) => {
 export default function HomePage() {
   const [stores, setStores] = useState([]);
   const [products, setProducts] = useState([]);
+  const [allProducts, setAllProducts] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const [loading, setLoading] = useState(true);
   
   const [bestSellers, setBestSellers] = useState([]);
@@ -106,16 +109,35 @@ export default function HomePage() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const [globalSettings, setGlobalSettings] = useState({ 
-    companyName: "MegaStore", 
-    companyLogo: "",
-    sections: {
-      topStores: true,
-      randomProducts: true,
-      bestSellers: true,
-      offers: true,
-      dailyTop: true
-    }
+  const [globalSettings, setGlobalSettings] = useState(() => {
+    try {
+      const cached = localStorage.getItem("global_branding");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return {
+          companyName: parsed.companyName || "",
+          companyLogo: parsed.companyLogo || "",
+          sections: parsed.homepageSections || {
+            topStores: true,
+            randomProducts: true,
+            bestSellers: true,
+            offers: true,
+            dailyTop: true
+          }
+        };
+      }
+    } catch (e) {}
+    return {
+      companyName: "",
+      companyLogo: "",
+      sections: {
+        topStores: true,
+        randomProducts: true,
+        bestSellers: true,
+        offers: true,
+        dailyTop: true
+      }
+    };
   });
 
   // 🌟 SLIDER GIGANTE (ESTILO MERCADOLIBRE / AMAZON)
@@ -174,11 +196,19 @@ export default function HomePage() {
           if (data.homepageSections) {
              currentSections = data.homepageSections;
           }
-          setGlobalSettings({
-            companyName: data.companyName || "MegaStore",
+          const updatedSettings = {
+            companyName: data.companyName || "",
             companyLogo: data.companyLogo || "",
             sections: currentSections
-          });
+          };
+          setGlobalSettings(updatedSettings);
+          try {
+            localStorage.setItem("global_branding", JSON.stringify({
+              companyName: updatedSettings.companyName,
+              companyLogo: updatedSettings.companyLogo,
+              homepageSections: currentSections
+            }));
+          } catch(e) {}
         }
 
         const storesSnap = await getDocs(collection(db, "stores"));
@@ -194,6 +224,8 @@ export default function HomePage() {
         const allActiveProducts = prodSnap.docs
           .map(d => ({ id: d.id, ...d.data() }))
           .filter(p => allActiveStoreIds.includes(p.storeId));
+        
+        setAllProducts(allActiveProducts);
           
         if (currentSections.randomProducts) {
           const randomList = [...allActiveProducts].sort(() => 0.5 - Math.random()).slice(0, 15);
@@ -243,18 +275,40 @@ export default function HomePage() {
     }
   };
 
+  // 🌟 CATEGORÍAS CON PALABRAS CLAVE PARA BÚSQUEDA INTELIGENTE
   const categories = [
-    { icon: "👗", name: "Moda" },
-    { icon: "💻", name: "Tecnología" },
-    { icon: "👟", name: "Calzado" },
-    { icon: "💄", name: "Belleza" },
-    { icon: "🎮", name: "Gaming" },
-    { icon: "🚲", name: "Deportes" },
-    { icon: "🧸", name: "Juguetes" },
-    { icon: "🚗", name: "Accesorios" },
-    { icon: "🍔", name: "Comida" },
-    { icon: "🛒", name: "Supermercado" }
+    { icon: "💎", name: "Bisutería", keywords: ["collar", "pulsera", "zarcillo", "anillo", "cadena", "joya", "acero", "bisuteria", "dije", "fantasia"] },
+    { icon: "🧸", name: "Juguetes", keywords: ["juguete", "peluche", "conejo", "niño", "juego", "muñeco"] },
+    { icon: "👗", name: "Moda", keywords: ["guante", "ropa", "moda", "accesorio", "invierno"] },
+    { icon: "📿", name: "Collares", keywords: ["collar", "collares", "dije", "cadena"] },
+    { icon: "💍", name: "Pulseras", keywords: ["pulsera", "pulseras", "brazalete"] },
+    { icon: "✨", name: "Zarcillos", keywords: ["zarcillo", "zarcillos", "pendiente", "aretes"] },
+    { icon: "🎀", name: "Cabello", keywords: ["pinza", "bandana", "cola", "cabello", "pelo", "moño", "estrellas"] },
+    { icon: "⌚", name: "Relojes", keywords: ["reloj", "relojes", "dama"] },
+    { icon: "👟", name: "Calzado", keywords: ["zapato", "calzado", "bota", "sandalia"] },
+    { icon: "💻", name: "Tecnología", keywords: ["tecnologia", "celular", "audifono", "gadget"] }
   ];
+
+  // 🌟 FUNCIÓN DE BÚSQUEDA INTELIGENTE: AL PRESIONAR UN ICONO BAJA ALLÍ MISMO Y FILTRA
+  const handleCategoryClick = (cat) => {
+    if (selectedCategory?.name === cat.name) {
+      setSelectedCategory(null);
+    } else {
+      setSelectedCategory(cat);
+      const target = document.getElementById("seccion-catalogo");
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+  };
+
+  // Productos mostrados según la categoría seleccionada
+  const displayedProducts = selectedCategory
+    ? allProducts.filter((p) => {
+        const text = `${p.name || ""} ${p.category || ""} ${p.description || ""}`.toLowerCase();
+        return selectedCategory.keywords.some((k) => text.includes(k.toLowerCase()));
+      })
+    : products;
 
   return (
     <div className="min-h-screen bg-[#ebebed] font-sans pb-20 relative overflow-x-hidden">
@@ -271,10 +325,12 @@ export default function HomePage() {
             <div className="flex items-center gap-2">
               {globalSettings.companyLogo ? (
                 <img src={globalSettings.companyLogo} alt="Logo" className="max-h-8 object-contain bg-white px-2 py-1 rounded-md" />
-              ) : (
+              ) : globalSettings.companyName ? (
                 <span className="text-xl font-black tracking-tighter">
-                  {globalSettings.companyName || "MegaStore"}
+                  {globalSettings.companyName}
                 </span>
+              ) : (
+                <div className="h-6 w-24 bg-white/30 animate-pulse rounded"></div>
               )}
             </div>
             <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 hover:bg-black/10 rounded-full transition-colors">
@@ -316,7 +372,14 @@ export default function HomePage() {
               <p className="text-xs font-bold text-gray-500 mb-3 px-2">Comprar por Departamento</p>
               <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
                 {categories.map((cat, index) => (
-                  <button key={index} className="w-full flex items-center justify-between p-4 hover:bg-gray-50 text-gray-700 font-medium transition-all">
+                  <button 
+                    key={index} 
+                    onClick={() => {
+                      handleCategoryClick(cat);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between p-4 hover:bg-gray-50 text-gray-700 font-medium transition-all"
+                  >
                     <span className="flex items-center gap-3">
                       <span className="text-xl">{cat.icon}</span> {cat.name}
                     </span>
@@ -330,7 +393,7 @@ export default function HomePage() {
       </div>
 
       {/* =========================================
-          🌟 HEADER YELLOW/WHITE STILE (E-COMMERCE REAL)
+          🌟 HEADER ORIGINAL (ESTILO E-COMMERCE REAL)
       ========================================= */}
       <header className="bg-white sticky top-0 z-40 border-b border-gray-200 shadow-sm">
         <div className="max-w-[1200px] mx-auto">
@@ -338,13 +401,15 @@ export default function HomePage() {
           <div className="flex items-center gap-4 py-3 px-4 sm:px-6 lg:px-8">
             
             {/* Logo */}
-            <div className="flex items-center gap-1 cursor-pointer shrink-0 mr-4" onClick={() => window.scrollTo(0,0)}>
+            <div className="flex items-center gap-1 cursor-pointer shrink-0 mr-4" onClick={() => { setSelectedCategory(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
               {globalSettings.companyLogo ? (
-                <img src={globalSettings.companyLogo} alt="Logo Matrix" className="max-h-12 w-auto object-contain drop-shadow-sm" />
-              ) : (
+                <img src={globalSettings.companyLogo} alt="Logo" className="max-h-12 w-auto object-contain drop-shadow-sm" />
+              ) : globalSettings.companyName ? (
                 <span className="text-3xl font-black tracking-tighter bg-gradient-to-r from-yellow-600 via-yellow-400 to-yellow-600 text-transparent bg-clip-text">
-                  {globalSettings.companyName || "MegaStore"}
+                  {globalSettings.companyName}
                 </span>
+              ) : (
+                <div className="h-10 w-36 bg-gray-200 animate-pulse rounded-lg"></div>
               )}
             </div>
 
@@ -374,7 +439,6 @@ export default function HomePage() {
 
             {/* Iconos Derecha: Hamburguesa en móvil, Cuenta en PC */}
             <div className="flex items-center gap-4 ml-auto md:ml-4 shrink-0">
-              {/* Carrito global de marketplace si lo hay, simulemos: */}
               <button className="relative p-2 text-gray-700 hover:text-pink-600 transition-colors group">
                 <svg className="w-6 h-6 group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
                 <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">0</span>
@@ -386,7 +450,7 @@ export default function HomePage() {
                     <span className="text-[11px] text-gray-500 group-hover:text-gray-900 transition-colors">Bienvenido, administrador</span>
                     <span className="text-sm font-bold text-gray-900 flex items-center gap-1">Mi panel <svg className="w-3 h-3 text-gray-400 group-hover:text-pink-500 transition-colors" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/></svg></span>
                   </div>
-                  <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors group" title="Cerrar Sessión">
+                  <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors group" title="Cerrar Sesión">
                     <svg className="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
                   </button>
                 </div>
@@ -409,10 +473,10 @@ export default function HomePage() {
           <div className="hidden md:flex items-center justify-between px-4 sm:px-6 lg:px-8 pb-3 text-[13px] text-gray-600 font-medium">
             <div className="flex items-center gap-5">
               <button onClick={() => setIsMobileMenuOpen(true)} className="flex items-center gap-1.5 hover:text-gray-900 transition-colors font-bold"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg> Categorías</button>
-              <a href="#" className="hover:text-gray-900 transition-colors">Ofertas</a>
+              <a href="#" onClick={(e) => { e.preventDefault(); handleCategoryClick({ name: "Ofertas", keywords: ["flash", "oferta", "descuento"] }); }} className="hover:text-gray-900 transition-colors">Ofertas</a>
               <a href="#" className="hover:text-gray-900 transition-colors">Historial</a>
-              <a href="#" className="hover:text-gray-900 transition-colors">Supermercado</a>
-              <a href="#" className="hover:text-gray-900 transition-colors">Moda</a>
+              <a href="#" onClick={(e) => { e.preventDefault(); handleCategoryClick({ name: "Bisutería", keywords: ["collar", "pulsera", "zarcillo"] }); }} className="hover:text-gray-900 transition-colors">Bisutería</a>
+              <a href="#" onClick={(e) => { e.preventDefault(); handleCategoryClick({ name: "Moda", keywords: ["guante", "ropa", "moda"] }); }} className="hover:text-gray-900 transition-colors">Moda</a>
               <a href="/registro-vendedor" className="hover:text-gray-900 transition-colors text-pink-600 font-bold">Vender</a>
             </div>
           </div>
@@ -436,10 +500,9 @@ export default function HomePage() {
       </header>
 
       {/* =========================================
-          🌟 SUPER HERO BANNER (SLIDER ULTRA PREMIUM)
+          🌟 SUPER HERO BANNER (SLIDER ORIGINAL)
       ========================================= */}
       <div className="w-full bg-gradient-to-b from-gray-100 to-[#ebebed] pb-4">
-        {/* Usamos AnimatePresence de Framer Motion para lograr un fadding real tipo Amazon */}
         <div className="relative w-full h-[200px] sm:h-[280px] md:h-[350px] lg:h-[400px] overflow-hidden bg-white shadow-inner">
           <AnimatePresence mode="sync">
             <motion.div
@@ -448,54 +511,59 @@ export default function HomePage() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.8 }}
-              className="absolute inset-0 w-full h-full"
+              className="absolute inset-0"
             >
               <img 
                 src={heroBanners[currentSlide].img} 
-                alt="Banner Promocional" 
+                alt="Banner" 
                 className="w-full h-full object-cover object-center"
               />
-              <div className={`absolute inset-0 ${heroBanners[currentSlide].bg} opacity-20 mix-blend-multiply`}></div>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-6 sm:p-12 text-white">
+                <span className="bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase w-max mb-2">
+                  {heroBanners[currentSlide].subtitle}
+                </span>
+                <h2 className="text-xl sm:text-3xl md:text-5xl font-black mb-1 drop-shadow-md">
+                  {heroBanners[currentSlide].title}
+                </h2>
+                <p className="text-xs sm:text-sm text-gray-200 max-w-md hidden sm:block">
+                  {heroBanners[currentSlide].desc}
+                </p>
+              </div>
             </motion.div>
           </AnimatePresence>
-
-          {/* Sombra de degradado para que el overlap inferior se vea genial */}
-          <div className="absolute bottom-0 left-0 w-full h-24 bg-gradient-to-t from-[rgba(235,235,237,1)] to-transparent"></div>
 
           {/* Controles del Slider */}
           <button 
             onClick={() => setCurrentSlide((prev) => (prev === 0 ? heroBanners.length - 1 : prev - 1))}
-            className="absolute top-1/2 left-2 sm:left-4 -translate-y-1/2 bg-white/80 backdrop-blur-sm hover:bg-white text-gray-800 p-2 sm:p-3 rounded-full shadow-lg transition-all hidden md:block"
+            className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 w-8 h-8 sm:w-10 sm:h-10 bg-white/80 hover:bg-white rounded-full flex items-center justify-center text-gray-800 shadow-md backdrop-blur-xs transition-transform active:scale-90"
           >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
           </button>
           <button 
             onClick={() => setCurrentSlide((prev) => (prev + 1) % heroBanners.length)}
-            className="absolute top-1/2 right-2 sm:right-4 -translate-y-1/2 bg-white/80 backdrop-blur-sm hover:bg-white text-gray-800 p-2 sm:p-3 rounded-full shadow-lg transition-all hidden md:block"
+            className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 w-8 h-8 sm:w-10 sm:h-10 bg-white/80 hover:bg-white rounded-full flex items-center justify-center text-gray-800 shadow-md backdrop-blur-xs transition-transform active:scale-90"
           >
-             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
           </button>
 
-          {/* Indicadores */}
-          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 flex gap-2">
+          {/* Dots Indicadores */}
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex gap-2">
             {heroBanners.map((_, i) => (
               <button 
                 key={i} 
                 onClick={() => setCurrentSlide(i)}
-                className={`h-1.5 rounded-full transition-all duration-300 ${currentSlide === i ? "w-6 bg-pink-500" : "w-3 bg-white/60 hover:bg-white"}`}
-              ></button>
+                className={`h-1.5 rounded-full transition-all duration-300 ${currentSlide === i ? "w-6 bg-pink-500" : "w-1.5 bg-white/60"}`}
+              />
             ))}
           </div>
         </div>
 
-        {/* =========================================
-            🌟 OVERLAP: MENÚ DE PAGOS Y PROTECCIÓN (TIPO MELI)
-        ========================================= */}
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 relative z-30 -mt-6 sm:-mt-10">
-          <div className="bg-white rounded-xl shadow-md border border-gray-100/50 p-4 sm:p-5 flex flex-wrap lg:flex-nowrap items-center justify-between gap-4">
+        {/* Tarjetas Informativas / Beneficios MercadoLibre */}
+        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 -mt-6 sm:-mt-8 relative z-20">
+          <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
              <div className="flex items-center gap-3 w-1/2 lg:w-auto">
                 <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center shrink-0">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
                 </div>
                 <div>
                   <h4 className="text-gray-900 font-bold text-sm">Transferencias y Pago Móvil</h4>
@@ -539,33 +607,55 @@ export default function HomePage() {
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 mt-12 space-y-14">
           
           {/* =========================================
-              🌟 CATEGORÍAS (CIRCULOS TIPO MELI)
+              🌟 CATEGORÍAS (CIRCULOS TIPO MELI) - AHORA DINÁMICAS
           ========================================= */}
           <section>
-            <h2 className="text-[22px] font-medium text-gray-800 tracking-tight flex items-center gap-2 mb-4">
-              Categorías populares
-            </h2>
-            <div className="flex overflow-x-auto gap-4 pb-4 hide-scrollbar snap-x">
-              {categories.map((cat, i) => (
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-[22px] font-medium text-gray-800 tracking-tight flex items-center gap-2">
+                Categorías populares
+              </h2>
+              {selectedCategory && (
                 <button 
-                  key={i} 
-                  className="flex flex-col items-center gap-2 min-w-[80px] sm:min-w-[100px] group snap-start"
+                  onClick={() => setSelectedCategory(null)}
+                  className="text-xs text-pink-600 font-bold hover:underline"
                 >
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center text-2xl sm:text-3xl group-hover:shadow-md group-hover:border-pink-300 transition-all duration-300 group-hover:-translate-y-1">
-                    {cat.icon}
-                  </div>
-                  <span className="text-xs font-medium text-gray-600 group-hover:text-pink-600 transition-colors text-center w-full truncate px-1">
-                    {cat.name}
-                  </span>
+                  ✕ Quitar filtro
                 </button>
-              ))}
+              )}
+            </div>
+
+            <div className="flex overflow-x-auto gap-4 pb-4 hide-scrollbar snap-x">
+              {categories.map((cat, i) => {
+                const isActive = selectedCategory?.name === cat.name;
+                return (
+                  <button 
+                    key={i} 
+                    onClick={() => handleCategoryClick(cat)}
+                    className="flex flex-col items-center gap-2 min-w-[80px] sm:min-w-[100px] group snap-start transition-transform active:scale-95"
+                    title={`Ver productos de ${cat.name}`}
+                  >
+                    <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white border shadow-sm flex items-center justify-center text-2xl sm:text-3xl transition-all duration-300 group-hover:-translate-y-1 ${
+                      isActive 
+                        ? "border-pink-500 ring-2 ring-pink-400 bg-pink-50/70 shadow-md scale-105" 
+                        : "border-gray-200 group-hover:shadow-md group-hover:border-pink-300"
+                    }`}>
+                      {cat.icon}
+                    </div>
+                    <span className={`text-xs font-medium text-center w-full truncate px-1 transition-colors ${
+                      isActive ? "text-pink-600 font-bold" : "text-gray-600 group-hover:text-pink-600"
+                    }`}>
+                      {cat.name}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </section>
           
           {/* =========================================
-              🌟 TIENDAS OFICIALES (BUBBLE / STORE CARDS TIPO AMAZON BRAND)
+              🌟 TIENDAS OFICIALES
           ========================================= */}
-          {globalSettings.sections.topStores && stores.length > 0 && (
+          {!selectedCategory && globalSettings.sections.topStores && stores.length > 0 && (
             <section>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-[22px] font-medium text-gray-800 tracking-tight flex items-center gap-2">
@@ -583,25 +673,30 @@ export default function HomePage() {
                     onClick={() => goToStoreWithRadar(store.id)} 
                     className="group bg-white rounded-lg shadow-sm hover:shadow-lg border border-gray-200/60 overflow-hidden flex flex-col transition-all duration-300 relative text-left"
                   >
-                    {/* Banner de la tienda (simulado con color para estilo premium) */}
                     <div className={`h-16 w-full ${i%2===0 ? 'bg-gradient-to-r from-blue-100 to-cyan-100' : 'bg-gradient-to-r from-rose-100 to-orange-100'} relative`}>
                         <div className="absolute inset-0 bg-white/20"></div>
                     </div>
                     
-                    {/* Logo sobrepuesto circular */}
-                    <div className="absolute top-6 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full overflow-hidden bg-white border-2 border-white shadow-md z-10 flex items-center justify-center text-2xl">
-                      {store.appLogos?.icon192 || store.profileImage ? (
-                        <img src={store.appLogos?.icon192 || store.profileImage} alt={store.nombre} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                      ) : (
-                        <span className="opacity-50 text-gray-400">🏪</span>
+                    <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10">
+                      <div className="w-16 h-16 rounded-full overflow-hidden bg-white border-2 border-white shadow-md flex items-center justify-center text-2xl">
+                        {store.appLogos?.icon192 || store.profileImage ? (
+                          <img src={store.appLogos?.icon192 || store.profileImage} alt={store.nombre} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                        ) : (
+                          <span className="opacity-50 text-gray-400">🏪</span>
+                        )}
+                      </div>
+                      {store.verification?.status === 'verified' && (
+                        <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
+                          <VerifiedBadge variant="shield" size="xs" showTooltip={false} />
+                        </div>
                       )}
                     </div>
 
                     <div className="pt-8 pb-4 px-3 flex flex-col items-center flex-1 bg-white">
                       <h3 className="font-bold text-gray-900 text-sm text-center truncate w-full flex items-center justify-center gap-1.5 mt-2">
-                        {store.nombre || store.id}
+                        <span className="truncate">{store.nombre || store.id}</span>
                         {store.verification?.status === 'verified' && (
-                          <svg className="w-3.5 h-3.5 text-blue-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                          <VerifiedBadge variant="shield" size="sm" />
                         )}
                       </h3>
                       <p className="text-[11px] text-gray-500 mt-0.5">Tienda Oficial</p>
@@ -613,28 +708,66 @@ export default function HomePage() {
           )}
 
           {/* =========================================
-              🌟 PRODUCTOS ALEATORIOS (Descubrimiento)
+              🌟 CATÁLOGO DE PRODUCTOS (CON BÚSQUEDA INTELIGENTE INTEGRADA)
           ========================================= */}
-          {globalSettings.sections.randomProducts && products.length > 0 && (
-            <section className="bg-white rounded-lg p-0 sm:p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
-              <div className="flex items-center justify-between mb-2 p-4 sm:p-0">
-                <h2 className="text-[22px] font-medium text-gray-800 tracking-tight flex items-center gap-2">
-                  Productos recomendados para ti
-                  <span className="bg-blue-100 text-blue-600 text-[10px] uppercase font-bold px-2 py-0.5 rounded-sm tracking-wider">Descubrimiento</span>
-                </h2>
-              </div>
+          <section id="seccion-catalogo" className="bg-white rounded-lg p-0 sm:p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)] scroll-mt-24">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 p-4 sm:p-0 gap-2">
+              <h2 className="text-[22px] font-medium text-gray-800 tracking-tight flex items-center gap-2">
+                {selectedCategory ? (
+                  <>
+                    <span>{selectedCategory.icon}</span>
+                    <span>Productos en {selectedCategory.name}</span>
+                    <span className="bg-pink-100 text-pink-700 text-xs font-bold px-2.5 py-0.5 rounded-full ml-1">
+                      {displayedProducts.length} encontrados
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span>Productos recomendados para ti</span>
+                    <span className="bg-blue-100 text-blue-600 text-[10px] uppercase font-bold px-2 py-0.5 rounded-sm tracking-wider">Descubrimiento</span>
+                  </>
+                )}
+              </h2>
+
+              {selectedCategory && (
+                <button
+                  onClick={() => setSelectedCategory(null)}
+                  className="self-start sm:self-auto text-xs text-pink-600 hover:text-pink-700 font-bold bg-pink-50 hover:bg-pink-100 px-3 py-1.5 rounded-md transition-colors"
+                >
+                  ✕ Quitar filtro (Ver todos)
+                </button>
+              )}
+            </div>
+
+            {displayedProducts.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 border-t sm:border border-gray-100 sm:rounded-md divide-x divide-y sm:divide-y-0 text-left border-b lg:divide-y-0">
-                {products.map((p, idx) => (
+                {displayedProducts.map((p, idx) => (
                   <ProductCard key={p.id} p={p} onClick={() => goToStoreWithRadar(p.storeId, p.id)} isFlash={idx % 4 === 0} />
                 ))}
               </div>
-            </section>
-          )}
+            ) : (
+              <div className="py-12 px-4 text-center">
+                <span className="text-4xl block mb-2">{selectedCategory?.icon || "🔍"}</span>
+                <p className="font-semibold text-gray-800 text-base mb-1">
+                  No se encontraron productos en "{selectedCategory?.name}"
+                </p>
+                <p className="text-xs text-gray-500 mb-4 max-w-sm mx-auto">
+                  Por los momentos no hay productos en esta categoría. Puedes explorar el resto de nuestra tienda.
+                </p>
+                <button
+                  onClick={() => setSelectedCategory(null)}
+                  className="bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold py-2.5 px-5 rounded-md transition-colors shadow-sm"
+                >
+                  Ver todos los productos disponibles
+                </button>
+              </div>
+            )}
+          </section>
 
           {/* =========================================
-              🌟 LOS MÁS VENDIDOS
+              🌟 LOS MÁS VENDIDOS (Visible cuando no hay filtro activo)
           ========================================= */}
-          {globalSettings.sections.bestSellers && bestSellers.length > 0 && (
+          {!selectedCategory && globalSettings.sections.bestSellers && bestSellers.length > 0 && (
             <section className="bg-white rounded-lg p-0 sm:p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
               <div className="flex items-center justify-between mb-2 p-4 sm:p-0">
                 <h2 className="text-[22px] font-medium text-gray-800 tracking-tight flex items-center gap-2">
@@ -653,9 +786,9 @@ export default function HomePage() {
           )}
 
           {/* =========================================
-              🌟 OFERTAS
+              🌟 OFERTAS ESPECIALES
           ========================================= */}
-          {globalSettings.sections.offers && offersProducts.length > 0 && (
+          {!selectedCategory && globalSettings.sections.offers && offersProducts.length > 0 && (
             <section className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-100/50 rounded-lg p-0 sm:p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
               <div className="flex items-center justify-between mb-2 p-4 sm:p-0">
                 <h2 className="text-[22px] font-black text-red-600 tracking-tight flex items-center gap-2">
@@ -676,7 +809,7 @@ export default function HomePage() {
           {/* =========================================
               🌟 TENDENCIAS / DAILY TOP
           ========================================= */}
-          {globalSettings.sections.dailyTop && dailyTopProducts.length > 0 && (
+          {!selectedCategory && globalSettings.sections.dailyTop && dailyTopProducts.length > 0 && (
             <section className="bg-white rounded-lg p-0 sm:p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
               <div className="flex items-center justify-between mb-2 p-4 sm:p-0">
                 <h2 className="text-[22px] font-medium text-gray-800 tracking-tight flex items-center gap-2">
@@ -698,23 +831,21 @@ export default function HomePage() {
               🌟 BANNERS DE PROMO (GRID 2 COLUMNAS)
           ========================================= */}
           <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-             <div onClick={() => navigate('/search?q=moda')} className="group bg-gradient-to-r from-purple-700 to-indigo-800 rounded-xl overflow-hidden cursor-pointer relative h-36 sm:h-48 flex items-center px-6 sm:px-10 shadow-sm hover:shadow-lg transition-all">
+             <div onClick={() => handleCategoryClick({ name: "Moda", keywords: ["guante", "ropa", "moda"] })} className="group bg-gradient-to-r from-purple-700 to-indigo-800 rounded-xl overflow-hidden cursor-pointer relative h-36 sm:h-48 flex items-center px-6 sm:px-10 shadow-sm hover:shadow-lg transition-all">
                 <div className="relative z-10 w-2/3">
                   <h3 className="text-white font-black text-xl sm:text-2xl mb-2">Moda y Accesorios</h3>
                   <p className="text-white/80 text-xs sm:text-sm font-medium mb-3">Descubre las nuevas tendencias</p>
                   <span className="bg-white text-indigo-900 text-xs font-bold px-4 py-1.5 rounded-full inline-block group-hover:scale-105 transition-transform">Ver Categoría</span>
                 </div>
-                {/* Imagen decorativa derecha */}
                 <div className="absolute right-0 top-0 bottom-0 w-1/2 bg-[url('https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center mask-image-gradient-left opacity-80 group-hover:opacity-100 transition-opacity"></div>
              </div>
 
-             <div onClick={() => navigate('/ofertas')} className="group bg-gradient-to-r from-orange-500 to-red-500 rounded-xl overflow-hidden cursor-pointer relative h-36 sm:h-48 flex items-center px-6 sm:px-10 shadow-sm hover:shadow-lg transition-all">
+             <div onClick={() => handleCategoryClick({ name: "Ofertas", keywords: ["flash", "oferta", "descuento"] })} className="group bg-gradient-to-r from-orange-500 to-red-500 rounded-xl overflow-hidden cursor-pointer relative h-36 sm:h-48 flex items-center px-6 sm:px-10 shadow-sm hover:shadow-lg transition-all">
                 <div className="relative z-10 w-2/3">
                   <h3 className="text-white font-black text-xl sm:text-2xl mb-2">Ofertas Relámpago</h3>
                   <p className="text-white/80 text-xs sm:text-sm font-medium mb-3">Solo por 24 horas</p>
                   <span className="bg-white text-red-600 text-xs font-bold px-4 py-1.5 rounded-full inline-block group-hover:scale-105 transition-transform">Comprar ahora</span>
                 </div>
-                {/* Imagen decorativa derecha */}
                 <div className="absolute right-0 top-0 bottom-0 w-1/2 bg-[url('https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center mask-image-gradient-left opacity-80 group-hover:opacity-100 transition-opacity"></div>
              </div>
           </section>
@@ -729,7 +860,7 @@ export default function HomePage() {
                  <span className="text-8xl group-hover:scale-110 transition-transform duration-500">🏪</span>
               </div>
               <div className="p-8 md:p-12 flex-1 relative">
-                <h2 className="text-2xl font-normal text-gray-900 mb-2">Empieza a vender tus productos en <span className="font-bold">MegaStore</span></h2>
+                <h2 className="text-2xl font-normal text-gray-900 mb-2">Empieza a vender tus productos en <span className="font-bold">{globalSettings.companyName || "nuestra plataforma"}</span></h2>
                 <p className="text-gray-500 text-sm mb-6">Únete a nuestra plataforma, crea tu tienda virtual y llega a miles de compradores. Sin complicaciones.</p>
                 <div className="flex gap-4">
                   <button onClick={() => navigate('/registro-vendedor')} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-md font-bold text-sm transition-colors shadow-sm">
@@ -759,17 +890,18 @@ export default function HomePage() {
         </div>
       )}
       
-      {/* 🌟 FOOTER TIPO CORPORATIVO */}
+      {/* 🌟 FOOTER ORIGINAL */}
       <footer className="mt-20 border-t border-gray-200 bg-white">
-        {/* Superior */}
         <div className="max-w-[1200px] mx-auto px-4 py-8 border-b border-gray-100 flex flex-wrap justify-between gap-8 md:gap-4 text-center md:text-left">
            <div className="w-full md:w-1/4">
               {globalSettings.companyLogo ? (
-                <img src={globalSettings.companyLogo} alt="Logo" className="max-h-10 mb-4 mx-auto md:mx-0 object-contain" />
-              ) : (
+                <img src={globalSettings.companyLogo} alt={globalSettings.companyName || "Logo"} className="max-h-10 mb-4 mx-auto md:mx-0 object-contain" />
+              ) : globalSettings.companyName ? (
                 <span className="text-2xl font-black tracking-tighter bg-gradient-to-r from-yellow-600 via-yellow-400 to-yellow-600 text-transparent bg-clip-text mb-4 block">
-                  {globalSettings.companyName || "MegaStore"}
+                  {globalSettings.companyName}
                 </span>
+              ) : (
+                <div className="h-8 w-28 bg-gray-200 animate-pulse rounded mb-4 mx-auto md:mx-0"></div>
               )}
               <p className="text-xs text-gray-500">El marketplace donde encuentras de todo, enviado por las mejores tiendas de tu país.</p>
            </div>
@@ -799,9 +931,8 @@ export default function HomePage() {
            </div>
         </div>
         
-        {/* Inferior */}
         <div className="bg-gray-100 py-4 text-center text-[11px] text-gray-500">
-          <p>Copyright © 2026 {globalSettings.companyName || "Mega Store"}. Todos los derechos reservados.</p>
+          <p>Copyright © 2026 {globalSettings.companyName || "Multi Tienda"}. Todos los derechos reservados.</p>
           <div className="flex justify-center gap-4 mt-2">
             <a href="#" className="hover:underline">Políticas de Privacidad</a>
             <a href="#" className="hover:underline">Términos de Condiciones</a>

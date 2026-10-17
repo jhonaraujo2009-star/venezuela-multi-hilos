@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
 import { SUPER_ADMIN_EMAIL } from "../config/constants";
+import VerifiedBadge from "../components/shared/VerifiedBadge";
 
 export default function SuperAdminPage() {
   const [stores, setStores] = useState([]);
@@ -343,7 +344,7 @@ export default function SuperAdminPage() {
             <button 
               onClick={() => navigate('/')} 
               className="hidden sm:flex items-center gap-2 text-xs font-black bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl transition-colors tracking-widest uppercase border border-white/10"
-              title="Ir a la página principal MegaStore"
+              title="Ir a la página principal"
             >
               <span>🏪</span> Catálogo Principal
             </button>
@@ -803,7 +804,7 @@ export default function SuperAdminPage() {
                               <div>
                                 <p className="font-bold text-gray-900 flex items-center gap-2">
                                   {store.nombre || "Sin nombre configurado"}
-                                  {store.verification?.status === 'verified' && <span title="Verificada">✅</span>}
+                                  {store.verification?.status === 'verified' && <VerifiedBadge variant="shield" size="xs" />}
                                 </p>
                                 <p className="text-[10px] text-gray-400 flex items-center gap-2">
                                   <span>ID: {store.id}</span>

@@ -33,11 +33,37 @@ export function AppProvider({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // 🌟 BRANDING GLOBAL (Logo y Nombre de la Plataforma configurados en SuperAdmin)
+  const [globalBranding, setGlobalBranding] = useState(() => {
+    try {
+      const saved = localStorage.getItem("global_branding");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return { companyName: "", companyLogo: "", homepageSections: null };
+  });
+
   useEffect(() => {
     const unsubConfig = onSnapshot(doc(db, "config", "settings"), (snap) => {
       if (snap.exists()) setSettings((prev) => ({ ...prev, ...snap.data() }));
     });
-    return () => unsubConfig();
+    const unsubGlobal = onSnapshot(doc(db, "settings", "global"), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        const updated = {
+          companyName: data.companyName || "",
+          companyLogo: data.companyLogo || "",
+          homepageSections: data.homepageSections || null
+        };
+        setGlobalBranding(updated);
+        try {
+          localStorage.setItem("global_branding", JSON.stringify(updated));
+        } catch (e) {}
+      }
+    });
+    return () => {
+      unsubConfig();
+      unsubGlobal();
+    };
   }, []);
 
   useEffect(() => {
@@ -91,7 +117,7 @@ export function AppProvider({ children }) {
   };
 
   return (
-    <AppContext.Provider value={{ settings, storeData, loading, updateSettings, bsPrice }}>
+    <AppContext.Provider value={{ settings, storeData, loading, updateSettings, bsPrice, globalBranding }}>
       {children}
     </AppContext.Provider>
   );

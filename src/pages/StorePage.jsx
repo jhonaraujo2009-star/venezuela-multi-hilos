@@ -13,6 +13,7 @@ import CartDrawer from "../components/cart/CartDrawer";
 import Footer from "../components/layout/Footer";
 import InstallButton from "../InstallButton";
 import WhatsAppVIP from "../components/layout/WhatsAppVIP";
+import VerifiedBadge from "../components/shared/VerifiedBadge";
 
 import { useCart } from "../context/CartContext";
 import { useApp } from "../context/AppContext";
@@ -136,12 +137,7 @@ export default function StorePage() {
             ✨ {displayStoreName}
             
             {storeData?.verification?.status === "verified" ? (
-              <div className="relative flex items-center justify-center ml-1" title="Tienda Verificada Oficialmente">
-                <span className="absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-20 animate-ping"></span>
-                <svg className="relative w-5 h-5 text-blue-500 drop-shadow-[0_0_6px_rgba(59,130,246,0.6)]" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
-                </svg>
-              </div>
+              <VerifiedBadge variant="shield" size="md" className="ml-1" />
             ) : (
               <div className="ml-1.5 px-2.5 py-1 text-[8px] font-black bg-gradient-to-r from-gray-50 to-gray-100 text-gray-500 rounded-full border border-gray-200/60 flex items-center gap-1.5 tracking-widest uppercase shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
                 <span className="relative flex h-2 w-2">
