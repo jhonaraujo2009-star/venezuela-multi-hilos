@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, doc, updateDoc, deleteDoc, query, where, getDoc, setDoc } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc, deleteDoc, query, where, getDoc, setDoc, writeBatch } from "firebase/firestore";
 import { db, auth } from "../config/firebase"; 
 import { onAuthStateChanged } from "firebase/auth"; 
 import { useNavigate } from "react-router-dom";
@@ -96,19 +96,28 @@ export default function SuperAdminPage() {
 
         const orderSnap = await getDocs(collection(db, "orders"));
         const orderCounts = {};
+        const orderTotals = {};
         orderSnap.docs.forEach(d => {
           const o = d.data();
           const sId = o?.storeId;
           const isDone = ["pagado", "entregado", "completed", "enviado"].includes((o.status || "").toLowerCase());
           if (sId && isDone) {
             orderCounts[sId] = (orderCounts[sId] || 0) + 1;
+            const amt = Number(o.totalAmount ?? o.total ?? 0);
+            orderTotals[sId] = (orderTotals[sId] || 0) + amt;
           }
         });
 
         storesList.forEach(s => {
           s.total_productos = prodCounts[s.id] !== undefined ? prodCounts[s.id] : (s.total_productos || 0);
-          if (!s.ventas_consolidadas && orderCounts[s.id]) {
-            s.ventas_consolidadas = orderCounts[s.id];
+          if (orderCounts[s.id] !== undefined) {
+            s.ventas_consolidadas = Math.max(Number(s.ventas_consolidadas || 0), orderCounts[s.id]);
+          }
+          // Si deuda_comision está en 0 pero tiene ventas confirmadas históricas:
+          const currentDebt = Number(s.deuda_comision || 0);
+          if (currentDebt === 0 && (orderTotals[s.id] || 0) > 0) {
+            const commRate = Number(s.comision_porcentaje ?? 5);
+            s.deuda_comision = Number(((orderTotals[s.id] * commRate) / 100).toFixed(2));
           }
         });
       } catch(e) {}
@@ -121,6 +130,98 @@ export default function SuperAdminPage() {
       toast.error("Error al cargar la base de datos de tiendas.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 🌟 SINCRONIZAR Y GUARDAR COMISIONES CALCULADAS EN FIRESTORE
+  const syncCommissions = async () => {
+    const toastId = toast.loading("Sincronizando comisiones con ventas reales...");
+    try {
+      const orderSnap = await getDocs(collection(db, "orders"));
+      const orderCounts = {};
+      const orderTotals = {};
+
+      orderSnap.docs.forEach(d => {
+        const o = d.data();
+        const sId = o?.storeId;
+        const isDone = ["pagado", "entregado", "completed", "enviado"].includes((o.status || "").toLowerCase());
+        if (sId && isDone) {
+          orderCounts[sId] = (orderCounts[sId] || 0) + 1;
+          const amt = Number(o.totalAmount ?? o.total ?? 0);
+          orderTotals[sId] = (orderTotals[sId] || 0) + amt;
+        }
+      });
+
+      const batch = writeBatch(db);
+      const updatedStores = stores.map(s => {
+        const totalSales = orderTotals[s.id] || 0;
+        const totalCount = orderCounts[s.id] || 0;
+        const commRate = Number(s.comision_porcentaje ?? 5);
+        const calculatedDebt = Number(((totalSales * commRate) / 100).toFixed(2));
+        
+        const newCount = Math.max(Number(s.ventas_consolidadas || 0), totalCount);
+        const newDebt = (s.deuda_comision && s.deuda_comision > 0) ? s.deuda_comision : calculatedDebt;
+
+        const sRef = doc(db, "stores", s.id);
+        batch.update(sRef, {
+          ventas_consolidadas: newCount,
+          deuda_comision: newDebt
+        });
+
+        return {
+          ...s,
+          ventas_consolidadas: newCount,
+          deuda_comision: newDebt
+        };
+      });
+
+      await batch.commit();
+      setStores(updatedStores);
+      toast.success("¡Comisiones y ventas sincronizadas en la base de datos! ✅", { id: toastId });
+    } catch (e) {
+      console.error(e);
+      toast.error("Error al sincronizar comisiones", { id: toastId });
+    }
+  };
+
+  // 🌟 RECALCULAR DEUDA INDIVIDUAL DE UNA TIENDA ESPECÍFICA
+  const recalculateStoreCommission = async (storeId) => {
+    const toastId = toast.loading("Recalculando deuda de la tienda...");
+    try {
+      const qOrders = query(collection(db, "orders"), where("storeId", "==", storeId));
+      const snap = await getDocs(qOrders);
+      
+      let totalAmount = 0;
+      let completedCount = 0;
+
+      snap.docs.forEach(d => {
+        const o = d.data();
+        const isDone = ["pagado", "entregado", "completed", "enviado"].includes((o.status || "").toLowerCase());
+        if (isDone) {
+          completedCount++;
+          totalAmount += Number(o.totalAmount ?? o.total ?? 0);
+        }
+      });
+
+      const targetStore = stores.find(s => s.id === storeId);
+      const commRate = Number(targetStore?.comision_porcentaje ?? 5);
+      const calculatedDebt = Number(((totalAmount * commRate) / 100).toFixed(2));
+
+      await updateDoc(doc(db, "stores", storeId), {
+        ventas_consolidadas: Math.max(Number(targetStore?.ventas_consolidadas || 0), completedCount),
+        deuda_comision: calculatedDebt
+      });
+
+      setStores(stores.map(s => s.id === storeId ? {
+        ...s,
+        ventas_consolidadas: Math.max(Number(s.ventas_consolidadas || 0), completedCount),
+        deuda_comision: calculatedDebt
+      } : s));
+
+      toast.success(`Deuda recalculada: $${calculatedDebt.toFixed(2)} (${completedCount} ventas) ✅`, { id: toastId });
+    } catch (e) {
+      console.error(e);
+      toast.error("Error al recalcular deuda", { id: toastId });
     }
   };
 
@@ -737,12 +838,19 @@ export default function SuperAdminPage() {
                 
                 {/* Botones Especiales para Finanzas */}
                 {activeTab === "finanzas" && (
-                  <div className="flex items-center gap-4 ml-4">
-                    <button onClick={exportToCSV} className="bg-green-100 hover:bg-green-200 text-green-700 text-xs font-bold px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
-                      📥 Descargar Excel
+                  <div className="flex flex-wrap items-center gap-3 ml-2 sm:ml-4">
+                    <button onClick={exportToCSV} className="bg-green-100 hover:bg-green-200 text-green-700 text-xs font-bold px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5">
+                      📥 Excel
                     </button>
-                    <button onClick={toggleGlobalCommission} className={`text-xs font-black px-4 py-2 rounded-lg border transition-colors ${isCommissionActive ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100" : "bg-gray-900 text-white hover:bg-black"}`}>
-                      {isCommissionActive ? "🛑 Apagar Cobros Globales" : "⚡ Encender Cobros Globales"}
+                    <button 
+                      onClick={syncCommissions} 
+                      className="bg-pink-100 hover:bg-pink-200 text-pink-700 text-xs font-bold px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 active:scale-95 shadow-xs"
+                      title="Sincronizar y recalcular comisiones pendientes de todas las tiendas con sus ventas reales"
+                    >
+                      🔄 Sincronizar Comisiones
+                    </button>
+                    <button onClick={toggleGlobalCommission} className={`text-xs font-black px-3 py-2 rounded-lg border transition-colors ${isCommissionActive ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100" : "bg-gray-900 text-white hover:bg-black"}`}>
+                      {isCommissionActive ? "🛑 Apagar Cobros" : "⚡ Encender Cobros"}
                     </button>
                   </div>
                 )}
@@ -883,13 +991,21 @@ export default function SuperAdminPage() {
                                 </div>
                               </td>
                               <td className="p-4 pr-6 text-right">
-                                <div className="flex items-center justify-end gap-3">
+                                <div className="flex items-center justify-end gap-2 sm:gap-3">
                                   <span className={`font-black text-lg ${store.deuda_comision > 0 ? 'text-red-500' : 'text-green-500'}`}>
                                     ${(store.deuda_comision || 0).toFixed(2)}
                                   </span>
-                                  {store.deuda_comision > 0 && (
-                                    <button onClick={() => resetDebt(store.id)} className="text-[10px] font-bold bg-green-50 text-green-600 hover:bg-green-100 px-2 py-1 rounded-lg border border-green-200 uppercase tracking-widest transition-colors">
+                                  {store.deuda_comision > 0 ? (
+                                    <button onClick={() => resetDebt(store.id)} className="text-[10px] font-bold bg-green-50 text-green-600 hover:bg-green-100 px-2.5 py-1 rounded-lg border border-green-200 uppercase tracking-widest transition-colors">
                                       Saldar
+                                    </button>
+                                  ) : (
+                                    <button 
+                                      onClick={() => recalculateStoreCommission(store.id)} 
+                                      className="text-[10px] font-bold bg-gray-50 text-gray-500 hover:bg-gray-100 px-2 py-1 rounded-lg border border-gray-200 uppercase tracking-widest transition-colors"
+                                      title="Recalcular comisiones basadas en pedidos de esta tienda"
+                                    >
+                                      🔄 Recalcular
                                     </button>
                                   )}
                                 </div>

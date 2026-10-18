@@ -20,6 +20,7 @@ import AdminLogistics from "../components/admin/AdminLogistics";
 import AdminStatistics from "../components/admin/AdminStatistics";
 import AdminPOS from "../components/admin/AdminPOS"; // 🌟 Importamos el nuevo POS
 import AdminSalesHistory from "../components/admin/AdminSalesHistory"; // 🌟 Importamos el nuevo Historial de Ventas
+import { useOrderNotifications } from "../hooks/useOrderNotifications"; // 🌟 Notificaciones push en móvil
 
 export default function AdminPage() {
   const { logout, user } = useAuth();
@@ -29,6 +30,9 @@ export default function AdminPage() {
   
   // 🌟 EXTRAEMOS LOS DATOS DE LA TIENDA PARA LEER EL MENSAJE DEL SÚPER ADMIN
   const { storeData } = useApp(); 
+
+  // 🌟 NOTIFICACIONES PUSH EN EL TELÉFONO PARA PEDIDOS ENTRANTES
+  const { permission, requestPermission, pendingCount } = useOrderNotifications(storeId);
 
   const NAV_ITEMS = [
     { path: `/${storeId}/admin`, label: "⚙️ Ajustes", end: true },
@@ -76,7 +80,7 @@ export default function AdminPage() {
               end={item.end}
               onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
-                `flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                `flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   isActive ? "text-white shadow-sm" : "text-gray-600 hover:bg-gray-50"
                 }`
               }
@@ -84,7 +88,12 @@ export default function AdminPage() {
                 isActive ? { background: "var(--primary)" } : {}
               }
             >
-              {item.label}
+              <span className="flex items-center gap-2">{item.label}</span>
+              {item.path.endsWith("/inbox") && pendingCount > 0 && (
+                <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full animate-pulse shadow-xs">
+                  {pendingCount}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -113,6 +122,28 @@ export default function AdminPage() {
           <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-xl hover:bg-gray-50">☰</button>
           <span className="font-bold text-gray-900">Admin Panel</span>
         </div>
+
+        {/* ==========================================
+            🔔 ACTIVAR NOTIFICACIONES PUSH EN EL MÓVIL
+        ========================================== */}
+        {permission !== "granted" && (
+          <div className="m-4 lg:mx-8 mt-4 p-3 sm:p-4 bg-gradient-to-r from-pink-600 to-rose-500 text-white rounded-2xl shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl animate-bounce">🔔</span>
+              <div>
+                <p className="text-xs font-black uppercase tracking-wider">Activar Notificaciones en tu Teléfono</p>
+                <p className="text-[11px] text-pink-100 font-medium">Recibe alertas con sonido y vibración en tu móvil al recibir un pedido.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={requestPermission}
+              className="bg-white text-pink-600 font-black text-xs px-4 py-2.5 rounded-xl shadow-xs hover:bg-pink-50 active:scale-95 transition-all whitespace-nowrap self-stretch sm:self-auto text-center"
+            >
+              Activar Alertas 📲
+            </button>
+          </div>
+        )}
 
         {/* ==========================================
             🌟 ALERTA DEL MEGÁFONO (SÚPER ADMIN) 🌟

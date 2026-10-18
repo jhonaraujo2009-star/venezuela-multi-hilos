@@ -86,11 +86,12 @@ export default function AdminOrders() {
           }
         }
 
-        // Registrar venta consolidada y comisión si la venta provino del SuperAdmin
+        // Registrar venta consolidada y comisión según la tasa de la tienda
+        let commissionAmount = 0;
         if (storeData?.id) {
           const storeRef = doc(db, "stores", storeData.id);
-          const commissionRate = storeData.comision_porcentaje || 5;
-          const commissionAmount = order._origenVenta === "index_super_admin" 
+          const commissionRate = Number(storeData.comision_porcentaje ?? 5);
+          commissionAmount = commissionRate > 0 
             ? Number(((orderTotal * commissionRate) / 100).toFixed(2))
             : 0;
 
@@ -103,7 +104,8 @@ export default function AdminOrders() {
         batch.update(orderRef, { 
           status: newStatus, 
           stockDeducted: true,
-          commissionRecorded: order._origenVenta === "index_super_admin"
+          commissionAmount: commissionAmount,
+          commissionRecorded: commissionAmount > 0
         });
       } else if (newStatus === "cancelado" && order.stockDeducted && order.items && order.items.length > 0) {
         // Restaurar inventario si se cancela un pedido que ya había restado stock

@@ -118,20 +118,22 @@ export default function AdminInbox() {
           transaction.update(producto.ref, updateData);
         }
         
-        // 3. COMISIONES SUPER ADMIN
+        // 3. COMISIONES SUPER ADMIN (Se calculan para toda venta confirmada según la tasa de la tienda)
+        const commissionRate = Number(storeData.comision_porcentaje ?? 5);
+        const orderTotal = Number(order.totalAmount ?? order.total ?? 0);
         let comisionASumar = 0;
 
-        if (isCommissionActive) {
-          const porcentaje = storeData.comision_porcentaje || 5;
-
-          (order.items || order.cart || []).forEach(item => {
-            if (item._origenVenta === "index_super_admin") {
-              const pQty = item.quantity || item.qty || 1;
-              const pPrice = Number(item.price || 0);
-              const totalItem = pPrice * pQty;
-              comisionASumar += (totalItem * (porcentaje / 100));
-            }
-          });
+        if (commissionRate > 0) {
+          if (orderTotal > 0) {
+            comisionASumar = Number(((orderTotal * commissionRate) / 100).toFixed(2));
+          } else {
+            const itemsSum = (order.items || order.cart || []).reduce((acc, item) => {
+              const pQty = Number(item.quantity ?? item.qty ?? 1);
+              const pPrice = Number(item.price ?? 0);
+              return acc + (pPrice * pQty);
+            }, 0);
+            comisionASumar = Number(((itemsSum * commissionRate) / 100).toFixed(2));
+          }
         }
 
         const storeRef = doc(db, "stores", storeData.id);
@@ -140,9 +142,13 @@ export default function AdminInbox() {
           deuda_comision: increment(comisionASumar)
         });
         
-        // Actualizamos orden a completed
+        // Actualizamos orden a completed y registramos la comisión
         const orderRef = doc(db, "orders", order.id);
-        transaction.update(orderRef, { status: "completed" });
+        transaction.update(orderRef, { 
+          status: "completed",
+          commissionAmount: comisionASumar,
+          commissionRecorded: true
+        });
       });
 
       toast.success(`¡Pedido Confirmado! Ahora está en tu Historial de Ventas. ✅`, { id: toastId });
