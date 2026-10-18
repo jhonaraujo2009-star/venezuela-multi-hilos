@@ -36,6 +36,11 @@ export default function RegisterStorePage() {
       setUrlStatus("idle");
       return;
     }
+
+    if (RESERVED_URLS.includes(formData.storeUrl.toLowerCase())) {
+      setUrlStatus("taken");
+      return;
+    }
     
     setUrlStatus("checking");
     const timer = setTimeout(async () => {
@@ -91,6 +96,10 @@ export default function RegisterStorePage() {
     }
     if (formData.password.length < 6) {
       toast.error("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+    if (RESERVED_URLS.includes(formData.storeUrl.toLowerCase())) {
+      toast.error("Este enlace o nombre está reservado por el sistema.");
       return;
     }
     if (urlStatus === "taken") {

@@ -17,6 +17,7 @@ import VerifiedBadge from "../components/shared/VerifiedBadge";
 
 import { useCart } from "../context/CartContext";
 import { useApp } from "../context/AppContext";
+import { AnimatePresence } from "framer-motion";
 
 export default function StorePage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -128,11 +129,11 @@ export default function StorePage() {
         <Header onProductClick={setSelectedProduct} onFilter={setActiveFilter} />
       </div>
 
-      {/* 🌟 Ajuste manual de altura (Mantenido intacto) */}
-      <div className="pt-20">
+      {/* 🌟 Ajuste de altura para que el header y announcement bar no tapen el contenido */}
+      <div className="pt-28 sm:pt-[116px]">
         
         {/* NOMBRE DE LA TIENDA CON VERIFICACIÓN */}
-        <div className="max-w-md mx-auto px-4 pb-2 flex items-center justify-center animate-in fade-in duration-700">
+        <div className="max-w-md mx-auto px-4 pt-2 pb-2 flex items-center justify-center animate-in fade-in duration-700">
           <span className="text-xl font-black tracking-tighter uppercase flex items-center gap-1.5 text-center" style={{ color: "var(--primary)" }}>
             ✨ {displayStoreName}
             
@@ -159,7 +160,9 @@ export default function StorePage() {
         </div>
       </div>
 
-      {selectedProduct && <ProductModal product={selectedProduct} onClose={() => setSelectedProduct(null)} />}
+      <AnimatePresence>
+        {selectedProduct && <ProductModal product={selectedProduct} onClose={() => setSelectedProduct(null)} />}
+      </AnimatePresence>
       <CartDrawer />
       {showFloatingElements && <WhatsAppVIP />}
       <InstallButton />

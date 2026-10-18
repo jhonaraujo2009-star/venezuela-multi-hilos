@@ -1,106 +1,248 @@
-import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useMemo } from "react";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useApp } from "./AppContext"; // 🌟 MAGIA: Conectamos el carrito con el cerebro
+import toast from "react-hot-toast";
 
 const CartContext = createContext(null);
 
 export function CartProvider({ children }) {
   const { storeData } = useApp(); // 🌟 Saber en qué tienda estamos
-  const [items, setItems] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [coupon, setCoupon] = useState(null);
+  const [selectedStoreId, setSelectedStoreId] = useState(null);
 
-  // 🌟 MAGIA: Cargar la bolsa correcta según la tienda
-  useEffect(() => {
-    if (!storeData?.id) return;
-    
-    const cartKey = `cart_${storeData.id}`; // Ej: cart_oscar o cart_cuentas_multiples
+  // 🌟 MAGIA: Cargar la bolsa unificada de marketplace o migrar claves anteriores
+  const [items, setItems] = useState(() => {
     try {
-      const localData = localStorage.getItem(cartKey);
-      if (localData) {
-        setItems(JSON.parse(localData));
-      } else {
-        setItems([]); // Si no hay nada guardado para esta tienda, la bolsa va vacía
+      const unified = localStorage.getItem("marketplace_cart");
+      if (unified) {
+        const parsed = JSON.parse(unified);
+        if (Array.isArray(parsed)) return parsed;
       }
-    } catch (error) {
-      setItems([]);
+      // Migración desde carritos por tienda individuales
+      const merged = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("cart_")) {
+          try {
+            const raw = localStorage.getItem(k);
+            const parsed = JSON.parse(raw || "[]");
+            if (Array.isArray(parsed)) {
+              const sId = k.replace("cart_", "");
+              parsed.forEach((item) => {
+                if (!item.storeId) item.storeId = sId;
+                if (!merged.some((m) => m.key === item.key)) {
+                  merged.push(item);
+                }
+              });
+            }
+          } catch (e) {}
+        }
+      }
+      return merged;
+    } catch (e) {
+      return [];
+    }
+  });
+
+  // 🌟 Si entramos a una tienda específica, auto-seleccionar sus productos
+  useEffect(() => {
+    if (storeData?.id) {
+      setSelectedStoreId(storeData.id);
+      // Opcionalmente auto-seleccionar productos de esta tienda si existen en la bolsa
+      setItems((prev) => {
+        const hasThisStore = prev.some(
+          (i) => (i.storeId || i.product?.storeId) === storeData.id
+        );
+        if (hasThisStore) {
+          return prev.map((item) => ({
+            ...item,
+            selected: (item.storeId || item.product?.storeId) === storeData.id
+          }));
+        }
+        return prev;
+      });
     }
   }, [storeData?.id]);
 
-  // 🌟 MAGIA: Guardar los productos en la bolsa de esta tienda específica
+  // 🌟 MAGIA: Guardar persistente en marketplace_cart y sincronizar cart_${storeId}
   useEffect(() => {
-    if (!storeData?.id) return;
-    
-    const cartKey = `cart_${storeData.id}`;
-    localStorage.setItem(cartKey, JSON.stringify(items));
-  }, [items, storeData?.id]);
+    try {
+      localStorage.setItem("marketplace_cart", JSON.stringify(items));
 
+      // Guardar también por tienda para compatibilidad retroactiva
+      const grouped = {};
+      items.forEach((item) => {
+        const sId = item.storeId || item.product?.storeId || "default";
+        if (!grouped[sId]) grouped[sId] = [];
+        grouped[sId].push(item);
+      });
+      Object.keys(grouped).forEach((sId) => {
+        localStorage.setItem(`cart_${sId}`, JSON.stringify(grouped[sId]));
+      });
+    } catch (e) {
+      console.warn("Error guardando bolsa:", e);
+    }
+  }, [items]);
+
+  // 🌟 FUNCIÓN TIPO ALIBABA: Seleccionar SOLO los productos de una tienda específica
+  const selectStoreOnly = useCallback((storeId) => {
+    setSelectedStoreId(storeId);
+    setItems((prev) =>
+      prev.map((item) => {
+        const sId = item.storeId || item.product?.storeId || "tienda";
+        return {
+          ...item,
+          selected: sId === storeId
+        };
+      })
+    );
+  }, []);
+
+  // 🌟 Conmutar selección de un producto individual
+  const toggleItemSelection = useCallback((key) => {
+    setItems((prev) =>
+      prev.map((item) =>
+        item.key === key ? { ...item, selected: item.selected === false } : item
+      )
+    );
+  }, []);
+
+  // 🌟 AÑADIR A LA BOLSA (Con verificación estricta de stock disponible en BD)
   const addItem = useCallback((product, variant, quantity) => {
-    // 🌟 RASTREADOR DE COMISIONES: Leemos de dónde vino el cliente
     const origenVentaActual = sessionStorage.getItem("origenVenta") || null;
+    const sId = product.storeId || storeData?.id || "tienda";
+    const sName = product.storeName || (sId === storeData?.id ? storeData?.nombre : null) || sId;
+
+    // Obtener stock máximo según variantes o totalStock de BD
+    const maxStock = variant
+      ? Number(variant.stock ?? 0)
+      : Number(product.totalStock ?? product.stock ?? 0);
+
+    if (maxStock <= 0) {
+      toast.error("Este producto se encuentra agotado.");
+      return false;
+    }
+
+    let addedSuccessfully = true;
 
     setItems((prev) => {
       const key = `${product.id}-${variant?.id || "default"}`;
       const existing = prev.find((i) => i.key === key);
+
       if (existing) {
+        const totalDesired = existing.quantity + quantity;
+        if (totalDesired > maxStock) {
+          const allowedToAdd = Math.max(0, maxStock - existing.quantity);
+          if (allowedToAdd <= 0) {
+            toast.error(`Ya tienes el límite disponible (${maxStock} unidades) en tu bolsa`);
+            addedSuccessfully = false;
+            return prev;
+          }
+          toast.error(`Solo puedes agregar ${allowedToAdd} más. Stock máximo alcanzado (${maxStock})`);
+          return prev.map((i) =>
+            i.key === key ? { ...i, quantity: maxStock, selected: true } : i
+          );
+        }
         return prev.map((i) =>
-          i.key === key ? { ...i, quantity: i.quantity + quantity } : i
+          i.key === key ? { ...i, quantity: totalDesired, selected: true } : i
         );
       }
+
+      const finalQuantity = Math.min(quantity, maxStock);
+      if (quantity > maxStock) {
+        toast.error(`Solo hay ${maxStock} unidades disponibles en inventario`);
+      }
+
       return [
         ...prev,
         {
           key,
           product,
           variant,
-          quantity,
+          quantity: finalQuantity,
           price: product.price,
+          oldPrice: product.oldPrice || null,
+          storeId: sId,
+          storeName: sName,
+          selected: true,
           _origenVenta: origenVentaActual // Guardamos la firma del SuperAdmin en la bolsa
         },
       ];
     });
-  }, []);
+
+    return addedSuccessfully;
+  }, [storeData]);
 
   const removeItem = useCallback((key) => {
     setItems((prev) => prev.filter((i) => i.key !== key));
   }, []);
 
+  // 🌟 ACTUALIZAR CANTIDAD (Con verificación estricta de stock máximo en BD)
   const updateQuantity = useCallback((key, quantity) => {
     if (quantity <= 0) {
       setItems((prev) => prev.filter((i) => i.key !== key));
-    } else {
-      setItems((prev) =>
-        prev.map((i) => (i.key === key ? { ...i, quantity } : i))
-      );
+      return;
     }
+    setItems((prev) =>
+      prev.map((i) => {
+        if (i.key !== key) return i;
+        const maxStock = i.variant
+          ? Number(i.variant.stock ?? 0)
+          : Number(i.product?.totalStock ?? i.product?.stock ?? 0);
+
+        if (quantity > maxStock) {
+          toast.error(`Límite alcanzado: solo hay ${maxStock} unidades disponibles en inventario`);
+          return { ...i, quantity: maxStock };
+        }
+        return { ...i, quantity };
+      })
+    );
   }, []);
 
   const clearCart = useCallback(() => setItems([]), []);
 
-  const createOrder = async (customerData) => {
+  // 🌟 CREAR ORDEN MULTITIENDA
+  const createOrder = async (customerData, targetStoreId, customItems, customTotal) => {
     try {
-      // Determinamos el origen dominante (si vino de la mega página, cuenta. Si vino de tienda directa, no)
-      const primaryOrigin = items.find(i => i._origenVenta === "index_super_admin") ? "index_super_admin" : "tienda_directa";
+      const itemsToOrder = customItems || items.filter((i) => i.selected !== false);
+      const effectiveTotal = customTotal !== undefined ? customTotal : total;
+      const effectiveStoreId = targetStoreId || selectedStoreId || storeData?.id || itemsToOrder[0]?.storeId || "tienda";
+
+      const primaryOrigin = itemsToOrder.find((i) => i._origenVenta === "index_super_admin")
+        ? "index_super_admin"
+        : "tienda_directa";
 
       const orderData = {
         customerName: customerData.name,
         customerPhone: customerData.phone,
-        items: items.map(i => ({
+        paymentId: customerData.paymentId || "acordar_vendedor",
+        paymentMethod: customerData.paymentMethod || customerData.paymentId || "Acordar con vendedor",
+        items: itemsToOrder.map((i) => ({
           id: i.product.id,
           name: i.product.name,
-          qty: i.quantity,
-          price: i.price,
+          qty: Number(i.quantity) || 1,
+          quantity: Number(i.quantity) || 1,
+          price: Number(i.price) || 0,
           variant: i.variant?.label || null,
+          storeId: i.storeId || effectiveStoreId,
           _origenVenta: i._origenVenta || i.product._origenVenta || primaryOrigin
         })),
-        totalAmount: total,
+        totalAmount: Number(effectiveTotal.toFixed(2)),
+        total: Number(effectiveTotal.toFixed(2)),
         status: "pending",
         createdAt: serverTimestamp(),
-        storeId: storeData?.id, // 🌟 MAGIA: Le pegamos la etiqueta de la tienda a la orden para que el dueño correcto lo reciba
-        _origenVenta: primaryOrigin // 🌟 Guardamos a nivel de orden para búsquedas más fáciles
+        storeId: effectiveStoreId,
+        _origenVenta: primaryOrigin
       };
+
       const docRef = await addDoc(collection(db, "orders"), orderData);
+
+      // Eliminar de la bolsa solo los artículos que fueron ordenados
+      const orderedKeys = new Set(itemsToOrder.map((i) => i.key));
+      setItems((prev) => prev.filter((i) => !orderedKeys.has(i.key)));
+
       return docRef.id;
     } catch (error) {
       console.error("Error creando orden:", error);
@@ -108,17 +250,55 @@ export function CartProvider({ children }) {
     }
   };
 
-  const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-  const discountAmount = coupon ? (coupon.type === "percent" ? subtotal * (coupon.value / 100) : coupon.value) : 0;
-  const total = Math.max(0, subtotal - discountAmount);
-  const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
+  // 🌟 CÁLCULOS: Totales basados en productos SELECCIONADOS
+  const selectedItems = useMemo(
+    () => items.filter((i) => i.selected !== false),
+    [items]
+  );
+  const subtotal = useMemo(
+    () => selectedItems.reduce((sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0),
+    [selectedItems]
+  );
+  const discountAmount = useMemo(
+    () => (coupon ? (coupon.type === "percent" ? subtotal * ((Number(coupon.value) || 0) / 100) : (Number(coupon.value) || 0)) : 0),
+    [coupon, subtotal]
+  );
+  const total = useMemo(
+    () => Math.max(0, subtotal - discountAmount),
+    [subtotal, discountAmount]
+  );
+  const itemCount = useMemo(
+    () => items.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0),
+    [items]
+  );
+  const selectedItemCount = useMemo(
+    () => selectedItems.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0),
+    [selectedItems]
+  );
 
   return (
     <CartContext.Provider
       value={{
-        items, addItem, removeItem, updateQuantity, clearCart,
-        isOpen, setIsOpen, coupon, setCoupon, subtotal, 
-        discount: discountAmount, total, itemCount, createOrder
+        items,
+        selectedItems,
+        addItem,
+        removeItem,
+        updateQuantity,
+        clearCart,
+        isOpen,
+        setIsOpen,
+        coupon,
+        setCoupon,
+        subtotal,
+        discount: discountAmount,
+        total,
+        itemCount,
+        selectedItemCount,
+        createOrder,
+        selectedStoreId,
+        setSelectedStoreId,
+        selectStoreOnly,
+        toggleItemSelection
       }}
     >
       {children}

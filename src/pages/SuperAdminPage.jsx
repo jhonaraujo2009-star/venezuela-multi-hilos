@@ -5,7 +5,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
-import { SUPER_ADMIN_EMAIL } from "../config/constants";
+import { SUPER_ADMIN_EMAIL, CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from "../config/constants";
 import VerifiedBadge from "../components/shared/VerifiedBadge";
 
 export default function SuperAdminPage() {
@@ -84,9 +84,38 @@ export default function SuperAdminPage() {
     try {
       const querySnapshot = await getDocs(collection(db, "stores"));
       const storesList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // 🌟 Contar productos y ventas reales por tienda para tener datos 100% exactos en vivo
+      try {
+        const prodSnap = await getDocs(collection(db, "products"));
+        const prodCounts = {};
+        prodSnap.docs.forEach(d => {
+          const sId = d.data()?.storeId;
+          if (sId) prodCounts[sId] = (prodCounts[sId] || 0) + 1;
+        });
+
+        const orderSnap = await getDocs(collection(db, "orders"));
+        const orderCounts = {};
+        orderSnap.docs.forEach(d => {
+          const o = d.data();
+          const sId = o?.storeId;
+          const isDone = ["pagado", "entregado", "completed", "enviado"].includes((o.status || "").toLowerCase());
+          if (sId && isDone) {
+            orderCounts[sId] = (orderCounts[sId] || 0) + 1;
+          }
+        });
+
+        storesList.forEach(s => {
+          s.total_productos = prodCounts[s.id] !== undefined ? prodCounts[s.id] : (s.total_productos || 0);
+          if (!s.ventas_consolidadas && orderCounts[s.id]) {
+            s.ventas_consolidadas = orderCounts[s.id];
+          }
+        });
+      } catch(e) {}
+
       setStores(storesList);
       // Buscar el storeId que pertenece al Super Admin
-      const myStore = storesList.find(s => s.ownerEmail === MASTER_EMAIL);
+      const myStore = storesList.find(s => s.ownerEmail?.toLowerCase() === MASTER_EMAIL?.toLowerCase());
       if (myStore) setAdminStoreId(myStore.id);
     } catch (error) {
       toast.error("Error al cargar la base de datos de tiendas.");
@@ -141,8 +170,8 @@ export default function SuperAdminPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("upload_preset", "tienda_maquillaje"); 
-      const res = await fetch("https://api.cloudinary.com/v1_1/dp3abweme/image/upload", { method: "POST", body: formData });
+      formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET); 
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
       if (!res.ok) throw new Error("Error en la subida");
       const data = await res.json();
       
@@ -286,8 +315,8 @@ export default function SuperAdminPage() {
   };
 
   // Métricas Globales
-  const totalDebt = stores.reduce((acc, s) => acc + (s.deuda_comision || 0), 0);
-  const totalSales = stores.reduce((acc, s) => acc + (s.ventas_consolidadas || 0), 0);
+  const totalDebt = stores.reduce((acc, s) => acc + (Number(s.deuda_comision) || 0), 0);
+  const totalSales = stores.reduce((acc, s) => acc + (Number(s.ventas_consolidadas) || 0), 0);
   const activeStoresCount = stores.filter(s => s.isActive !== false).length;
 
   const filteredStores = stores.filter(store => 

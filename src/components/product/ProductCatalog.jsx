@@ -27,12 +27,18 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
   }, [activeFilter]);
 
   useEffect(() => {
-    const unsubSessions = onSnapshot(
-      query(collection(db, "sessions"), where("hidden", "==", false)), 
-      (snap) => {
-        setSessions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      }
-    );
+    let sessionsQuery = query(collection(db, "sessions"), where("hidden", "==", false));
+    if (storeData?.id) {
+      sessionsQuery = query(
+        collection(db, "sessions"), 
+        where("hidden", "==", false),
+        where("storeId", "==", storeData.id)
+      );
+    }
+
+    const unsubSessions = onSnapshot(sessionsQuery, (snap) => {
+      setSessions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
 
     let productsQuery = collection(db, "products");
     

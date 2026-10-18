@@ -16,6 +16,7 @@ import AdminSessions from "../components/admin/AdminSessions";
 import AdminProducts from "../components/admin/AdminProducts";
 import AdminInbox from "../components/admin/AdminInbox";
 import AdminPayments from "../components/admin/AdminPayments";
+import AdminLogistics from "../components/admin/AdminLogistics";
 import AdminStatistics from "../components/admin/AdminStatistics";
 import AdminPOS from "../components/admin/AdminPOS"; // 🌟 Importamos el nuevo POS
 import AdminSalesHistory from "../components/admin/AdminSalesHistory"; // 🌟 Importamos el nuevo Historial de Ventas
@@ -38,6 +39,7 @@ export default function AdminPage() {
     { path: `/${storeId}/admin/productos`, label: "📦 Productos" },
     { path: `/${storeId}/admin/estadisticas`, label: "📊 Estadísticas" },
     { path: `/${storeId}/admin/inbox`, label: "📦 Pedidos por Confirmar" }, // 🌟 Renombrado Inbox
+    { path: `/${storeId}/admin/logistica`, label: "🚚 Logística y Cupones" },
     { path: `/${storeId}/admin/pagos`, label: "🏦 Pagos" },
   ];
 
@@ -143,6 +145,7 @@ export default function AdminPage() {
             <Route path="productos" element={<AdminProducts />} />
             <Route path="estadisticas" element={<AdminStatistics />} />
             <Route path="inbox" element={<AdminInbox />} />
+            <Route path="logistica" element={<AdminLogistics />} />
             <Route path="pagos" element={<AdminPayments />} />
           </Routes>
         </div>

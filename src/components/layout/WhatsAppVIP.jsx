@@ -13,8 +13,14 @@ export default function WhatsAppVIP() {
   if (!widget?.active || !widget?.number || !isVisible) return null;
 
   const handleChat = () => {
+    let num = String(widget.number || "").replace(/\D/g, "");
+    if (num.startsWith("0")) {
+      num = "58" + num.slice(1);
+    } else if (num.length === 10 && /^(412|414|424|416|426)/.test(num)) {
+      num = "58" + num;
+    }
     const text = encodeURIComponent(widget.message || "Hola, necesito asesoría.");
-    window.open(`https://wa.me/${widget.number}?text=${text}`, "_blank");
+    window.open(`https://wa.me/${num}?text=${text}`, "_blank");
   };
 
   return (

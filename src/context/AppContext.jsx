@@ -22,7 +22,6 @@ const DEFAULT_SETTINGS = {
     { id: "4", label: "Maquillaje", icon: "💄", filter: "maquillaje" },
   ],
   legalText: "Todos los precios están expresados en dólares americanos (USD).",
-  happyCustomerImages: [],
 };
 
 export function AppProvider({ children }) {
@@ -113,7 +112,9 @@ export function AppProvider({ children }) {
   };
 
   const bsPrice = (usdPrice) => {
-    return (usdPrice * settings.exchangeRate).toFixed(2);
+    const rate = Number(storeData?.exchangeRate || settings?.exchangeRate || 36.5);
+    const num = Number(usdPrice) || 0;
+    return (num * rate).toFixed(2);
   };
 
   return (

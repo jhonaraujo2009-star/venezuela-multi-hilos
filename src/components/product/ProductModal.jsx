@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { doc, updateDoc, increment, setDoc, onSnapshot, collection, query, where, limit, getDocs } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import { useApp } from "../../context/AppContext";
@@ -7,11 +8,12 @@ import { useBackButton } from "../../hooks/useBackButton";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 
-export default function ProductModal({ product: initialProduct, onClose }) {
+export default function ProductModal({ product, onClose }) {
+  const navigate = useNavigate();
   const { bsPrice, storeData, settings } = useApp();
-  const { addItem } = useCart();
+  const { addItem, items } = useCart();
   
-  const [currentProduct, setCurrentProduct] = useState(initialProduct);
+  const [currentProduct, setCurrentProduct] = useState(product);
   const [relatedProducts, setRelatedProducts] = useState([]);
   const [timeLeft, setTimeLeft] = useState("");
 
@@ -27,7 +29,8 @@ export default function ProductModal({ product: initialProduct, onClose }) {
   useBackButton(true, onClose);
 
   const primaryColor = storeData?.primaryColor || settings?.primaryColor || "#000000";
-  const likedKey = `userLikes_${storeData?.id || "global"}`;
+  const activeStoreId = storeData?.id || currentProduct?.storeId || product?.storeId || "global";
+  const likedKey = `userLikes_${activeStoreId}`;
 
   const relatedScrollRef = useRef(null);
 
@@ -42,8 +45,14 @@ export default function ProductModal({ product: initialProduct, onClose }) {
   const variants = currentProduct?.variants || [];
   const hasVariants = variants.length > 0;
   const availableStock = hasVariants
-    ? selectedVariant?.stock ?? 0
-    : currentProduct?.totalStock ?? 0;
+    ? (selectedVariant ? Number(selectedVariant.stock ?? 0) : 0)
+    : Number(currentProduct?.totalStock ?? currentProduct?.stock ?? 0);
+
+  // 🌟 LÍMITE ESTRICTO DE BASE DE DATOS TENIENDO EN CUENTA LO YA AGREGADO EN LA BOLSA
+  const currentKey = `${currentProduct?.id}-${selectedVariant?.id || "default"}`;
+  const itemInCart = items.find((i) => i.key === currentKey);
+  const alreadyInCart = itemInCart ? itemInCart.quantity : 0;
+  const remainingStock = Math.max(0, availableStock - alreadyInCart);
 
   const oldPrice = Number(currentProduct?.oldPrice) || 0;
   const currentPrice = Number(currentProduct?.price) || 0;
@@ -57,32 +66,45 @@ export default function ProductModal({ product: initialProduct, onClose }) {
     discountPercentage = Math.round(((oldPrice - currentPrice) / oldPrice) * 100);
   }
 
+  // 🌟 PRECIO FINAL EXACTO CON DESCUENTO RELÁMPAGO (Si aplica)
+  const finalPrice = (isFlashOffer && discountPercentage > 0)
+    ? currentPrice - (currentPrice * (discountPercentage / 100))
+    : currentPrice;
+
   // 🌟 TOTAL DINÁMICO PARA EL BOTÓN AGRESIVO
-  const totalPrice = (currentPrice * quantity).toFixed(2);
+  const effectiveQuantity = remainingStock <= 0 ? 0 : quantity;
+  const totalPrice = (finalPrice * effectiveQuantity).toFixed(2);
 
   useEffect(() => {
-    if (!currentProduct) return;
+    if (!product) return;
+    setCurrentProduct(product);
     setActiveImage(0);
     setSelectedVariant(null);
     setQuantity(1);
     setDirection(0);
     setShowDescription(false); // Cierra la descripción al cambiar de producto
     const likedProducts = JSON.parse(localStorage.getItem(likedKey) || "{}");
-    setHasLiked(!!likedProducts[currentProduct.id]);
+    setHasLiked(!!likedProducts[product.id]);
     document.getElementById('modalScrollArea')?.scrollTo(0,0);
-  }, [currentProduct, likedKey]);
+  }, [product?.id, likedKey]);
 
+  // 🌟 ESCUCHADOR EN TIEMPO REAL DESDE FIRESTORE: ACTUALIZA STOCK Y VARIANTES DE LA BD
   useEffect(() => {
     if (!currentProduct?.id) return;
     const productRef = doc(db, "products", currentProduct.id);
     const unsubscribe = onSnapshot(productRef, (docSnap) => {
       if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.likes !== undefined) setLikesCount(data.likes);
+        const freshData = { id: docSnap.id, ...docSnap.data() };
+        setCurrentProduct((prev) => ({ ...prev, ...freshData }));
+        if (freshData.likes !== undefined) setLikesCount(freshData.likes);
+        if (selectedVariant) {
+          const freshV = freshData.variants?.find((v) => v.id === selectedVariant.id);
+          if (freshV) setSelectedVariant(freshV);
+        }
       }
     });
     return () => unsubscribe();
-  }, [currentProduct?.id]);
+  }, [currentProduct?.id, selectedVariant?.id]);
 
   useEffect(() => {
     if (!isFlashOffer) return;
@@ -104,11 +126,12 @@ export default function ProductModal({ product: initialProduct, onClose }) {
 
   useEffect(() => {
     const fetchRelated = async () => {
-      if (!currentProduct?.sessionId || !storeData?.id) return; 
+      const targetStoreId = storeData?.id || currentProduct?.storeId;
+      if (!currentProduct?.sessionId || !targetStoreId) return; 
       try {
         const q = query(
           collection(db, "products"),
-          where("storeId", "==", storeData.id),
+          where("storeId", "==", targetStoreId),
           where("sessionId", "==", currentProduct.sessionId),
           limit(10)
         );
@@ -123,7 +146,7 @@ export default function ProductModal({ product: initialProduct, onClose }) {
       }
     };
     fetchRelated();
-  }, [currentProduct?.id, currentProduct?.sessionId, storeData?.id]);
+  }, [currentProduct?.id, currentProduct?.sessionId, currentProduct?.storeId, storeData?.id]);
 
   const scrollRelated = (scrollOffset) => {
     if(relatedScrollRef.current){
@@ -161,16 +184,29 @@ export default function ProductModal({ product: initialProduct, onClose }) {
 
   const handleAddToCart = () => {
     if (hasVariants && !selectedVariant) return toast.error("Selecciona una talla primero");
-    if (quantity > availableStock) return toast.error("Supera el stock disponible");
-    addItem(currentProduct, selectedVariant, quantity);
-    toast.success("¡Agregado a tu bolsa! 🛍️");
-    onClose();
+    if (availableStock <= 0) return toast.error("Este producto se encuentra agotado");
+    if (remainingStock <= 0) return toast.error(`Ya tienes el límite disponible (${availableStock} unidades) en tu bolsa`);
+    if (quantity > remainingStock) return toast.error(`Solo puedes agregar hasta ${remainingStock} unidades más`);
+
+    const displayOldPrice = oldPrice > finalPrice ? oldPrice : (finalPrice < currentPrice ? currentPrice : (Number(currentProduct?.oldPrice) || 0));
+    const productToAdd = { 
+      ...currentProduct, 
+      price: finalPrice,
+      oldPrice: displayOldPrice > finalPrice ? displayOldPrice : 0
+    };
+    const added = addItem(productToAdd, selectedVariant, quantity);
+    if (added !== false) {
+      toast.success("¡Agregado a tu bolsa! 🛍️");
+      onClose();
+    }
   };
 
   const handleShareWhatsApp = () => {
-    const text = `¡Mira lo que encontré en ${storeData?.nombre || 'la tienda'}! 😍\n*${currentProduct?.name}* por solo *$${currentPrice}*\n\nMíralo aquí:`;
-    const url = `${window.location.origin}/api/store-og?storeId=${storeData?.id || ''}`; 
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text + "\n" + url)}`;
+    const targetStoreId = storeData?.id || currentProduct?.storeId || '';
+    const targetStoreName = storeData?.nombre || currentProduct?.storeName || 'la tienda';
+    const text = `¡Mira lo que encontré en ${targetStoreName}! 😍\n*${currentProduct?.name}* por solo *$${finalPrice.toFixed(2)}*\n\nMíralo aquí:`;
+    const url = `${window.location.origin}/api/store-og?storeId=${targetStoreId}`; 
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text + "\n" + url)}`;
     window.open(whatsappUrl, '_blank');
   };
 
@@ -198,9 +234,27 @@ export default function ProductModal({ product: initialProduct, onClose }) {
   const swipeConfidenceThreshold = 10000;
   const swipePower = (offset, velocity) => Math.abs(offset) * velocity;
 
+  const slideVariants = {
+    enter: (dir) => ({
+      x: dir === 0 ? 0 : dir > 0 ? "100%" : "-100%",
+      opacity: dir === 0 ? 1 : 0
+    }),
+    center: {
+      x: 0,
+      opacity: 1
+    },
+    exit: (dir) => ({
+      x: dir === 0 ? 0 : dir < 0 ? "100%" : "-100%",
+      opacity: 0
+    })
+  };
+
   return (
-    <div
-      className="fixed inset-0 z-[100] flex flex-col justify-end sm:justify-center items-center bg-black/70 backdrop-blur-sm sm:p-4 animate-in fade-in duration-300"
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex flex-col justify-end sm:justify-center items-center bg-black/70 backdrop-blur-sm sm:p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <motion.div 
@@ -231,29 +285,40 @@ export default function ProductModal({ product: initialProduct, onClose }) {
                   </div>
                 )}
 
-                <AnimatePresence initial={false} custom={direction}>
-                  {images.length > 0 && (
-                    <motion.img
-                      key={activeImage}
-                      src={images[activeImage]}
-                      custom={direction}
-                      initial={{ x: direction > 0 ? 300 : -300, opacity: 0 }}
-                      animate={{ x: 0, opacity: 1 }}
-                      exit={{ x: direction < 0 ? 300 : -300, opacity: 0 }}
-                      transition={{ x: { type: "spring", stiffness: 300, damping: 30 }, opacity: { duration: 0.2 } }}
-                      drag="x"
-                      dragConstraints={{ left: 0, right: 0 }}
-                      dragElastic={1}
-                      onDragEnd={(e, { offset, velocity }) => {
-                        const swipe = swipePower(offset.x, velocity.x);
-                        if (swipe < -swipeConfidenceThreshold) paginate(1);
-                        else if (swipe > swipeConfidenceThreshold) paginate(-1);
-                      }}
-                      className="absolute inset-0 w-full h-full object-cover cursor-grab active:cursor-grabbing"
+                {hasMultipleImages ? (
+                  <AnimatePresence initial={false} custom={direction}>
+                    {images.length > 0 && (
+                      <motion.img
+                        key={activeImage}
+                        src={images[activeImage]}
+                        custom={direction}
+                        variants={slideVariants}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ x: { type: "spring", stiffness: 300, damping: 30 }, opacity: { duration: 0.2 } }}
+                        drag="x"
+                        dragConstraints={{ left: 0, right: 0 }}
+                        dragElastic={0.2}
+                        onDragEnd={(e, { offset, velocity }) => {
+                          const swipe = swipePower(offset.x, velocity.x);
+                          if (swipe < -swipeConfidenceThreshold) paginate(1);
+                          else if (swipe > swipeConfidenceThreshold) paginate(-1);
+                        }}
+                        className="absolute inset-0 w-full h-full object-cover cursor-grab active:cursor-grabbing"
+                        alt={currentProduct.name}
+                      />
+                    )}
+                  </AnimatePresence>
+                ) : (
+                  images.length > 0 && (
+                    <img
+                      src={images[0]}
+                      className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
                       alt={currentProduct.name}
                     />
-                  )}
-                </AnimatePresence>
+                  )
+                )}
 
                 {hasMultipleImages && (
                   <>
@@ -300,17 +365,37 @@ export default function ProductModal({ product: initialProduct, onClose }) {
                     </h2>
                     <div className="flex items-baseline gap-3">
                       <span className="text-3xl font-black" style={{color: "var(--primary)"}}>
-                        ${currentPrice}
+                        ${finalPrice.toFixed(2)}
                       </span>
-                      {oldPrice > currentPrice && (
+                      {(oldPrice > finalPrice || (isFlashOffer && discountPercentage > 0)) && (
                         <span className="text-base font-medium text-gray-400 line-through">
-                          ${oldPrice}
+                          ${(oldPrice > currentPrice ? oldPrice : currentPrice).toFixed(2)}
                         </span>
                       )}
                     </div>
                     <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 block">
-                      Ref: Bs. {bsPrice(currentPrice)}
+                      Ref: Bs. {bsPrice(finalPrice)}
                     </span>
+
+                    {/* 🌟 VENDIDO POR - VISITAR TIENDA DIRECTA */}
+                    {currentProduct.storeId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          sessionStorage.setItem("origenVenta", "index_super_admin");
+                          navigate(`/${currentProduct.storeId}?ref=index`);
+                          onClose();
+                        }}
+                        className="mt-3 inline-flex items-center gap-1.5 text-xs text-gray-600 hover:text-pink-600 transition-colors font-bold group bg-gray-50 hover:bg-pink-50 px-3 py-1.5 rounded-full border border-gray-200 hover:border-pink-200 active:scale-95"
+                        title="Visitar la tienda de este producto"
+                      >
+                        <span className="text-gray-400 font-normal">Vendido por:</span>
+                        <span className="text-gray-800 group-hover:text-pink-600 group-hover:underline">
+                          🏪 {currentProduct.storeName || currentProduct.storeId}
+                        </span>
+                        <span className="text-[10px] text-pink-500 font-black">→ Visitar</span>
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2.5 flex-shrink-0 pt-1">
@@ -368,14 +453,50 @@ export default function ProductModal({ product: initialProduct, onClose }) {
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-950">Cantidad</span>
                       <div className="flex items-center bg-gray-100 rounded-full p-1.5 border border-gray-200 shadow-inner">
-                        <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold text-gray-600 hover:bg-white hover:shadow-md transition-all active:scale-90">-</button>
-                        <span className="w-12 text-center text-base font-black text-gray-950">{quantity}</span>
-                        <button onClick={() => setQuantity(Math.min(availableStock, quantity + 1))} className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold text-gray-600 hover:bg-white hover:shadow-md transition-all active:scale-90">+</button>
+                        <button 
+                          type="button"
+                          onClick={() => setQuantity(Math.max(1, quantity - 1))} 
+                          disabled={quantity <= 1 || remainingStock <= 0}
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold text-gray-600 hover:bg-white hover:shadow-md transition-all active:scale-90 disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          -
+                        </button>
+                        <span className="w-12 text-center text-base font-black text-gray-950">
+                          {remainingStock <= 0 ? 0 : quantity}
+                        </span>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            if (quantity >= remainingStock) {
+                              toast.error(`Stock máximo alcanzado: solo hay ${availableStock} unidades disponibles en inventario.`);
+                              return;
+                            }
+                            setQuantity(Math.min(remainingStock, quantity + 1));
+                          }} 
+                          disabled={quantity >= remainingStock || remainingStock <= 0}
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold text-gray-600 hover:bg-white hover:shadow-md transition-all active:scale-90 disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          +
+                        </button>
                       </div>
                     </div>
                     <div className="w-full">
-                      <p className={`text-[10px] font-bold uppercase tracking-widest text-right transition-colors duration-300 ${availableStock <= 5 ? "text-red-500 animate-pulse" : "text-gray-400"}`}>
-                        {availableStock <= 5 ? `⚠️ ¡Corre! Solo quedan ${availableStock} disponibles` : `${availableStock} unidades disponibles`}
+                      <p className={`text-[10px] font-bold uppercase tracking-widest text-right transition-colors duration-300 ${
+                        remainingStock <= 0 
+                          ? "text-amber-600 font-black" 
+                          : availableStock <= 5 
+                            ? "text-red-500 animate-pulse" 
+                            : "text-gray-400"
+                      }`}>
+                        {availableStock <= 0 
+                          ? "Agotado en inventario" 
+                          : remainingStock === 0
+                            ? `⚠️ Ya tienes el máximo disponible en tu bolsa (${alreadyInCart} de ${availableStock})`
+                            : alreadyInCart > 0
+                              ? `Tienes ${alreadyInCart} en bolsa. Puedes agregar ${remainingStock} más (${availableStock} disponibles)`
+                              : availableStock <= 5 
+                                ? `⚠️ ¡Corre! Solo quedan ${availableStock} disponibles` 
+                                : `${availableStock} unidades disponibles`}
                       </p>
                     </div>
                   </div>
@@ -466,27 +587,29 @@ export default function ProductModal({ product: initialProduct, onClose }) {
         <div className="absolute bottom-0 left-0 right-0 p-5 bg-white/95 backdrop-blur-md border-t border-gray-100 shadow-[0_-15px_30px_rgba(0,0,0,0.08)] z-40">
           <button
             onClick={handleAddToCart}
-            disabled={availableStock === 0 || (hasVariants && !selectedVariant)}
-            style={{ backgroundColor: availableStock === 0 ? '#e5e7eb' : (primaryColor || '#000000') }}
+            disabled={availableStock === 0 || (hasVariants && !selectedVariant) || remainingStock === 0}
+            style={{ backgroundColor: (availableStock === 0 || (hasVariants && !selectedVariant) || remainingStock === 0) ? '#e5e7eb' : (primaryColor || '#000000') }}
             className={`w-full py-5 rounded-full text-white text-[13px] font-black uppercase tracking-[0.15em] transition-all duration-300 shadow-[0_10px_25px_rgba(0,0,0,0.2)] flex items-center justify-center gap-2
-              ${availableStock === 0 || (hasVariants && !selectedVariant) ? "text-gray-400 shadow-none cursor-not-allowed" : "hover:shadow-[0_15px_30px_rgba(0,0,0,0.3)] hover:-translate-y-1 active:translate-y-0 active:scale-[0.98]"}
+              ${availableStock === 0 || (hasVariants && !selectedVariant) || remainingStock === 0 ? "text-gray-400 shadow-none cursor-not-allowed" : "hover:shadow-[0_15px_30px_rgba(0,0,0,0.3)] hover:-translate-y-1 active:translate-y-0 active:scale-[0.98]"}
             `}
           >
             {availableStock === 0 
-              ? "Agotado" 
+              ? "Agotado en inventario" 
               : hasVariants && !selectedVariant 
                 ? "Selecciona una Talla" 
-                : (
-                  <>
-                    <span>{quantity > 1 ? `Agregar ${quantity} a la Bolsa` : "Agregar a la Bolsa"}</span>
-                    <span className="opacity-50 text-[10px]">•</span>
-                    <span>${totalPrice}</span>
-                  </>
-                )}
+                : remainingStock === 0
+                  ? `Límite en bolsa alcanzado (${alreadyInCart} en bolsa)`
+                  : (
+                    <>
+                      <span>{quantity > 1 ? `Agregar ${quantity} a la Bolsa` : "Agregar a la Bolsa"}</span>
+                      <span className="opacity-50 text-[10px]">•</span>
+                      <span>${totalPrice}</span>
+                    </>
+                  )}
           </button>
         </div>
 
       </motion.div>
-    </div>
+    </motion.div>
   );
 }

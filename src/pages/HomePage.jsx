@@ -3,10 +3,14 @@ import { collection, getDocs, query, limit, doc, getDoc } from "firebase/firesto
 import { db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useCart } from "../context/CartContext";
+import CartDrawer from "../components/cart/CartDrawer";
+import ProductModal from "../components/product/ProductModal";
+import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion"; // 🌟 LÓGICA ULTRA PREMIUM
 import VerifiedBadge from "../components/shared/VerifiedBadge";
 
-const ProductCard = ({ p, onClick, isFlash = false, extraClasses = "" }) => {
+const ProductCard = ({ p, onClick, onAddToCart, onGoToStore, storeName, isFlash = false, extraClasses = "" }) => {
   const getThumbnail = () => {
     if (p.image) return p.image;
     if (p.imageUrl) return p.imageUrl;
@@ -14,6 +18,8 @@ const ProductCard = ({ p, onClick, isFlash = false, extraClasses = "" }) => {
     return null;
   };
   const pImg = getThumbnail();
+  const displayName = storeName || p.storeName || p.storeId;
+
   return (
     <div 
       onClick={onClick} 
@@ -46,7 +52,39 @@ const ProductCard = ({ p, onClick, isFlash = false, extraClasses = "" }) => {
         <h3 className="text-[12px] sm:text-[13px] font-normal text-gray-500 line-clamp-2 leading-snug mt-2 group-hover:text-pink-600 transition-colors">
           {p.name}
         </h3>
-        <p className="text-[10px] text-gray-400 mt-2">Vendido por: <span className="font-bold text-gray-600 truncate">{p.storeId}</span></p>
+
+        {/* 🌟 VENDIDO POR - CLICKABLE HACIA LA TIENDA */}
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onGoToStore) onGoToStore(p.storeId);
+          }}
+          className="mt-2 text-[11px] text-gray-500 flex items-center gap-1 group/store hover:text-pink-600 transition-colors cursor-pointer w-fit py-0.5 px-1.5 -ml-1 rounded-md hover:bg-pink-50 active:scale-95"
+          title={`Ir a la tienda ${displayName}`}
+        >
+          <span className="text-gray-400 font-normal">Vendido por:</span>
+          <span className="font-bold text-gray-800 group-hover/store:text-pink-600 group-hover/store:underline truncate max-w-[130px] flex items-center gap-1">
+            <span>🏪</span>
+            <span className="truncate">{displayName}</span>
+          </span>
+          <span className="text-[9px] text-pink-500 opacity-0 group-hover/store:opacity-100 transition-opacity font-bold">
+            →
+          </span>
+        </div>
+
+        {/* 🌟 BOTÓN DE AÑADIR A LA BOLSA DIRECTO */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onAddToCart) onAddToCart(p);
+          }}
+          className="mt-3 w-full py-2 px-3 bg-pink-50 hover:bg-pink-600 text-pink-600 hover:text-white rounded-xl text-[11px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 active:scale-95 border border-pink-200 hover:border-pink-600 shadow-xs"
+          title="Añadir a la bolsa"
+        >
+          <span>🛍️</span>
+          <span>Añadir a la bolsa</span>
+        </button>
       </div>
     </div>
   );
@@ -91,6 +129,7 @@ const HorizontalCarousel = ({ id, children }) => {
 
 export default function HomePage() {
   const [stores, setStores] = useState([]);
+  const [storesMap, setStoresMap] = useState({});
   const [products, setProducts] = useState([]);
   const [allProducts, setAllProducts] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -108,6 +147,38 @@ export default function HomePage() {
 
   const [currentSlide, setCurrentSlide] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // 🌟 CONEXIÓN CON LA BOLSA DE COMPRAS MULTITIENDA
+  const { itemCount, total, setIsOpen, isOpen, addItem, items } = useCart();
+  const [selectedProduct, setSelectedProduct] = useState(null);
+
+  const handleAddToCartFromHome = (p) => {
+    // Si tiene variantes (tallas/colores), abrir modal para que elija su talla
+    if (p.variants && p.variants.length > 0) {
+      setSelectedProduct(p);
+      return;
+    }
+    const stock = Number(p.totalStock ?? p.stock ?? 0);
+    const inCart = items.find((i) => i.key === `${p.id}-default`)?.quantity || 0;
+    if (stock <= 0) {
+      toast.error("Este producto se encuentra agotado");
+      return;
+    }
+    if (inCart >= stock) {
+      toast.error(`Ya tienes el límite disponible (${stock} unidades) en tu bolsa`);
+      return;
+    }
+    const added = addItem(p, null, 1);
+    if (added !== false) {
+      toast.success(`¡"${p.name}" agregado a tu bolsa! 🛍️`);
+    }
+  };
+
+  // 🌟 NAVEGACIÓN DIRECTA A LA TIENDA DEL PRODUCTO
+  const handleGoToStore = (storeId) => {
+    if (!storeId) return;
+    goToStoreWithRadar(storeId);
+  };
 
   const [globalSettings, setGlobalSettings] = useState(() => {
     try {
@@ -214,6 +285,13 @@ export default function HomePage() {
         const storesSnap = await getDocs(collection(db, "stores"));
         const allStores = storesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         
+        // Mapeo rápido de id de tienda a nombre oficial
+        const sMap = {};
+        allStores.forEach(s => {
+          sMap[s.id] = s.nombre || s.name || s.id;
+        });
+        setStoresMap(sMap);
+
         // Solo tiendas activas Y VERIFICADAS
         const activeVerifiedStores = allStores.filter(s => s.isActive !== false && s.verification?.status === 'verified');
         setStores(activeVerifiedStores.slice(0, 8)); // Top 8 tiendas
@@ -368,6 +446,20 @@ export default function HomePage() {
               </div>
             )}
 
+            {/* 🌟 ACCESO A LA BOLSA EN MENÚ MÓVIL */}
+            <button 
+              type="button"
+              onClick={() => { setIsMobileMenuOpen(false); setIsOpen(true); }} 
+              className="w-full flex items-center justify-between bg-white border border-gray-200 hover:bg-pink-50 text-gray-900 font-bold px-4 py-3.5 rounded-2xl transition-colors shadow-xs mb-5 active:scale-95"
+            >
+              <span className="flex items-center gap-3 text-xs uppercase tracking-wider font-black text-gray-800">
+                <span className="text-lg">🛍️</span> Mi Bolsa de Compras
+              </span>
+              <span className="bg-pink-500 text-white text-[11px] px-2.5 py-0.5 rounded-full font-black">
+                {itemCount} {itemCount === 1 ? "artículo" : "artículos"}
+              </span>
+            </button>
+
             <div>
               <p className="text-xs font-bold text-gray-500 mb-3 px-2">Comprar por Departamento</p>
               <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
@@ -439,9 +531,20 @@ export default function HomePage() {
 
             {/* Iconos Derecha: Hamburguesa en móvil, Cuenta en PC */}
             <div className="flex items-center gap-4 ml-auto md:ml-4 shrink-0">
-              <button className="relative p-2 text-gray-700 hover:text-pink-600 transition-colors group">
-                <svg className="w-6 h-6 group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">0</span>
+              <button 
+                type="button"
+                onClick={() => setIsOpen(true)}
+                className="relative p-2 text-gray-700 hover:text-pink-600 transition-colors group active:scale-90"
+                title="Mi Bolsa de Compras"
+              >
+                <svg className="w-6 h-6 group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                {itemCount > 0 && (
+                  <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center border-2 border-white animate-in zoom-in-50 duration-200">
+                    {itemCount}
+                  </span>
+                )}
               </button>
 
               {activeUser ? (
@@ -742,7 +845,15 @@ export default function HomePage() {
             {displayedProducts.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 border-t sm:border border-gray-100 sm:rounded-md divide-x divide-y sm:divide-y-0 text-left border-b lg:divide-y-0">
                 {displayedProducts.map((p, idx) => (
-                  <ProductCard key={p.id} p={p} onClick={() => goToStoreWithRadar(p.storeId, p.id)} isFlash={idx % 4 === 0} />
+                  <ProductCard 
+                    key={p.id} 
+                    p={p} 
+                    storeName={storesMap[p.storeId]}
+                    onClick={() => setSelectedProduct(p)} 
+                    onAddToCart={handleAddToCartFromHome} 
+                    onGoToStore={handleGoToStore}
+                    isFlash={idx % 4 === 0} 
+                  />
                 ))}
               </div>
             ) : (
@@ -778,7 +889,14 @@ export default function HomePage() {
               <HorizontalCarousel id="bs-carousel">
                 {bestSellers.map((p) => (
                   <div key={`bs-${p.id}`} className="min-w-[160px] max-w-[160px] sm:min-w-[200px] sm:max-w-[200px] shrink-0 snap-center sm:snap-start">
-                    <ProductCard p={p} onClick={() => goToStoreWithRadar(p.storeId, p.id)} extraClasses="border sm:border" />
+                    <ProductCard 
+                      p={p} 
+                      storeName={storesMap[p.storeId]}
+                      onClick={() => setSelectedProduct(p)} 
+                      onAddToCart={handleAddToCartFromHome}
+                      onGoToStore={handleGoToStore}
+                      extraClasses="border sm:border" 
+                    />
                   </div>
                 ))}
               </HorizontalCarousel>
@@ -799,7 +917,15 @@ export default function HomePage() {
               <HorizontalCarousel id="offer-carousel">
                 {offersProducts.map((p) => (
                   <div key={`offer-${p.id}`} className="min-w-[160px] max-w-[160px] sm:min-w-[200px] sm:max-w-[200px] shrink-0 snap-center sm:snap-start">
-                    <ProductCard p={p} onClick={() => goToStoreWithRadar(p.storeId, p.id)} isFlash={true} extraClasses="border border-red-200/50 shadow-sm" />
+                    <ProductCard 
+                      p={p} 
+                      storeName={storesMap[p.storeId]}
+                      onClick={() => setSelectedProduct(p)} 
+                      onAddToCart={handleAddToCartFromHome}
+                      onGoToStore={handleGoToStore}
+                      isFlash={true} 
+                      extraClasses="border border-red-200/50 shadow-sm" 
+                    />
                   </div>
                 ))}
               </HorizontalCarousel>
@@ -820,7 +946,14 @@ export default function HomePage() {
               <HorizontalCarousel id="daily-carousel">
                 {dailyTopProducts.map((p) => (
                   <div key={`top-${p.id}`} className="min-w-[160px] max-w-[160px] sm:min-w-[200px] sm:max-w-[200px] shrink-0 snap-center sm:snap-start">
-                    <ProductCard p={p} onClick={() => goToStoreWithRadar(p.storeId, p.id)} extraClasses="border sm:border" />
+                    <ProductCard 
+                      p={p} 
+                      storeName={storesMap[p.storeId]}
+                      onClick={() => setSelectedProduct(p)} 
+                      onAddToCart={handleAddToCartFromHome}
+                      onGoToStore={handleGoToStore}
+                      extraClasses="border sm:border" 
+                    />
                   </div>
                 ))}
               </HorizontalCarousel>
@@ -939,6 +1072,45 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+
+      {/* 🌟 MODAL DE DETALLE DE PRODUCTO */}
+      <AnimatePresence>
+        {selectedProduct && (
+          <ProductModal 
+            product={selectedProduct} 
+            onClose={() => setSelectedProduct(null)} 
+          />
+        )}
+      </AnimatePresence>
+
+      {/* 🌟 BOLSA DE COMPRAS MULTITIENDA */}
+      <CartDrawer />
+
+      {/* 🌟 BOTÓN FLOTANTE DE BOLSA SI HAY PRODUCTOS */}
+      {!isOpen && !selectedProduct && itemCount > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[92%] max-w-md h-[72px] bg-white/80 backdrop-blur-2xl rounded-full flex items-center justify-between p-1.5 pr-2.5 shadow-[0_20px_50px_rgba(236,72,153,0.15),0_10px_10px_rgba(0,0,0,0.05)] border border-white/60 animate-in slide-in-from-bottom-10 fade-in duration-500 active:scale-[0.98] transition-transform">
+          <div className="flex-1 flex flex-col justify-center px-6">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-sm font-black text-gray-500 uppercase tracking-tighter">Total:</span>
+              <span className="text-2xl font-black text-gray-950 tracking-tight">${total.toFixed(2)}</span>
+            </div>
+            <span className="text-[11px] font-bold text-gray-400 mt-[-1px] uppercase tracking-wider">
+              {itemCount} {itemCount === 1 ? "artículo" : "artículos"}
+            </span>
+          </div>
+          <button 
+            type="button"
+            onClick={() => setIsOpen(true)} 
+            className="h-[58px] min-w-[150px] bg-gray-950 text-white rounded-full font-black uppercase tracking-[0.2em] text-[11px] relative overflow-hidden group active:scale-95 transition-all flex items-center justify-center gap-2.5 shadow-inner"
+          >
+            Ver Bolsa
+            <span className="text-base group-hover:animate-bounce transition-transform">🛍️</span>
+            <span className="absolute -top-1.5 -right-1.5 bg-pink-500 text-white text-[10px] font-black w-6 h-6 rounded-full flex items-center justify-center border-2 border-white shadow-xl shadow-pink-500/30">
+              {itemCount}
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* 🌟 CSS INYECTADO PARA MASKS Y BLENDS */}
       <style dangerouslySetInnerHTML={{__html: `

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, query, where, getDocs, doc, updateDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, updateDoc, writeBatch, increment, getDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import { useApp } from "../../context/AppContext";
 import toast from "react-hot-toast";
@@ -46,20 +46,125 @@ export default function AdminOrders() {
     }
   };
 
+  const getItemPrice = (item) => Number(item?.price || 0);
+  const getItemName = (item) => item?.name || "Producto Desconocido";
+  const getItemQty = (item) => Number(item?.qty ?? item?.quantity ?? 1);
+
+  // 🌟 ACTUALIZAR ESTADO: Sincroniza inventario, ventas y comisiones
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
-      await updateDoc(doc(db, "orders", orderId), { status: newStatus });
-      setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+      const order = orders.find(o => o.id === orderId);
+      if (!order) return;
+
+      const orderTotal = Number(order.totalAmount ?? order.total ?? 0);
+      const isFinalized = ["pagado", "entregado", "completed", "enviado"].includes(newStatus.toLowerCase());
+
+      const batch = writeBatch(db);
+      const orderRef = doc(db, "orders", orderId);
+
+      // Si pasa a pagado/entregado/enviado y no se había descontado stock:
+      if (isFinalized && !order.stockDeducted && order.items && order.items.length > 0) {
+        for (const item of order.items) {
+          const pId = item.id || item.productId;
+          if (pId) {
+            const prodRef = doc(db, "products", pId);
+            const qty = getItemQty(item);
+            if (item.variant) {
+              const pSnap = await getDoc(prodRef);
+              if (pSnap.exists() && pSnap.data().variants) {
+                const freshVariants = pSnap.data().variants.map(v => {
+                  if (v.id === item.variant?.id || v.label === (item.variant?.label || item.variant)) {
+                    return { ...v, stock: Math.max(0, Number(v.stock || 0) - qty) };
+                  }
+                  return v;
+                });
+                batch.update(prodRef, { variants: freshVariants });
+              }
+            } else {
+              batch.update(prodRef, { totalStock: increment(-qty) });
+            }
+          }
+        }
+
+        // Registrar venta consolidada y comisión si la venta provino del SuperAdmin
+        if (storeData?.id) {
+          const storeRef = doc(db, "stores", storeData.id);
+          const commissionRate = storeData.comision_porcentaje || 5;
+          const commissionAmount = order._origenVenta === "index_super_admin" 
+            ? Number(((orderTotal * commissionRate) / 100).toFixed(2))
+            : 0;
+
+          batch.update(storeRef, {
+            ventas_consolidadas: increment(1),
+            ...(commissionAmount > 0 ? { deuda_comision: increment(commissionAmount) } : {})
+          });
+        }
+
+        batch.update(orderRef, { 
+          status: newStatus, 
+          stockDeducted: true,
+          commissionRecorded: order._origenVenta === "index_super_admin"
+        });
+      } else if (newStatus === "cancelado" && order.stockDeducted && order.items && order.items.length > 0) {
+        // Restaurar inventario si se cancela un pedido que ya había restado stock
+        for (const item of order.items) {
+          const pId = item.id || item.productId;
+          if (pId) {
+            const prodRef = doc(db, "products", pId);
+            const qty = getItemQty(item);
+            if (item.variant) {
+              const pSnap = await getDoc(prodRef);
+              if (pSnap.exists() && pSnap.data().variants) {
+                const freshVariants = pSnap.data().variants.map(v => {
+                  if (v.id === item.variant?.id || v.label === (item.variant?.label || item.variant)) {
+                    return { ...v, stock: Number(v.stock || 0) + qty };
+                  }
+                  return v;
+                });
+                batch.update(prodRef, { variants: freshVariants });
+              }
+            } else {
+              batch.update(prodRef, { totalStock: increment(qty) });
+            }
+          }
+        }
+
+        if (storeData?.id) {
+          const storeRef = doc(db, "stores", storeData.id);
+          const commissionRate = storeData.comision_porcentaje || 5;
+          const commissionAmount = order.commissionRecorded 
+            ? Number(((orderTotal * commissionRate) / 100).toFixed(2))
+            : 0;
+
+          batch.update(storeRef, {
+            ventas_consolidadas: increment(-1),
+            ...(commissionAmount > 0 ? { deuda_comision: increment(-commissionAmount) } : {})
+          });
+        }
+
+        batch.update(orderRef, { 
+          status: "cancelado", 
+          stockDeducted: false,
+          commissionRecorded: false
+        });
+      } else {
+        batch.update(orderRef, { status: newStatus });
+      }
+
+      await batch.commit();
+
+      setOrders(orders.map(o => o.id === orderId ? { 
+        ...o, 
+        status: newStatus,
+        ...(isFinalized ? { stockDeducted: true } : newStatus === "cancelado" ? { stockDeducted: false } : {})
+      } : o));
+
       toast.success(`Estado actualizado a: ${newStatus.toUpperCase()}`);
     } catch (error) {
+      console.error("Error actualizando pedido:", error);
       toast.error("No se pudo actualizar el estado");
     }
   };
-
-  // 🌟 MAGIA: Funciones para extraer precio, nombre y cantidad con TUS VARIABLES EXACTAS
-  const getItemPrice = (item) => Number(item?.price || 0);
-  const getItemName = (item) => item?.name || "Producto Desconocido";
-  const getItemQty = (item) => Number(item?.qty || 1); // Tú usas "qty", no "quantity"
 
   const handleUpdateItemQuantity = async (order, itemIndex, delta) => {
     const newItems = [...order.items];
@@ -68,14 +173,21 @@ export default function AdminOrders() {
     
     if (newQuantity <= 0) return;
 
-    newItems[itemIndex].qty = newQuantity; // Actualizamos TU variable "qty"
+    newItems[itemIndex] = {
+      ...newItems[itemIndex],
+      qty: newQuantity,
+      quantity: newQuantity
+    };
     
-    // Recalcular el totalAmount sumando (precio * qty)
-    const newTotal = newItems.reduce((acc, curr) => acc + (getItemPrice(curr) * getItemQty(curr)), 0);
+    const newTotal = Number(newItems.reduce((acc, curr) => acc + (getItemPrice(curr) * getItemQty(curr)), 0).toFixed(2));
 
     try {
-      await updateDoc(doc(db, "orders", order.id), { items: newItems, totalAmount: newTotal }); // Guardamos en TU variable "totalAmount"
-      setOrders(orders.map(o => o.id === order.id ? { ...o, items: newItems, totalAmount: newTotal } : o));
+      await updateDoc(doc(db, "orders", order.id), { 
+        items: newItems, 
+        totalAmount: newTotal,
+        total: newTotal
+      });
+      setOrders(orders.map(o => o.id === order.id ? { ...o, items: newItems, totalAmount: newTotal, total: newTotal } : o));
       toast.success("Cantidad actualizada 🔄");
     } catch (error) {
       toast.error("Error al actualizar el producto");
@@ -88,11 +200,15 @@ export default function AdminOrders() {
     const newItems = [...order.items];
     newItems.splice(itemIndex, 1);
     
-    const newTotal = newItems.reduce((acc, curr) => acc + (getItemPrice(curr) * getItemQty(curr)), 0);
+    const newTotal = Number(newItems.reduce((acc, curr) => acc + (getItemPrice(curr) * getItemQty(curr)), 0).toFixed(2));
 
     try {
-      await updateDoc(doc(db, "orders", order.id), { items: newItems, totalAmount: newTotal });
-      setOrders(orders.map(o => o.id === order.id ? { ...o, items: newItems, totalAmount: newTotal } : o));
+      await updateDoc(doc(db, "orders", order.id), { 
+        items: newItems, 
+        totalAmount: newTotal,
+        total: newTotal
+      });
+      setOrders(orders.map(o => o.id === order.id ? { ...o, items: newItems, totalAmount: newTotal, total: newTotal } : o));
       toast.success("Producto eliminado 🗑️");
     } catch (error) {
       toast.error("Error al eliminar el producto");
@@ -173,7 +289,7 @@ export default function AdminOrders() {
             // Leemos con TUS variables exactas
             const orderCustomerName = order.customerName || "Cliente Desconocido";
             const orderCustomerPhone = order.customerPhone || "";
-            const orderTotalAmount = Number(order.totalAmount || 0);
+            const orderTotalAmount = Number(order.totalAmount ?? order.total ?? 0);
 
             return (
               <div 

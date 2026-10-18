@@ -23,7 +23,6 @@ C:.
 |   +---layout
 |   |       AnnouncementBar.jsx
 |   |       Footer.jsx
-|   |       HappyCustomers.jsx
 |   |       Header.jsx
 |   |       HeroBanner.jsx
 |   |       QuickButtons.jsx

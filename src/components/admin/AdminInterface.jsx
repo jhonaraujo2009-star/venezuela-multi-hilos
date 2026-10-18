@@ -43,7 +43,7 @@ export default function AdminInterface() {
     formData.append("file", file);
     formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET); 
 
-    const res = await fetch("https://api.cloudinary.com/v1_1/dp3abweme/image/upload", { method: "POST", body: formData });
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
     if (!res.ok) throw new Error("Error en la subida");
     const data = await res.json();
     return data.secure_url;
@@ -64,29 +64,6 @@ export default function AdminInterface() {
     }
   };
 
-  const handleHappyCustomerUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
-    setUploading(true);
-    try {
-      const urls = await Promise.all(files.map((f) => uploadToCloudinary(f)));
-      const existing = storeData?.happyCustomerImages || settings.happyCustomerImages || [];
-      await updateStoreConfig({ happyCustomerImages: [...existing, ...urls] }); // Lo guarda en la tienda
-      toast.success(`${urls.length} imagen(es) subida(s) ✅`);
-    } catch (error) {
-      toast.error("Error al subir imágenes");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const removeHappyCustomer = async (url) => {
-    const existing = storeData?.happyCustomerImages || settings.happyCustomerImages || [];
-    const updated = existing.filter((u) => u !== url);
-    await updateStoreConfig({ happyCustomerImages: updated });
-    toast.success("Imagen eliminada");
-  };
-
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -101,7 +78,6 @@ export default function AdminInterface() {
 
   // Variables visuales (le damos prioridad a los datos de la tienda)
   const currentProfileImage = storeData?.profileImage || settings.profileImage;
-  const currentHappyImages = storeData?.happyCustomerImages || settings.happyCustomerImages || [];
 
   return (
     <div className="space-y-6">
@@ -154,25 +130,6 @@ export default function AdminInterface() {
         </div>
       </div>
 
-      {/* Happy customers carrusel */}
-      <div className="bg-white rounded-3xl p-6 shadow-sm">
-        <h3 className="font-bold text-gray-800 mb-3">Tus Clientes Felices (Fotos)</h3>
-        <div className="grid grid-cols-3 gap-2 mb-3">
-          {currentHappyImages.map((url, i) => (
-            <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-gray-100">
-              <img src={url} alt="" className="w-full h-full object-cover" />
-              <button
-                onClick={() => removeHappyCustomer(url)}
-                className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center"
-              >×</button>
-            </div>
-          ))}
-          <label className="aspect-square rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer hover:border-pink-300 transition-colors">
-            {uploading ? <span className="text-xs text-gray-400 animate-pulse">...</span> : <span className="text-gray-400 text-2xl">+</span>}
-            <input type="file" accept="image/*" multiple onChange={handleHappyCustomerUpload} className="hidden" disabled={uploading} />
-          </label>
-        </div>
-      </div>
 
       <button onClick={handleSave} disabled={saving || uploading}
         className="w-full py-4 rounded-2xl text-white font-bold disabled:opacity-50"

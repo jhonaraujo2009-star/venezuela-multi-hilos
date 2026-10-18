@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import {
-  collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, getDocs, query, where
+  collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, getDocs, query, where, increment
 } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import toast from "react-hot-toast";
 import { useApp } from "../../context/AppContext"; // 🌟 INYECTAMOS EL CEREBRO
+import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from "../../config/constants";
 import JSZip from "jszip";
 
 // ==========================================
@@ -91,13 +92,13 @@ function ProductForm({ sessions, product, onClose, storeData }) {
         files.map(async (f) => {
           const formData = new FormData();
           formData.append("file", f);
-          formData.append("upload_preset", "tienda_maquillaje"); 
+          formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET); 
 
           // 🌟 MAGIA CLOUDINARY: Le decimos que cree una sub-carpeta con el ID de la tienda
           formData.append("folder", `tienda_maquillaje/${storeData.id}`);
 
           const res = await fetch(
-            "https://api.cloudinary.com/v1_1/dp3abweme/image/upload", 
+            `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, 
             { method: "POST", body: formData }
           );
           const data = await res.json();
@@ -155,6 +156,9 @@ function ProductForm({ sessions, product, onClose, storeData }) {
         toast.success("Producto actualizado ✅");
       } else {
         await addDoc(collection(db, "products"), { ...data, createdAt: serverTimestamp(), salesCount: 0 });
+        try {
+          await updateDoc(doc(db, "stores", storeData.id), { total_productos: increment(1) });
+        } catch (e) {}
         toast.success("Producto creado ✅");
       }
       onClose();
@@ -302,19 +306,27 @@ export default function AdminProducts() {
       setLoading(false);
     });
 
-    // 🌟 MAGIA 2: El panel admin AHORA SOLO CARGA las sesiones (carpetas) de la tienda actual
+    // 🌟 MAGIA 2: El panel admin AHORA ESCUCHA en tiempo real las sesiones de la tienda
     const qSessions = query(collection(db, "sessions"), where("storeId", "==", storeData.id));
-    getDocs(qSessions).then((snap) =>
-      setSessions(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-    );
+    const unsubSessions = onSnapshot(qSessions, (snap) => {
+      setSessions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
 
-    return unsub;
+    return () => {
+      unsub();
+      unsubSessions();
+    };
   }, [storeData?.id]); // Recarga si cambia la tienda
 
   const deleteProduct = async (id, e) => {
     e.stopPropagation(); 
     if (!confirm("¿Eliminar este producto?")) return;
     await deleteDoc(doc(db, "products", id));
+    if (storeData?.id) {
+      try {
+        await updateDoc(doc(db, "stores", storeData.id), { total_productos: increment(-1) });
+      } catch (err) {}
+    }
     toast.success("Producto eliminado");
   };
 

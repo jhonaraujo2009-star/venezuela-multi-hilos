@@ -126,16 +126,31 @@ export default function AdminPOS() {
 
       // 1. Crear la Orden (Pedido)
       const orderRef = doc(collection(db, "orders"));
+      const normalizedItems = cart.map(item => ({
+        id: item.productId,
+        productId: item.productId,
+        name: item.name,
+        image: item.image,
+        qty: Number(item.quantity) || 1,
+        quantity: Number(item.quantity) || 1,
+        price: Number(item.price) || 0,
+        variant: item.variant?.label || (typeof item.variant === "string" ? item.variant : null),
+        storeId: storeData.id
+      }));
+
       batch.set(orderRef, {
         storeId: storeData.id,
         customerName: customerName || "Cliente Mostrador",
         origin: "POS_Manual",
         status: "completed",
-        items: cart,
-        subtotal,
-        discount: discountAmount,
-        total,
+        items: normalizedItems,
+        subtotal: Number(subtotal.toFixed(2)),
+        discount: Number(discountAmount.toFixed(2)),
+        total: Number(total.toFixed(2)),
+        totalAmount: Number(total.toFixed(2)),
         paymentMethod,
+        stockDeducted: true,
+        commissionRecorded: true,
         createdAt: serverTimestamp(),
       });
 

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { collection, query, where, getDocs, doc, onSnapshot } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import { useCart } from "../../context/CartContext";
@@ -138,7 +138,7 @@ export default function Header({ onProductClick, onFilter }) {
       {/* 🌟 BUSCADOR PANTALLA COMPLETA */}
       <div 
         className={`fixed inset-0 z-[100] bg-white/95 backdrop-blur-3xl flex flex-col transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${
-          searchOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-12'
+          searchOpen ? 'opacity-100 visible translate-y-0 pointer-events-auto' : 'opacity-0 invisible -translate-y-12 pointer-events-none'
         }`}
       >
         <div className="flex items-center px-6 py-6 sm:py-10 border-b border-gray-100 max-w-4xl mx-auto w-full">
@@ -201,26 +201,23 @@ export default function Header({ onProductClick, onFilter }) {
       </div>
 
       {/* 🌟 CABECERA PRINCIPAL (HEADER NORMAL) */}
-      <header className="fixed top-0 left-0 right-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100 h-14 transition-all duration-300">
+      <header className="w-full bg-white/90 backdrop-blur-md border-b border-gray-100 h-14 transition-all duration-300">
         <div className="max-w-md mx-auto px-4 h-full flex items-center justify-between gap-3">
           
           {/* 🌟 LOGO O NOMBRE ENCHAPADO EN ORO (ESTILO EK EMPIRE) 🌟 */}
-          <div 
-            className="flex-shrink-0 cursor-pointer flex items-center gap-1.5" 
+          <Link 
+            to="/" 
+            className="flex-shrink-0 flex items-center gap-1.5 py-1.5 pr-3 cursor-pointer select-none relative z-10 active:opacity-80 transition-opacity" 
+            title="Ir a la página principal"
             onClick={() => { 
-              // 1. Resetea filtros por seguridad
-              if(onFilter) onFilter("all"); 
-              // 2. Sube la pantalla arriba
-              window.scrollTo(0, 0); 
-              // 3. 🌟 MAGIA: Te envía al INDEX PRINCIPAL DE LA PLATAFORMA (/)
-              navigate("/");
+              window.scrollTo({ top: 0, behavior: "instant" }); 
             }}
           >
             {globalBranding.logo ? (
-              <img src={globalBranding.logo} alt="Empresa Matriz" className="h-8 w-auto object-contain drop-shadow-sm" />
+              <img src={globalBranding.logo} alt="Empresa Matriz" className="h-8 w-auto object-contain drop-shadow-sm pointer-events-none" />
             ) : (
               <span 
-                className="text-xl sm:text-[22px] font-black tracking-tighter uppercase text-transparent bg-clip-text"
+                className="text-xl sm:text-[22px] font-black tracking-tighter uppercase text-transparent bg-clip-text pointer-events-none"
                 style={{
                   backgroundImage: "linear-gradient(to right, #462523 0%, #cb9b51 22%, #f6e27a 45%, #ffffff 50%, #f6e27a 55%, #cb9b51 78%, #462523 100%)",
                   filter: "drop-shadow(0px 2px 2px rgba(0,0,0,0.4))",
@@ -228,10 +225,10 @@ export default function Header({ onProductClick, onFilter }) {
                   WebkitTextFillColor: "transparent"
                 }}
               >
-                {globalBranding.name}
+                {globalBranding.name || "MULTI TIENDA"}
               </span>
             )}
-          </div>
+          </Link>
 
           <div className="flex items-center gap-0.5 sm:gap-1.5 flex-shrink-0">
             <button 

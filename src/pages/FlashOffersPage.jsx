@@ -13,10 +13,17 @@ export default function FlashOffersPage() {
     const fetchPromotionalProducts = async () => {
       setLoading(true);
       try {
-        // En un caso real quiza haya un campo 'isFlashOffer', aqui simulamos
-        // trayendo productos y mostrándolos como ofertas
-        const prodSnap = await getDocs(query(collection(db, "products"), limit(40)));
-        const allProducts = prodSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const storesSnap = await getDocs(collection(db, "stores"));
+        const activeStoreIds = new Set(
+          storesSnap.docs
+            .filter(d => d.data().isActive !== false)
+            .map(d => d.id)
+        );
+
+        const prodSnap = await getDocs(query(collection(db, "products"), limit(60)));
+        const allProducts = prodSnap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter(p => activeStoreIds.has(p.storeId));
 
         setProducts(allProducts);
       } catch (error) {

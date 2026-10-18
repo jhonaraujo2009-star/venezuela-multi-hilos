@@ -18,16 +18,25 @@ export default function QuestionsPage() {
     if (!storeData?.id) return;
 
     const fetchQ = async () => {
-      // 🌟 MAGIA: Traer solo las preguntas públicas de ESTA tienda
-      const snap = await getDocs(
-        query(
-          collection(db, "questions"), 
-          where("isPublic", "==", true),
-          where("storeId", "==", storeData.id),
-          orderBy("createdAt", "desc")
-        )
-      );
-      setQuestions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      // 🌟 MAGIA: Traer solo las preguntas públicas de ESTA tienda (ordenadas en memoria para no requerir índice compuesto)
+      try {
+        const snap = await getDocs(
+          query(
+            collection(db, "questions"), 
+            where("isPublic", "==", true),
+            where("storeId", "==", storeData.id)
+          )
+        );
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        list.sort((a, b) => {
+          const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
+          const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
+          return timeB - timeA;
+        });
+        setQuestions(list);
+      } catch (err) {
+        console.error("Error al cargar preguntas:", err);
+      }
     };
     fetchQ();
   }, [storeData?.id]);

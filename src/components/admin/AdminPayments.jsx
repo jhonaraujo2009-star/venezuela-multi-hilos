@@ -5,6 +5,7 @@ import {
 import { db } from "../../config/firebase";
 import toast from "react-hot-toast";
 import { useApp } from "../../context/AppContext"; // 🌟 INYECTAMOS LA TIENDA
+import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from "../../config/constants";
 
 function PaymentForm({ payment, onClose, storeData }) {
   const [form, setForm] = useState({
@@ -34,13 +35,13 @@ function PaymentForm({ payment, onClose, storeData }) {
     
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("upload_preset", "tienda_maquillaje"); // Tu carpeta de Cloudinary
+    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
 
     // 🌟 MAGIA CLOUDINARY: Le decimos que cree una sub-carpeta con el ID de la tienda
     formData.append("folder", `tienda_maquillaje/${storeData.id}`);
 
     try {
-      const res = await fetch("https://api.cloudinary.com/v1_1/dp3abweme/image/upload", { 
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { 
         method: "POST", 
         body: formData 
       });

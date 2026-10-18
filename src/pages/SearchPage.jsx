@@ -16,8 +16,17 @@ export default function SearchPage() {
     const fetchAndFilterProducts = async () => {
       setLoading(true);
       try {
+        const storesSnap = await getDocs(collection(db, "stores"));
+        const activeStoreIds = new Set(
+          storesSnap.docs
+            .filter(d => d.data().isActive !== false)
+            .map(d => d.id)
+        );
+
         const prodSnap = await getDocs(query(collection(db, "products")));
-        const allProducts = prodSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const allProducts = prodSnap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter(p => activeStoreIds.has(p.storeId));
 
         // Filtro local asegurando que el string de busqueda coincida parcialmente con nombre o categoria
         const filtered = allProducts.filter(p => {

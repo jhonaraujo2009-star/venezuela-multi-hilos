@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { useCart } from "../../context/CartContext";
+import toast from "react-hot-toast";
 
 export default function ProductCard({ product, onClick, rank }) {
   const { bsPrice, storeData } = useApp();
-  const { addItem, setIsOpen } = useCart();
+  const { addItem, setIsOpen, items } = useCart();
   const [timeLeft, setTimeLeft] = useState("");
 
   // 🌟 LÓGICA DE FAVORITOS EN TIEMPO REAL
@@ -116,8 +117,10 @@ export default function ProductCard({ product, onClick, rank }) {
   // ------------------------------------------------------------------
   // 🌟 FASE 2: EL CHISMOSO (Rastreador de Origen) 🌟
   // ------------------------------------------------------------------
-  // Detectamos si el cliente está viendo este producto en tu página principal (/)
+  // Detectamos si el cliente está viendo este producto en tu página principal (/) o vino referido
   const isFromSuperAdmin = window.location.pathname === "/";
+  const savedOrigin = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("origenVenta") : null;
+  const originToUse = isFromSuperAdmin ? "index_super_admin" : (savedOrigin || "tienda_directa");
 
   // Clonamos el producto con los precios matemáticos y LA ETIQUETA INVISIBLE
   const productWithFinalPrice = {
@@ -125,7 +128,7 @@ export default function ProductCard({ product, onClick, rank }) {
     price: Number(finalPrice.toFixed(2)),
     oldPrice: displayCrossedPrice,
     // Aquí inyectamos el GPS para cobrar la comisión luego
-    _origenVenta: isFromSuperAdmin ? "index_super_admin" : "tienda_directa"
+    _origenVenta: originToUse
   };
   // ------------------------------------------------------------------
 
@@ -137,8 +140,16 @@ export default function ProductCard({ product, onClick, rank }) {
       // Si tiene variantes (tallas, colores), forzamos a abrir el modal
       onClick(productWithFinalPrice);
     } else {
+      const stock = Number(productWithFinalPrice.totalStock ?? productWithFinalPrice.stock ?? 0);
+      const inCart = items.find((i) => i.key === `${productWithFinalPrice.id}-default`)?.quantity || 0;
+      if (inCart >= stock) {
+        toast.error(`Ya tienes el máximo disponible (${stock} unidades) en tu bolsa`);
+        return;
+      }
+
       // Si no tiene variantes, lo mandamos directo a la bolsa con animación
-      addItem(productWithFinalPrice, null, 1);
+      const added = addItem(productWithFinalPrice, null, 1);
+      if (added === false) return;
       
       // Feedback visual
       const btn = e.currentTarget;
@@ -148,13 +159,20 @@ export default function ProductCard({ product, onClick, rank }) {
       setTimeout(() => {
         btn.classList.remove("scale-125", "bg-pink-500", "text-white");
         btn.classList.add("bg-white", "text-gray-900");
-        // setIsOpen(true); -> El usuario solicitó NO abrir la bolsa automáticamente.
       }, 400);
     }
   };
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          !isSoldOut && onClick(productWithFinalPrice);
+        }
+      }}
       onClick={() => !isSoldOut && onClick(productWithFinalPrice)}
       className={`relative text-left bg-white/80 backdrop-blur-sm rounded-[2.5rem] overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-500 border border-white w-full group ${isSoldOut ? "opacity-70 cursor-default" : "cursor-pointer"}`}
     >
@@ -288,6 +306,6 @@ export default function ProductCard({ product, onClick, rank }) {
           )}
         </div>
       </div>
-    </button>
+    </div>
   );
 }

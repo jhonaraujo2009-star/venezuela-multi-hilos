@@ -14,7 +14,6 @@
  *   - socialLinks: { instagram, tiktok, facebook, twitter }
  *   - quickButtons: [{ id, label, icon, filter }]
  *   - legalText: string
- *   - happyCustomerImages: [string] (Storage URLs)
  *
  * /sessions  (collection)
  *   - id: auto

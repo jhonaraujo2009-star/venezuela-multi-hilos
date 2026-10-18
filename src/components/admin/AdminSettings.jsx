@@ -75,7 +75,7 @@ export default function AdminSettings() {
     formData.append("folder", `tienda_maquillaje/${storeData.id}`);
 
     try {
-      const res = await fetch("https://api.cloudinary.com/v1_1/dp3abweme/image/upload", { method: "POST", body: formData });
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
       const data = await res.json();
       setForm(prev => ({ ...prev, [category]: { ...prev[category], [type]: data.secure_url } }));
       toast.success("Logo subido con éxito");
