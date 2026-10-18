@@ -18,6 +18,7 @@ export default function RegisterStorePage() {
     password: "",
   });
   
+  const [showPassword, setShowPassword] = useState(false);
   const [urlStatus, setUrlStatus] = useState("idle"); 
   const [emailStatus, setEmailStatus] = useState("idle"); 
   
@@ -91,7 +92,7 @@ export default function RegisterStorePage() {
   const handleRegister = async (e) => {
     e.preventDefault();
     if (!formData.storeName || !formData.storeUrl || !formData.email || !formData.password) {
-      toast.error("Por favor, completa todos los campos.");
+      toast.error("Por favor, completa todos los campos requeridos.");
       return;
     }
     if (formData.password.length < 6) {
@@ -103,7 +104,7 @@ export default function RegisterStorePage() {
       return;
     }
     if (urlStatus === "taken") {
-      toast.error("El enlace de la tienda ya está en uso.");
+      toast.error("El enlace de la tienda ya está en uso. Por favor elige otro.");
       return;
     }
     if (emailStatus === "taken") {
@@ -113,9 +114,7 @@ export default function RegisterStorePage() {
 
     setLoading(true);
     try {
-      // ------------------------------------------------------------------
-      // 🌟 FASE 1: RASTREO SILENCIOSO DE IP AL REGISTRARSE 🌟
-      // ------------------------------------------------------------------
+      // 🌟 FASE 1: RASTREO SILENCIOSO DE IP AL REGISTRARSE
       let ipOperacion = "Desconocida";
       let paisOperacion = "Desconocido";
       try {
@@ -126,7 +125,6 @@ export default function RegisterStorePage() {
       } catch (geoError) {
         console.warn("No se pudo obtener la ubicación:", geoError);
       }
-      // ------------------------------------------------------------------
 
       const userCred = await createUserWithEmailAndPassword(auth, formData.email.toLowerCase(), formData.password);
       const user = userCred.user;
@@ -139,24 +137,20 @@ export default function RegisterStorePage() {
         createdAt: serverTimestamp(),
         verification: { status: "none" }, 
         isActive: true,
-        // ------------------------------------------------------------------
-        // 🌟 FASE 1: KIT DE INICIO SÚPER ADMIN (FINANZAS Y ANALÍTICAS) 🌟
-        // ------------------------------------------------------------------
-        ip_registro: ipOperacion, // Se guarda para siempre (IP original)
-        pais_registro: paisOperacion, // País original de la cuenta
-        ip_operacion: ipOperacion, // IP de la última sesión
-        pais_operacion: paisOperacion, // País de la última sesión
+        ip_registro: ipOperacion,
+        pais_registro: paisOperacion,
+        ip_operacion: ipOperacion,
+        pais_operacion: paisOperacion,
         last_login: serverTimestamp(),
-        comision_porcentaje: 5, // % de comisión por defecto (modificable en panel admin)
-        deuda_comision: 0, // Inician sin deber nada
-        total_productos: 0, // Contador de catálogo
-        ventas_consolidadas: 0 // Contador de éxito
-        // ------------------------------------------------------------------
+        comision_porcentaje: 5,
+        deuda_comision: 0,
+        total_productos: 0,
+        ventas_consolidadas: 0
       });
 
-      toast.success("¡Tienda creada con éxito! Bienvenido a tu imperio.");
+      toast.success("¡Tu tienda ha sido creada con éxito! 🚀");
       
-      // 🌟 MAGIA: INTERCEPTOR VIP PARA EL JEFE
+      // Interceptor para el Super Admin
       if (formData.email.toLowerCase() === SUPER_ADMIN_EMAIL?.toLowerCase()) {
         const choice = window.confirm("¡Bienvenido, Jefe! 👑\n\n¿Deseas entrar al PANEL DE CONTROL TOTAL (Súper Admin)?\n\n(Aceptar = Súper Admin / Cancelar = Administrar mi Tienda)");
         if (choice) {
@@ -165,7 +159,6 @@ export default function RegisterStorePage() {
           navigate(`/${formData.storeUrl}/admin`);
         }
       } else {
-        // Redirección normal para los demás usuarios
         navigate(`/${formData.storeUrl}/admin`);
       }
 
@@ -182,180 +175,424 @@ export default function RegisterStorePage() {
     }
   };
 
-  const StatusIcon = ({ status }) => {
-    if (status === "checking") return <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-gray-300 border-t-pink-500 rounded-full animate-spin"></div>;
-    if (status === "available") return <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>;
-    if (status === "taken") return <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>;
-    return null;
+  const getPasswordStrength = () => {
+    const len = formData.password.length;
+    if (len === 0) return { label: "", color: "bg-gray-200", width: "0%" };
+    if (len < 6) return { label: "Muy corta", color: "bg-red-400", width: "30%" };
+    if (len < 8) return { label: "Aceptable", color: "bg-yellow-400", width: "60%" };
+    return { label: "Segura y fuerte", color: "bg-emerald-500", width: "100%" };
   };
 
+  const strength = getPasswordStrength();
+
   return (
-    // 🌟 Fondo gris claro en móvil para resaltar la tarjeta, fondo blanco en PC
-    <div className="min-h-screen flex font-sans bg-[#F9FAFB] lg:bg-white">
+    <div className="min-h-screen bg-gradient-to-br from-pink-50/60 via-white to-purple-50/40 text-gray-900 font-sans selection:bg-pink-100 selection:text-pink-900 relative overflow-x-hidden">
       
-      {/* LADO IZQUIERDO: Promesa de Valor (Oculto en móviles) */}
-      <div className="hidden lg:flex w-1/2 bg-gray-900 text-white flex-col justify-between p-16 relative overflow-hidden">
-        <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-pink-500/20 blur-[100px] rounded-full pointer-events-none"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] bg-violet-500/20 blur-[100px] rounded-full pointer-events-none"></div>
-        
-        <div className="relative z-10">
-          <div className="w-fit h-14 px-3 py-1.5 bg-white/95 backdrop-blur-md rounded-2xl flex items-center justify-center mb-10 shadow-lg cursor-pointer hover:scale-105 transition-transform border border-white/20" onClick={() => navigate('/')}>
+      {/* Luces sutiles y estéticas de fondo (Colores Claros Pro) */}
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-pink-100/50 blur-[130px] rounded-full pointer-events-none -z-10"></div>
+      <div className="absolute bottom-0 left-0 w-[550px] h-[550px] bg-purple-100/40 blur-[140px] rounded-full pointer-events-none -z-10"></div>
+
+      {/* NAVBAR SUPERIOR ELEGANTE */}
+      <header className="border-b border-gray-100 bg-white/80 backdrop-blur-md sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 py-3 flex items-center justify-between">
+          <div 
+            onClick={() => navigate('/')} 
+            className="flex items-center gap-3 cursor-pointer hover:opacity-90 transition-opacity"
+          >
             {globalBranding?.companyLogo ? (
-              <img src={globalBranding.companyLogo} alt={globalBranding?.companyName || "Logo"} className="h-full w-auto max-w-[180px] object-contain rounded-lg" />
+              <img 
+                src={globalBranding.companyLogo} 
+                alt={globalBranding?.companyName || "Logo"} 
+                className="h-10 w-auto max-w-[160px] object-contain rounded-xl"
+              />
             ) : (
-              <span className="text-gray-900 font-black text-2xl">{globalBranding?.companyName ? globalBranding.companyName.charAt(0).toUpperCase() : "🏪"}</span>
+              <div className="flex items-center gap-2">
+                <span className="w-10 h-10 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-500 text-white flex items-center justify-center font-black text-xl shadow-md shadow-pink-500/20">
+                  {globalBranding?.companyName ? globalBranding.companyName.charAt(0).toUpperCase() : "🏪"}
+                </span>
+                <span className="font-black text-gray-900 text-lg sm:text-xl tracking-tight">
+                  {globalBranding?.companyName || "Venezuela Multi-Hilos"}
+                </span>
+              </div>
             )}
           </div>
-          <h1 className="text-5xl font-black leading-tight mb-6">
-            Lleva tu negocio al <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-violet-400">siguiente nivel.</span>
-          </h1>
-          <p className="text-gray-400 text-lg max-w-md">
-            Crea tu tienda online profesional en menos de 1 minuto. Sube tus productos, recibe pedidos y administra todo desde tu celular.
-          </p>
-        </div>
 
-        <div className="relative z-10 bg-white/10 backdrop-blur-md border border-white/20 p-6 rounded-3xl max-w-md">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="flex -space-x-3">
-              <div className="w-10 h-10 rounded-full bg-pink-500 border-2 border-gray-900 flex items-center justify-center text-xs">👩</div>
-              <div className="w-10 h-10 rounded-full bg-violet-500 border-2 border-gray-900 flex items-center justify-center text-xs">👨</div>
-              <div className="w-10 h-10 rounded-full bg-blue-500 border-2 border-gray-900 flex items-center justify-center text-xs">👱‍♀️</div>
-            </div>
-            <p className="text-sm font-bold text-gray-300">+500 emprendedores</p>
-          </div>
-          <p className="text-sm text-gray-400 italic">"Desde que abrí mi tienda aquí, mis ventas se automatizaron por completo. ¡Es la mejor decisión!"</p>
-        </div>
-      </div>
-
-      {/* LADO DERECHO: Formulario de Registro */}
-      <div className="w-full lg:w-1/2 flex flex-col items-center justify-center p-4 sm:p-8 lg:p-12 relative min-h-screen lg:min-h-0 py-10">
-        
-        {/* 🌟 Botón volver (Adaptable) */}
-        <div className="w-full max-w-md flex items-center justify-between mb-6 lg:absolute lg:top-8 lg:left-8 lg:mb-0 lg:w-auto">
-          <button onClick={() => navigate('/')} className="text-sm font-bold text-gray-500 hover:text-gray-900 flex items-center gap-2 transition-colors">
-            ← <span className="hidden sm:inline">Volver al inicio</span><span className="sm:hidden">Volver</span>
-          </button>
-        </div>
-
-        {/* 🌟 Logo en móvil */}
-        <div className="lg:hidden flex items-center justify-center mb-6 cursor-pointer" onClick={() => navigate('/')}>
-          {globalBranding?.companyLogo ? (
-            <img src={globalBranding.companyLogo} alt={globalBranding?.companyName || "Logo"} className="h-14 max-w-[200px] object-contain rounded-2xl bg-white p-2 shadow-md border border-gray-100" />
-          ) : (
-            <span className="text-white font-black text-3xl">{globalBranding?.companyName ? globalBranding.companyName.charAt(0).toUpperCase() : "🏪"}</span>
-          )}
-        </div>
-
-        {/* 🌟 Tarjeta del Formulario (Premium Glass en móvil) */}
-        <div className="w-full max-w-md bg-white lg:bg-transparent p-6 sm:p-10 lg:p-0 rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] lg:shadow-none border border-gray-100 lg:border-none">
-          <div className="text-center lg:text-left mb-8">
-            <h2 className="text-2xl sm:text-3xl font-black text-gray-900 mb-2 tracking-tight">Abre tu Tienda Gratis</h2>
-            <p className="text-gray-500 text-sm sm:text-base">Completa tus datos y empieza a vender hoy mismo.</p>
-          </div>
-
-          <form onSubmit={handleRegister} className="space-y-4 sm:space-y-5">
-            
-            {/* Nombre de la tienda */}
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1.5">Nombre de tu marca</label>
-              <input 
-                type="text" 
-                required
-                value={formData.storeName}
-                onChange={handleNameChange}
-                placeholder="Ej: Tienda Moda Oscar" 
-                className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 sm:py-3.5 outline-none focus:bg-white focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all text-gray-900 font-medium text-sm sm:text-base"
-              />
-            </div>
-
-            {/* Enlace Personalizado con Validación Responsiva */}
-            <div>
-              <label className="text-sm font-bold text-gray-700 mb-1.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                <span>Tu enlace personalizado</span>
-                {urlStatus === "available" && <span className="text-green-500 text-[10px] sm:text-xs font-bold flex items-center gap-1"><StatusIcon status="available"/> ¡Disponible!</span>}
-                {urlStatus === "taken" && <span className="text-red-500 text-[10px] sm:text-xs font-bold flex items-center gap-1"><StatusIcon status="taken"/> No disponible</span>}
-              </label>
-              <div className="flex items-stretch relative">
-                <div className="bg-gray-100 border border-gray-200 border-r-0 rounded-l-2xl px-3 sm:px-4 py-3 sm:py-3.5 flex items-center text-gray-500 text-xs sm:text-sm font-medium select-none">
-                  tienda/
-                </div>
-                <input 
-                  type="text" 
-                  required
-                  value={formData.storeUrl}
-                  onChange={(e) => setFormData({ ...formData, storeUrl: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, "") })}
-                  placeholder="tu-tienda" 
-                  className={`w-full bg-gray-50 border rounded-r-2xl px-3 sm:px-4 py-3 sm:py-3.5 outline-none focus:bg-white transition-all text-pink-600 font-bold text-sm sm:text-base ${
-                    urlStatus === 'taken' ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-500/10' : 
-                    urlStatus === 'available' ? 'border-green-300 focus:border-green-500 focus:ring-4 focus:ring-green-500/10' : 
-                    'border-gray-200 focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10'
-                  }`}
-                />
-                <div className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2">
-                  {urlStatus === "checking" && <StatusIcon status="checking" />}
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-gray-100 my-4 sm:my-6"></div>
-
-            {/* Correo Electrónico con Validación Responsiva */}
-            <div>
-              <label className="text-sm font-bold text-gray-700 mb-1.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                <span>Correo Electrónico</span>
-                {emailStatus === "available" && <span className="text-green-500 text-[10px] sm:text-xs font-bold flex items-center gap-1"><StatusIcon status="available"/> Correo disponible</span>}
-                {emailStatus === "taken" && <span className="text-red-500 text-[10px] sm:text-xs font-bold flex items-center gap-1"><StatusIcon status="taken"/> Ya registrado</span>}
-              </label>
-              <div className="relative">
-                <input 
-                  type="email" 
-                  required
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="tucorreo@ejemplo.com" 
-                  className={`w-full bg-gray-50 border rounded-2xl px-4 py-3 sm:py-3.5 outline-none focus:bg-white transition-all text-gray-900 font-medium pr-10 text-sm sm:text-base ${
-                    emailStatus === 'taken' ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-500/10' : 
-                    emailStatus === 'available' ? 'border-green-300 focus:border-green-500 focus:ring-4 focus:ring-green-500/10' : 
-                    'border-gray-200 focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10'
-                  }`}
-                />
-                <div className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2">
-                  {emailStatus === "checking" && <StatusIcon status="checking" />}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1.5">Contraseña</label>
-              <input 
-                type="password" 
-                required
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                placeholder="Mínimo 6 caracteres" 
-                className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 sm:py-3.5 outline-none focus:bg-white focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all text-gray-900 font-medium text-sm sm:text-base"
-              />
-            </div>
-
-            {/* Botón de Submit */}
-            <button 
-              type="submit"
-              disabled={loading || urlStatus === "taken" || emailStatus === "taken"}
-              className="w-full bg-gray-900 hover:bg-pink-600 text-white font-black py-3.5 sm:py-4 rounded-2xl mt-6 transition-colors disabled:opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-lg flex items-center justify-center text-sm sm:text-base"
+          <div className="flex items-center gap-3">
+            <span className="hidden sm:inline text-xs font-semibold text-gray-500">¿Ya tienes cuenta?</span>
+            <button
+              onClick={() => navigate('/login')}
+              className="text-xs font-black uppercase tracking-wider px-4 py-2.5 rounded-2xl border border-gray-200 text-gray-700 hover:text-pink-600 hover:border-pink-300 hover:bg-pink-50/50 transition-all cursor-pointer shadow-xs active:scale-95"
             >
-              {loading ? (
-                <div className="w-5 h-5 sm:w-6 sm:h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                "Crear mi tienda ahora"
-              )}
+              Iniciar Sesión 🔐
             </button>
-          </form>
-
-          <p className="text-center text-xs sm:text-sm text-gray-500 mt-6 sm:mt-8">
-            ¿Ya tienes una tienda? <button onClick={() => navigate('/login')} className="text-pink-600 font-bold hover:underline">Inicia sesión aquí</button>
-          </p>
+          </div>
         </div>
-      </div>
+      </header>
+
+      {/* CONTENIDO PRINCIPAL */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-start">
+
+          {/* ========================================================
+              COLUMNA IZQUIERDA: Presentación E-Commerce & Mockup
+          ======================================================== */}
+          <div className="lg:col-span-6 space-y-8">
+            
+            {/* Titular */}
+            <div className="space-y-4">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-pink-100/80 border border-pink-200 text-pink-700 text-xs font-black tracking-wider uppercase shadow-xs">
+                <span>✨</span> Plataforma E-Commerce para Marcas
+              </div>
+
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-gray-900 tracking-tight leading-[1.15]">
+                Crea tu tienda online y <br className="hidden sm:inline" />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-600 via-rose-500 to-purple-600">
+                  vende como los grandes.
+                </span>
+              </h1>
+
+              <p className="text-gray-600 text-sm sm:text-base leading-relaxed font-normal">
+                Tu catálogo interactivo listo en segundos. Automatiza tus ventas por WhatsApp, gestiona tu inventario con Punto de Venta (POS) y acepta pagos en Bolívares y Dólares con tasa actualizada.
+              </p>
+            </div>
+
+            {/* SIMULADOR EN VIVO DE CÓMO SE VERÁ SU TIENDA (Interactive Preview) */}
+            <div className="bg-white rounded-[2.5rem] border border-pink-100 p-5 sm:p-7 shadow-[0_20px_50px_-15px_rgba(236,72,153,0.12)] relative overflow-hidden transition-all">
+              <div className="flex items-center justify-between pb-4 mb-4 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-red-400"></div>
+                  <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
+                  <div className="w-3 h-3 rounded-full bg-emerald-400"></div>
+                  <span className="text-[11px] font-bold text-gray-400 ml-2">Vista previa de tu tienda</span>
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-pink-600 bg-pink-50 px-2.5 py-1 rounded-full border border-pink-100">
+                  ⚡ En vivo
+                </span>
+              </div>
+
+              {/* Encabezado de la tienda simulada */}
+              <div className="bg-gradient-to-br from-pink-50 via-rose-50/40 to-white rounded-3xl p-4 sm:p-5 border border-pink-100/80 mb-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 text-white flex items-center justify-center font-black text-xl shadow-md shadow-pink-500/20">
+                    {formData.storeName ? formData.storeName.charAt(0).toUpperCase() : "🛍️"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="font-black text-gray-900 text-base sm:text-lg truncate">
+                        {formData.storeName.trim() || "Nombre de Tu Tienda"}
+                      </h4>
+                      <span className="text-blue-500 text-sm" title="Tienda Oficial">✓</span>
+                    </div>
+                    <p className="text-xs font-mono font-bold text-pink-600 truncate">
+                      /{formData.storeUrl ? formData.storeUrl : "tu-marca"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
+                  <span className="bg-white/90 text-gray-700 px-2.5 py-1 rounded-xl shadow-xs border border-pink-100">
+                    💵 Tasa Oficial / Paralelo
+                  </span>
+                  <span className="bg-white/90 text-gray-700 px-2.5 py-1 rounded-xl shadow-xs border border-pink-100">
+                    🚚 Envíos Nacionales
+                  </span>
+                  <span className="bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-xl border border-emerald-200">
+                    🟢 Abierto ahora
+                  </span>
+                </div>
+              </div>
+
+              {/* Mini Demo de Productos del E-Commerce */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-gray-50/80 rounded-2xl p-3 border border-gray-100 group">
+                  <div className="w-full h-20 bg-white rounded-xl mb-2 flex items-center justify-center text-3xl shadow-xs">
+                    👗
+                  </div>
+                  <span className="text-[11px] font-black text-gray-900 block truncate">Vestido Colección</span>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-xs font-bold text-pink-600">$18.00</span>
+                    <span className="text-[10px] bg-pink-100 text-pink-700 px-1.5 py-0.5 rounded font-black">+ Carrito</span>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50/80 rounded-2xl p-3 border border-gray-100 group">
+                  <div className="w-full h-20 bg-white rounded-xl mb-2 flex items-center justify-center text-3xl shadow-xs">
+                    💄
+                  </div>
+                  <span className="text-[11px] font-black text-gray-900 block truncate">Labial Larga Duración</span>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-xs font-bold text-pink-600">$12.50</span>
+                    <span className="text-[10px] bg-pink-100 text-pink-700 px-1.5 py-0.5 rounded font-black">+ Carrito</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botón flotante simulado */}
+              <div className="bg-emerald-500 text-white text-xs font-black py-2.5 px-4 rounded-2xl flex items-center justify-center gap-2 shadow-md shadow-emerald-500/20">
+                <span>💬 Recibir Pedidos por WhatsApp al Instante</span>
+              </div>
+            </div>
+
+            {/* Puntos Claves E-Commerce */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-left">
+              <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-xs">
+                <div className="text-xl mb-1">🏪</div>
+                <p className="text-xs font-black text-gray-900">Punto de Venta POS</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">Control de caja e inventario</p>
+              </div>
+
+              <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-xs">
+                <div className="text-xl mb-1">📱</div>
+                <p className="text-xs font-black text-gray-900">App Instalable (PWA)</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">Tus clientes la bajan a su móvil</p>
+              </div>
+
+              <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-xs col-span-2 sm:col-span-1">
+                <div className="text-xl mb-1">🛡️</div>
+                <p className="text-xs font-black text-gray-900">100% Independiente</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">Tus ventas son solo tuyas</p>
+              </div>
+            </div>
+
+            {/* Testimonio y Prueba Social */}
+            <div className="bg-white/70 backdrop-blur-sm border border-gray-100 p-4 rounded-2xl flex items-center gap-4">
+              <div className="flex -space-x-2">
+                <span className="w-9 h-9 rounded-full bg-pink-500 text-white font-bold text-xs flex items-center justify-center border-2 border-white shadow-xs">👩</span>
+                <span className="w-9 h-9 rounded-full bg-purple-500 text-white font-bold text-xs flex items-center justify-center border-2 border-white shadow-xs">👨</span>
+                <span className="w-9 h-9 rounded-full bg-blue-500 text-white font-bold text-xs flex items-center justify-center border-2 border-white shadow-xs">👱‍♀️</span>
+              </div>
+              <div className="text-xs">
+                <p className="font-black text-gray-900 flex items-center gap-1">
+                  ⭐⭐⭐⭐⭐ <span className="text-gray-400 font-medium">| +500 tiendas activas</span>
+                </p>
+                <p className="text-gray-500 mt-0.5">"La forma más rápida y profesional de vender en Venezuela."</p>
+              </div>
+            </div>
+
+          </div>
+
+          {/* ========================================================
+              COLUMNA DERECHA: Formulario Pro de Registro
+          ======================================================== */}
+          <div className="lg:col-span-6">
+            <div className="bg-white rounded-[2.5rem] p-6 sm:p-10 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.06)] border border-pink-100/70 relative">
+              
+              <div className="mb-8">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-pink-50 text-pink-600 text-[10px] font-black uppercase tracking-wider mb-3">
+                  🚀 Registro Inmediato
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight">
+                  Abre tu Tienda Gratis
+                </h2>
+                <p className="text-gray-500 text-xs sm:text-sm mt-1">
+                  Completa estos 4 datos y empieza a vender hoy mismo.
+                </p>
+              </div>
+
+              <form onSubmit={handleRegister} className="space-y-5">
+                
+                {/* 1. NOMBRE DE LA MARCA */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5 ml-1">
+                    1. Nombre de tu marca o tienda
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-base pointer-events-none">
+                      🏪
+                    </span>
+                    <input 
+                      type="text" 
+                      required
+                      value={formData.storeName}
+                      onChange={handleNameChange}
+                      placeholder="Ej: Moda & Estilo Caracas" 
+                      className="w-full bg-gray-50/70 border border-gray-200 rounded-2xl pl-11 pr-4 py-3.5 text-sm sm:text-base outline-none focus:bg-white focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 font-bold text-gray-900 transition-all placeholder:font-normal placeholder:text-gray-400"
+                    />
+                  </div>
+                </div>
+
+                {/* 2. ENLACE PERSONALIZADO */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5 ml-1">
+                    <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                      2. Tu Enlace Web Oficial
+                    </label>
+                    {urlStatus === "available" && (
+                      <span className="text-emerald-600 text-[11px] font-black flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        ✓ ¡Disponible!
+                      </span>
+                    )}
+                    {urlStatus === "taken" && (
+                      <span className="text-red-500 text-[11px] font-black flex items-center gap-1 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
+                        ✗ No disponible
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-stretch rounded-2xl overflow-hidden border border-gray-200 focus-within:border-pink-500 focus-within:ring-4 focus-within:ring-pink-500/10 transition-all">
+                    <span className="bg-gray-100/90 text-gray-500 text-xs sm:text-sm font-bold px-3.5 sm:px-4 py-3.5 flex items-center border-r border-gray-200 select-none">
+                      tienda/
+                    </span>
+                    <input 
+                      type="text" 
+                      required
+                      value={formData.storeUrl}
+                      onChange={(e) => setFormData({ ...formData, storeUrl: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, "") })}
+                      placeholder="tu-marca" 
+                      className="w-full bg-gray-50/70 px-3.5 sm:px-4 py-3.5 text-sm sm:text-base outline-none font-bold text-pink-600 focus:bg-white transition-all placeholder:font-normal placeholder:text-gray-400"
+                    />
+                    <div className="px-3 flex items-center bg-gray-50/70">
+                      {urlStatus === "checking" && (
+                        <div className="w-4 h-4 border-2 border-gray-300 border-t-pink-500 rounded-full animate-spin"></div>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-1.5 ml-1">
+                    Este será el link que compartirás con tus clientes en Instagram y WhatsApp.
+                  </p>
+                </div>
+
+                <div className="border-t border-gray-100 my-2"></div>
+
+                {/* 3. CORREO ELECTRÓNICO */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5 ml-1">
+                    <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                      3. Correo de Acceso (Administrador)
+                    </label>
+                    {emailStatus === "available" && (
+                      <span className="text-emerald-600 text-[11px] font-black flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        ✓ Correo listo
+                      </span>
+                    )}
+                    {emailStatus === "taken" && (
+                      <span className="text-red-500 text-[11px] font-black flex items-center gap-1 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
+                        ✗ Ya registrado
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-base pointer-events-none">
+                      ✉️
+                    </span>
+                    <input 
+                      type="email" 
+                      required
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      placeholder="admin@tunegocio.com" 
+                      className="w-full bg-gray-50/70 border border-gray-200 rounded-2xl pl-11 pr-10 py-3.5 text-sm sm:text-base outline-none focus:bg-white focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 font-medium text-gray-900 transition-all placeholder:font-normal placeholder:text-gray-400"
+                    />
+                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2">
+                      {emailStatus === "checking" && (
+                        <div className="w-4 h-4 border-2 border-gray-300 border-t-pink-500 rounded-full animate-spin"></div>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-1 ml-1">
+                    🔒 Por seguridad, este correo será tu identificador único de cuenta.
+                  </p>
+                </div>
+
+                {/* 4. CONTRASEÑA */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5 ml-1">
+                    <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                      4. Contraseña Segura
+                    </label>
+                    {strength.label && (
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                        formData.password.length >= 8 ? "bg-emerald-50 text-emerald-700" :
+                        formData.password.length >= 6 ? "bg-yellow-50 text-yellow-700" : "bg-red-50 text-red-700"
+                      }`}>
+                        {strength.label}
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-base pointer-events-none">
+                      🔒
+                    </span>
+                    <input 
+                      type={showPassword ? "text" : "password"} 
+                      required
+                      minLength={6}
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      placeholder="Mínimo 6 caracteres" 
+                      className="w-full bg-gray-50/70 border border-gray-200 rounded-2xl pl-11 pr-12 py-3.5 text-sm sm:text-base outline-none focus:bg-white focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 font-medium text-gray-900 transition-all placeholder:font-normal placeholder:text-gray-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 text-sm p-1 transition-colors"
+                      aria-label="Mostrar contraseña"
+                    >
+                      {showPassword ? "🙈" : "👁️"}
+                    </button>
+                  </div>
+
+                  {/* Barra indicadora de fortaleza */}
+                  {formData.password.length > 0 && (
+                    <div className="w-full bg-gray-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                      <div className={`h-full ${strength.color} transition-all duration-300`} style={{ width: strength.width }}></div>
+                    </div>
+                  )}
+                </div>
+
+                {/* BOTÓN DE CREAR TIENDA */}
+                <button 
+                  type="submit"
+                  disabled={loading || urlStatus === "taken" || emailStatus === "taken"}
+                  className="w-full bg-gradient-to-r from-pink-500 via-rose-500 to-pink-600 hover:from-pink-600 hover:to-rose-700 text-white font-black py-4 sm:py-4.5 rounded-2xl mt-4 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_12px_30px_-5px_rgba(236,72,153,0.4)] hover:scale-[1.01] active:scale-[0.98] flex items-center justify-center gap-2 text-sm sm:text-base cursor-pointer tracking-wider uppercase"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Creando tu tienda...</span>
+                    </>
+                  ) : (
+                    <span>🚀 Crear mi tienda ahora</span>
+                  )}
+                </button>
+              </form>
+
+              {/* Beneficios de confianza debajo del botón */}
+              <div className="grid grid-cols-3 gap-2 mt-6 pt-5 border-t border-gray-100 text-center">
+                <div className="text-[11px] text-gray-500 font-semibold">
+                  <span className="block text-base mb-0.5">⚡</span>
+                  Activa al instante
+                </div>
+                <div className="text-[11px] text-gray-500 font-semibold">
+                  <span className="block text-base mb-0.5">🛡️</span>
+                  Sin costos ocultos
+                </div>
+                <div className="text-[11px] text-gray-500 font-semibold">
+                  <span className="block text-base mb-0.5">💳</span>
+                  Sin tarjeta de crédito
+                </div>
+              </div>
+
+              {/* Enlace al login */}
+              <p className="text-center text-xs sm:text-sm text-gray-500 mt-6">
+                ¿Ya tienes una tienda registrada?{" "}
+                <button 
+                  onClick={() => navigate('/login')} 
+                  className="text-pink-600 font-black hover:underline cursor-pointer"
+                >
+                  Inicia sesión aquí
+                </button>
+              </p>
+            </div>
+          </div>
+
+        </div>
+      </main>
+
+      {/* FOOTER LIGERO */}
+      <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400">
+        <p>© {new Date().getFullYear()} {globalBranding?.companyName || "Venezuela Multi-Hilos"}. Todos los derechos reservados.</p>
+      </footer>
     </div>
   );
 }
