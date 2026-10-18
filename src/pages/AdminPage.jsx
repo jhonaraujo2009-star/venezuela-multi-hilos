@@ -20,6 +20,7 @@ import AdminLogistics from "../components/admin/AdminLogistics";
 import AdminStatistics from "../components/admin/AdminStatistics";
 import AdminPOS from "../components/admin/AdminPOS"; // 🌟 Importamos el nuevo POS
 import AdminSalesHistory from "../components/admin/AdminSalesHistory"; // 🌟 Importamos el nuevo Historial de Ventas
+import AdminSecurity from "../components/admin/AdminSecurity"; // 🌟 Nueva sección de Seguridad
 import { useOrderNotifications } from "../hooks/useOrderNotifications"; // 🌟 Notificaciones push en móvil
 
 export default function AdminPage() {
@@ -45,6 +46,7 @@ export default function AdminPage() {
     { path: `/${storeId}/admin/inbox`, label: "📦 Pedidos por Confirmar" }, // 🌟 Renombrado Inbox
     { path: `/${storeId}/admin/logistica`, label: "🚚 Logística y Cupones" },
     { path: `/${storeId}/admin/pagos`, label: "🏦 Pagos" },
+    { path: `/${storeId}/admin/seguridad`, label: "🛡️ Seguridad" },
   ];
 
   const handleLogout = async () => {
@@ -178,6 +180,7 @@ export default function AdminPage() {
             <Route path="inbox" element={<AdminInbox />} />
             <Route path="logistica" element={<AdminLogistics />} />
             <Route path="pagos" element={<AdminPayments />} />
+            <Route path="seguridad" element={<AdminSecurity />} />
           </Routes>
         </div>
       </main>

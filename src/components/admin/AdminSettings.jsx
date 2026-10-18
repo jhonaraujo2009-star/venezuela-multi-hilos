@@ -4,6 +4,7 @@ import { useApp } from "../../context/AppContext";
 import toast from "react-hot-toast";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
+import { Link } from "react-router-dom";
 
 export default function AdminSettings() {
   const { settings, storeData } = useApp(); 
@@ -386,6 +387,26 @@ export default function AdminSettings() {
           </label>
 
         </div>
+      </div>
+
+      {/* 🌟 SEGURIDAD Y ACCESO DE LA CUENTA */}
+      <div className="bg-white/90 backdrop-blur-xl rounded-[2.5rem] p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl shrink-0">
+            🛡️
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-gray-800">Seguridad de la Cuenta</h3>
+            <p className="text-xs text-gray-500">Mi correo, contraseña y acceso independiente</p>
+          </div>
+        </div>
+        <Link
+          to={`/${storeData?.id || ""}/admin/seguridad`}
+          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-wider text-white shadow-md hover:scale-105 active:scale-95 transition-all whitespace-nowrap"
+          style={{ background: form.primaryColor || '#ec4899' }}
+        >
+          Gestionar Seguridad 🔐
+        </Link>
       </div>
 
       <button onClick={handleSave} disabled={saving} className="w-full py-5 rounded-[2rem] text-white font-black uppercase tracking-[0.3em] shadow-[0_10px_40px_rgba(236,72,153,0.3)] hover:scale-[1.02] active:scale-95 transition-all" style={{ background: form.primaryColor || '#ec4899' }}>
