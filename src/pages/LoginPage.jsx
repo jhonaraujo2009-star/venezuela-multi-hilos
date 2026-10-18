@@ -336,12 +336,17 @@ export default function LoginPage() {
                 className="h-full w-auto max-w-[190px] object-contain rounded-lg"
               />
             ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">✨</span>
-                <span className="text-gray-900 font-black text-xl tracking-tight">
-                  {globalBranding?.companyName || "Venezuela Multi-Hilos"}
-                </span>
-              </div>
+              <span 
+                className="text-xl sm:text-2xl font-black tracking-tighter uppercase text-transparent bg-clip-text select-none pointer-events-none"
+                style={{
+                  backgroundImage: "linear-gradient(to right, #462523 0%, #cb9b51 22%, #f6e27a 45%, #ffffff 50%, #f6e27a 55%, #cb9b51 78%, #462523 100%)",
+                  filter: "drop-shadow(0px 2px 2px rgba(0,0,0,0.3))",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent"
+                }}
+              >
+                {globalBranding?.companyName || "VENEZUELA MULTI-HILOS"}
+              </span>
             )}
           </div>
 
@@ -406,10 +411,17 @@ export default function LoginPage() {
               className="h-12 max-w-[200px] object-contain rounded-2xl bg-white p-2 shadow-md border border-gray-100"
             />
           ) : (
-            <div className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-2xl shadow-sm border border-gray-100">
-              <span className="text-2xl">✨</span>
-              <span className="font-black text-gray-900 text-lg">
-                {globalBranding?.companyName || "Panel Vendedores"}
+            <div className="flex items-center gap-2 bg-white px-5 py-3 rounded-2xl shadow-sm border border-gray-100">
+              <span 
+                className="text-xl font-black tracking-tighter uppercase text-transparent bg-clip-text select-none"
+                style={{
+                  backgroundImage: "linear-gradient(to right, #462523 0%, #cb9b51 22%, #f6e27a 45%, #ffffff 50%, #f6e27a 55%, #cb9b51 78%, #462523 100%)",
+                  filter: "drop-shadow(0px 1px 2px rgba(0,0,0,0.2))",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent"
+                }}
+              >
+                {globalBranding?.companyName || "VENEZUELA MULTI-HILOS"}
               </span>
             </div>
           )}

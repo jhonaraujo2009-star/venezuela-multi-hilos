@@ -203,17 +203,20 @@ export default function RegisterStorePage() {
               <img 
                 src={globalBranding.companyLogo} 
                 alt={globalBranding?.companyName || "Logo"} 
-                className="h-10 w-auto max-w-[160px] object-contain rounded-xl"
+                className="h-10 sm:h-12 w-auto max-w-[200px] object-contain drop-shadow-sm pointer-events-none"
               />
             ) : (
-              <div className="flex items-center gap-2">
-                <span className="w-10 h-10 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-500 text-white flex items-center justify-center font-black text-xl shadow-md shadow-pink-500/20">
-                  {globalBranding?.companyName ? globalBranding.companyName.charAt(0).toUpperCase() : "🏪"}
-                </span>
-                <span className="font-black text-gray-900 text-lg sm:text-xl tracking-tight">
-                  {globalBranding?.companyName || "Venezuela Multi-Hilos"}
-                </span>
-              </div>
+              <span 
+                className="text-2xl sm:text-3xl font-black tracking-tighter uppercase text-transparent bg-clip-text select-none pointer-events-none"
+                style={{
+                  backgroundImage: "linear-gradient(to right, #462523 0%, #cb9b51 22%, #f6e27a 45%, #ffffff 50%, #f6e27a 55%, #cb9b51 78%, #462523 100%)",
+                  filter: "drop-shadow(0px 2px 2px rgba(0,0,0,0.3))",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent"
+                }}
+              >
+                {globalBranding?.companyName || "VENEZUELA MULTI-HILOS"}
+              </span>
             )}
           </div>
 
@@ -351,21 +354,6 @@ export default function RegisterStorePage() {
                 <div className="text-xl mb-1">🛡️</div>
                 <p className="text-xs font-black text-gray-900">100% Independiente</p>
                 <p className="text-[11px] text-gray-500 mt-0.5">Tus ventas son solo tuyas</p>
-              </div>
-            </div>
-
-            {/* Testimonio y Prueba Social */}
-            <div className="bg-white/70 backdrop-blur-sm border border-gray-100 p-4 rounded-2xl flex items-center gap-4">
-              <div className="flex -space-x-2">
-                <span className="w-9 h-9 rounded-full bg-pink-500 text-white font-bold text-xs flex items-center justify-center border-2 border-white shadow-xs">👩</span>
-                <span className="w-9 h-9 rounded-full bg-purple-500 text-white font-bold text-xs flex items-center justify-center border-2 border-white shadow-xs">👨</span>
-                <span className="w-9 h-9 rounded-full bg-blue-500 text-white font-bold text-xs flex items-center justify-center border-2 border-white shadow-xs">👱‍♀️</span>
-              </div>
-              <div className="text-xs">
-                <p className="font-black text-gray-900 flex items-center gap-1">
-                  ⭐⭐⭐⭐⭐ <span className="text-gray-400 font-medium">| +500 tiendas activas</span>
-                </p>
-                <p className="text-gray-500 mt-0.5">"La forma más rápida y profesional de vender en Venezuela."</p>
               </div>
             </div>
 
