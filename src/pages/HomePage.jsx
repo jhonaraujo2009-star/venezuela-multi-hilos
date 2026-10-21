@@ -314,7 +314,15 @@ export default function HomePage() {
           setBestSellers(bsList);
         }
         if (currentSections.offers) {
-          const offersList = [...allActiveProducts].sort(() => 0.5 - Math.random()).slice(0, 12);
+          const actualOffers = allActiveProducts.filter(p => {
+            const oldP = Number(p.oldPrice) || 0;
+            const curP = Number(p.price) || 0;
+            const extraD = Number(p.discount) || Number(p.offerDiscount) || 0;
+            return oldP > curP || extraD > 0 || (p.offerEndsAt && p.offerEndsAt > Date.now());
+          });
+          const offersList = actualOffers.length > 0 
+            ? actualOffers.slice(0, 12) 
+            : [...allActiveProducts].sort(() => 0.5 - Math.random()).slice(0, 12);
           setOffersProducts(offersList);
         }
         if (currentSections.dailyTop) {

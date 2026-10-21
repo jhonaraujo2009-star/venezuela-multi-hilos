@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { storeId } = req.query;
+  const { storeId, product } = req.query;
 
   // Validar que storeId sea alfanumérico (evitar path traversal / inyección)
   if (!storeId || !/^[a-z0-9_-]{1,50}$/i.test(storeId)) {
@@ -37,7 +37,10 @@ export default async function handler(req, res) {
 
   const protocol = req.headers["x-forwarded-proto"] || "https";
   const host = req.headers["host"];
-  const storeUrl = `${protocol}://${host}/${storeId}`;
+  const targetRedirect = product
+    ? `/${storeId}?product=${encodeURIComponent(product)}`
+    : `/${storeId}`;
+  const storeUrl = `${protocol}://${host}${targetRedirect}`;
 
   // ---------- VALORES POR DEFECTO ----------
   let storeName = "Nuestra Tienda";
@@ -59,6 +62,22 @@ export default async function handler(req, res) {
       const appLogo192 = f?.appLogos?.mapValue?.fields?.icon192?.stringValue || "";
       if (profileImg)      storeImage = profileImg;
       else if (appLogo192) storeImage = appLogo192;
+    }
+
+    if (product && typeof product === "string") {
+      const prodRes = await fetch(
+        `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT}/databases/(default)/documents/products/${product}?key=${FIREBASE_API_KEY}`
+      );
+      if (prodRes.ok) {
+        const prodDoc = await prodRes.json();
+        const pf = prodDoc.fields || {};
+        const pName = getStr(pf, "name", "");
+        const pDesc = getStr(pf, "description", "");
+        const pImg = getStr(pf, "image", "") || (pf?.images?.arrayValue?.values?.[0]?.stringValue || "");
+        if (pName) storeName = `${pName} | ${storeName}`;
+        if (pDesc) storeDescription = pDesc;
+        if (pImg) storeImage = pImg;
+      }
     }
   } catch (err) {
     console.error("[store-og] Error al consultar Firestore:", err.message);
@@ -93,10 +112,10 @@ export default async function handler(req, res) {
   <meta name="twitter:image"       content="${safeImage}" />
 
   <!-- Redirige a la tienda real automáticamente (humanos) -->
-  <meta http-equiv="refresh" content="0;url=/${storeId}" />
+  <meta http-equiv="refresh" content="0;url=${targetRedirect}" />
 </head>
 <body>
-  <p>Redirigiendo a <a href="/${storeId}">${safeTitle}</a>...</p>
+  <p>Redirigiendo a <a href="${targetRedirect}">${safeTitle}</a>...</p>
 </body>
 </html>`;
 

@@ -69,61 +69,73 @@ export default function AdminInbox() {
 
     try {
       await runTransaction(db, async (transaction) => {
-        // 1. Leer TODOS los productos a descontar y Configuraciones Globales
-        const itemsToUpdate = [];
+        // 1. Agrupar items por productId para no sobreescribir variantes ni repetir llamadas
+        const productItemsMap = new Map();
         for (const item of (order.items || order.cart || [])) {
           const pId = item.productId || item.id; 
           if (!pId) continue;
+          if (!productItemsMap.has(pId)) productItemsMap.set(pId, []);
+          productItemsMap.get(pId).push(item);
+        }
 
+        // Leer cada producto una sola vez en la transacción
+        const productsToUpdate = [];
+        for (const [pId, itemsList] of productItemsMap.entries()) {
           const pRef = doc(db, "products", pId);
           const pDoc = await transaction.get(pRef);
-          
           if (pDoc.exists()) {
-             itemsToUpdate.push({ doc: pDoc, ref: pRef, item: item });
+            productsToUpdate.push({ ref: pRef, doc: pDoc, items: itemsList });
           }
         }
 
         // Leer configuración global de comisiones ANTES de escribir
         const globalRef = doc(db, "settings", "global");
         const globalDoc = await transaction.get(globalRef);
-        const isCommissionActive = globalDoc.exists() ? globalDoc.data().isCommissionActive : false;
+        const isCommissionActive = globalDoc.exists() ? Boolean(globalDoc.data().isCommissionActive) : false;
 
-        // 2. Ejecutar Resta de Inventario
-        for (const producto of itemsToUpdate) {
-          const currentData = producto.doc.data();
-          const pQty = producto.item.quantity || producto.item.qty || 1;
-          let updateData = {};
+        // 2. Ejecutar Resta de Inventario acumulada
+        for (const { ref, doc: pDoc, items: itemsList } of productsToUpdate) {
+          const currentData = pDoc.data();
+          let variants = currentData.variants && currentData.variants.length > 0 
+            ? currentData.variants.map(v => ({ ...v })) 
+            : null;
+          let totalStock = Number(currentData.totalStock || 0);
+          let salesCount = Number(currentData.salesCount || 0);
 
-          if (currentData.variants && currentData.variants.length > 0 && producto.item.variant) {
-            const labelABuscar = typeof producto.item.variant === 'object' ? producto.item.variant.label : producto.item.variant;
+          for (const item of itemsList) {
+            const pQty = Number(item.quantity || item.qty || 1);
+            salesCount += pQty;
 
-            const newVariants = currentData.variants.map(v => {
-              if (v.label === labelABuscar || v.id === producto.item.variant?.id) {
-                return { ...v, stock: Math.max(0, (v.stock || 0) - pQty) };
-              }
-              return v;
-            });
-            
-            updateData = { 
-              variants: newVariants,
-              totalStock: newVariants.reduce((acc, v) => acc + (v.stock || 0), 0) 
-            };
-          } else {
-            updateData = { 
-              totalStock: Math.max(0, (currentData.totalStock || 0) - pQty) 
-            };
+            if (variants && item.variant) {
+              const labelABuscar = typeof item.variant === 'object' ? item.variant.label : item.variant;
+              variants = variants.map(v => {
+                if (v.label === labelABuscar || v.id === item.variant?.id) {
+                  return { ...v, stock: Math.max(0, (Number(v.stock) || 0) - pQty) };
+                }
+                return v;
+              });
+            } else {
+              totalStock = Math.max(0, totalStock - pQty);
+            }
           }
 
-          updateData.salesCount = (currentData.salesCount || 0) + pQty;
-          transaction.update(producto.ref, updateData);
+          const updateData = { salesCount };
+          if (variants) {
+            updateData.variants = variants;
+            updateData.totalStock = variants.reduce((acc, v) => acc + (Number(v.stock) || 0), 0);
+          } else {
+            updateData.totalStock = totalStock;
+          }
+
+          transaction.update(ref, updateData);
         }
         
-        // 3. COMISIONES SUPER ADMIN (Se calculan para toda venta confirmada según la tasa de la tienda)
+        // 3. COMISIONES SUPER ADMIN (Se calculan respetando la llave maestra global y tasa de tienda)
         const commissionRate = Number(storeData.comision_porcentaje ?? 5);
         const orderTotal = Number(order.totalAmount ?? order.total ?? 0);
         let comisionASumar = 0;
 
-        if (commissionRate > 0) {
+        if (isCommissionActive && commissionRate > 0) {
           if (orderTotal > 0) {
             comisionASumar = Number(((orderTotal * commissionRate) / 100).toFixed(2));
           } else {

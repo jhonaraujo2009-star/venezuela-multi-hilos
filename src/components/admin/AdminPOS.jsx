@@ -154,29 +154,36 @@ export default function AdminPOS() {
         createdAt: serverTimestamp(),
       });
 
-      // 2. Restar Inventario
+      // 2. Restar Inventario (agrupado por producto para evitar colisiones y escrituras duplicadas)
+      const cartByProduct = new Map();
       for (const item of cart) {
-        const prodRef = doc(db, "products", item.productId);
-        
-        if (item.variant) {
-          // Si tiene variante, leer la data del producto fresca o confiar en el estado, 
-          // pero escribiendo un payload donde el array de variantes esté actualizado.
-          // Para ser 100% seguros y limpios en Firestore con arrays complejos, lo mejor es actualizar el objeto dentro del array
-          // Dado que Firestore no permite un `increment` fácil dentro de un array de objetos sin leerlo primero, 
-          // usaremos la metadata de products local (que está up to date gracias a onSnapshot)
-          const productInState = products.find(p => p.id === item.productId);
-          if (productInState && productInState.variants) {
-             const updatedVariants = productInState.variants.map(v => {
-                if (v.id === item.variant.id) {
-                   return { ...v, stock: Math.max(0, v.stock - item.quantity) };
+        if (!cartByProduct.has(item.productId)) {
+          cartByProduct.set(item.productId, []);
+        }
+        cartByProduct.get(item.productId).push(item);
+      }
+
+      for (const [productId, itemsList] of cartByProduct.entries()) {
+        const prodRef = doc(db, "products", productId);
+        const productInState = products.find(p => p.id === productId);
+
+        if (productInState && productInState.variants && productInState.variants.length > 0) {
+          let updatedVariants = productInState.variants.map(v => ({ ...v }));
+          for (const item of itemsList) {
+            if (item.variant) {
+              updatedVariants = updatedVariants.map(v => {
+                if (v.id === item.variant.id || v.label === (item.variant.label || item.variant)) {
+                  return { ...v, stock: Math.max(0, (v.stock || 0) - item.quantity) };
                 }
                 return v;
-             });
-             batch.update(prodRef, { variants: updatedVariants });
+              });
+            }
           }
+          const newTotal = updatedVariants.reduce((s, v) => s + (v.stock || 0), 0);
+          batch.update(prodRef, { variants: updatedVariants, totalStock: newTotal });
         } else {
-          // Producto simple, restamos el stock natural
-          batch.update(prodRef, { totalStock: increment(-item.quantity) });
+          const totalQty = itemsList.reduce((s, i) => s + (Number(i.quantity) || 1), 0);
+          batch.update(prodRef, { totalStock: increment(-totalQty) });
         }
       }
 

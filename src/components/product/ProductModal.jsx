@@ -205,7 +205,9 @@ export default function ProductModal({ product, onClose }) {
     const targetStoreId = storeData?.id || currentProduct?.storeId || '';
     const targetStoreName = storeData?.nombre || currentProduct?.storeName || 'la tienda';
     const text = `¡Mira lo que encontré en ${targetStoreName}! 😍\n*${currentProduct?.name}* por solo *$${finalPrice.toFixed(2)}*\n\nMíralo aquí:`;
-    const url = `${window.location.origin}/api/store-og?storeId=${targetStoreId}`; 
+    const url = currentProduct?.id
+      ? `${window.location.origin}/api/store-og?storeId=${targetStoreId}&product=${encodeURIComponent(currentProduct.id)}`
+      : `${window.location.origin}/api/store-og?storeId=${targetStoreId}`; 
     const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text + "\n" + url)}`;
     window.open(whatsappUrl, '_blank');
   };

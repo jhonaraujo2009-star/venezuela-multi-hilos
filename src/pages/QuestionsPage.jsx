@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, where } from "firebase/firestore";
 import { db } from "../config/firebase";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useApp } from "../context/AppContext"; // 🌟 INYECTAMOS LA TIENDA
 
@@ -12,10 +12,12 @@ export default function QuestionsPage() {
   const [submitting, setSubmitting] = useState(false);
   
   const navigate = useNavigate();
+  const { storeId: routeStoreId } = useParams();
   const { storeData } = useApp(); // 🌟 SABER DE QUÉ TIENDA ES LA PREGUNTA
+  const effectiveStoreId = storeData?.id || routeStoreId;
 
   useEffect(() => {
-    if (!storeData?.id) return;
+    if (!effectiveStoreId) return;
 
     const fetchQ = async () => {
       // 🌟 MAGIA: Traer solo las preguntas públicas de ESTA tienda (ordenadas en memoria para no requerir índice compuesto)
@@ -24,7 +26,7 @@ export default function QuestionsPage() {
           query(
             collection(db, "questions"), 
             where("isPublic", "==", true),
-            where("storeId", "==", storeData.id)
+            where("storeId", "==", effectiveStoreId)
           )
         );
         const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -46,7 +48,7 @@ export default function QuestionsPage() {
       toast.error("Completa todos los campos");
       return;
     }
-    if (!storeData?.id) {
+    if (!effectiveStoreId) {
       toast.error("Error: No se detectó la tienda.");
       return;
     }
@@ -59,7 +61,7 @@ export default function QuestionsPage() {
         createdAt: serverTimestamp(),
         adminReply: null,
         isPublic: false,
-        storeId: storeData.id // 🌟 MAGIA: Guardar la pregunta con la etiqueta del dueño
+        storeId: effectiveStoreId // 🌟 MAGIA: Guardar la pregunta con la etiqueta del dueño
       });
       setPhone("");
       setText("");
@@ -75,7 +77,7 @@ export default function QuestionsPage() {
     <div className="min-h-screen bg-white max-w-md mx-auto px-4 py-8">
       <div className="flex items-center gap-3 mb-6">
         {/* 🌟 MAGIA: El botón de volver regresa a la tienda correcta */}
-        <button onClick={() => navigate(`/${storeData?.id || ""}`)} className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center">
+        <button onClick={() => navigate(`/${effectiveStoreId || ""}`)} className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center">
           ←
         </button>
         <h1 className="text-xl font-bold text-gray-900">💬 Zona de Preguntas</h1>

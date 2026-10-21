@@ -117,9 +117,22 @@ export default function FlashOffersPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
             {filteredOffers.map((p, idx) => {
               const pImg = p.image || p.images?.[0] || null;
-              // Simulamos precios anteriores para mostrar el descuento visualmente
               const currentPrice = Number(p.price || 0);
-              const originalPrice = currentPrice * 1.25; // Simular 20% off
+              const rawOldPrice = Number(p.oldPrice || 0);
+              const extraDiscountPerc = Number(p.discount) || Number(p.offerDiscount) || 0;
+
+              let originalPrice = rawOldPrice > currentPrice 
+                ? rawOldPrice 
+                : (extraDiscountPerc > 0 && extraDiscountPerc < 100 
+                  ? currentPrice / (1 - extraDiscountPerc / 100) 
+                  : currentPrice * 1.25);
+
+              let discountPerc = 0;
+              if (originalPrice > currentPrice && originalPrice > 0) {
+                discountPerc = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
+              } else if (extraDiscountPerc > 0) {
+                discountPerc = Math.round(extraDiscountPerc);
+              }
               
               return (
                 <div 
@@ -128,7 +141,7 @@ export default function FlashOffersPage() {
                   className="group bg-white rounded-lg p-3 hover:shadow-lg transition-all duration-300 cursor-pointer flex flex-col h-full relative border border-gray-200 overflow-hidden"
                 >
                   <div className="absolute top-2 left-2 z-10 bg-red-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">
-                    20% OFF
+                    {discountPerc > 0 ? `${discountPerc}% OFF` : "OFERTA"}
                   </div>
 
                   <div className="aspect-[1/1] bg-white relative overflow-hidden mb-3 flex items-center justify-center p-2">
