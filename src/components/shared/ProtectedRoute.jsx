@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Navigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import { SUPER_ADMIN_EMAIL } from "../../config/constants";
 
@@ -14,11 +14,13 @@ export default function ProtectedRoute({ children }) {
     const checkAccess = async () => {
       if (user && storeId) {
         try {
+          const currentEmail = user.email ? user.email.trim().toLowerCase() : "";
+
           // 👑 1. Si es Super Admin, tiene acceso total a cualquier tienda
           if (
-            user.email &&
+            currentEmail &&
             SUPER_ADMIN_EMAIL &&
-            user.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
+            currentEmail === SUPER_ADMIN_EMAIL.trim().toLowerCase()
           ) {
             setIsAuthorized(true);
             return;
@@ -29,14 +31,21 @@ export default function ProtectedRoute({ children }) {
 
           if (storeSnap.exists()) {
             const data = storeSnap.data();
-            // 2. Es el dueño si coincide su UID o su correo
-            const isOwner =
-              (data.ownerId && data.ownerId === user.uid) ||
-              (data.ownerEmail &&
-                user.email &&
-                data.ownerEmail.toLowerCase() === user.email.toLowerCase());
+            const storeOwnerEmail = data.ownerEmail ? data.ownerEmail.trim().toLowerCase() : "";
+
+            // 🔒 2. Regla estricta: Solo el correo registrado como dueño legítimo tiene acceso.
+            // Se elimina la brecha de comprobación por UID residual que permitía a otro correo entrar.
+            const isOwner = Boolean(currentEmail && storeOwnerEmail && currentEmail === storeOwnerEmail);
 
             if (isOwner) {
+              // Auto-sincronizar el ownerId con el UID del dueño actual para purgar cualquier UID de dueños anteriores
+              if (data.ownerId !== user.uid) {
+                try {
+                  await updateDoc(storeRef, { ownerId: user.uid });
+                } catch (syncErr) {
+                  console.warn("No se pudo sincronizar ownerId:", syncErr);
+                }
+              }
               setIsAuthorized(true);
               return;
             }

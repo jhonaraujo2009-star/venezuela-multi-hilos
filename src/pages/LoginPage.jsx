@@ -71,19 +71,31 @@ export default function LoginPage() {
         navigate("/super-admin");
       } else {
         const fetchMyStore = async () => {
-          let snap = await getDocs(
-            query(collection(db, "stores"), where("ownerId", "==", activeUser.uid))
-          );
-          if (snap.empty && activeUser.email) {
-            snap = await getDocs(
-              query(
-                collection(db, "stores"),
-                where("ownerEmail", "==", activeUser.email.toLowerCase())
-              )
-            );
+          const userEmail = activeUser.email ? activeUser.email.trim().toLowerCase() : "";
+          if (!userEmail) {
+            navigate("/");
+            return;
           }
+
+          // 🔒 Regla Estricta: 1 Correo = 1 Tienda Única (búsqueda exclusiva por ownerEmail)
+          const snap = await getDocs(
+            query(
+              collection(db, "stores"),
+              where("ownerEmail", "==", userEmail)
+            )
+          );
+
           if (!snap.empty) {
-            navigate(`/${snap.docs[0].id}/admin`);
+            const storeDoc = snap.docs[0];
+            // Auto-sincronizar ownerId con el UID del dueño actual si estaba desfasado
+            if (storeDoc.data().ownerId !== activeUser.uid) {
+              try {
+                await updateDoc(doc(db, "stores", storeDoc.id), { ownerId: activeUser.uid });
+              } catch (e) {
+                console.warn("Error sincronizando ownerId:", e);
+              }
+            }
+            navigate(`/${storeDoc.id}/admin`);
           } else {
             navigate("/");
           }
@@ -110,32 +122,38 @@ export default function LoginPage() {
       const isSuperAdmin =
         email.trim().toLowerCase() === SUPER_ADMIN_EMAIL?.trim().toLowerCase();
 
-      // Buscar la tienda por UID o correo
-      const q = query(collection(db, "stores"), where("ownerId", "==", userUid));
-      let querySnapshot = await getDocs(q);
-      if (querySnapshot.empty) {
-        const qEmail = query(
-          collection(db, "stores"),
-          where("ownerEmail", "==", email.trim().toLowerCase())
-        );
-        querySnapshot = await getDocs(qEmail);
-      }
+      const cleanEmail = email.trim().toLowerCase();
+
+      // 🔒 2. Búsqueda estricta por ownerEmail (1 Correo = 1 Tienda Única)
+      // Se elimina la búsqueda por ownerId que permitía a un usuario anterior ingresar por UID
+      const qEmail = query(
+        collection(db, "stores"),
+        where("ownerEmail", "==", cleanEmail)
+      );
+      const querySnapshot = await getDocs(qEmail);
 
       if (!querySnapshot.empty) {
         const storeDoc = querySnapshot.docs[0];
+        const storeData = storeDoc.data();
+        const storeRef = doc(db, "stores", storeDoc.id);
+
+        const updates = {
+          last_login: serverTimestamp(),
+        };
+
+        // Si el ownerId no corresponde al UID del usuario legítimo actual, se corrige inmediatamente
+        if (storeData.ownerId !== userUid) {
+          updates.ownerId = userUid;
+        }
 
         try {
           const ipResponse = await fetch("https://ipapi.co/json/");
           const ipData = await ipResponse.json();
-          const storeRef = doc(db, "stores", storeDoc.id);
-          await updateDoc(storeRef, {
-            last_login: serverTimestamp(),
-            ip_operacion: ipData.ip || "Desconocida",
-            pais_operacion: ipData.country_name || "Desconocido",
-          });
+          updates.ip_operacion = ipData.ip || "Desconocida";
+          updates.pais_operacion = ipData.country_name || "Desconocido";
+          await updateDoc(storeRef, updates);
         } catch (geoError) {
-          const storeRef = doc(db, "stores", storeDoc.id);
-          await updateDoc(storeRef, { last_login: serverTimestamp() });
+          await updateDoc(storeRef, updates);
         }
 
         if (isSuperAdmin) {
@@ -263,21 +281,22 @@ export default function LoginPage() {
           const isSuperAdmin =
             targetEmail === SUPER_ADMIN_EMAIL?.trim().toLowerCase();
 
-          const q = query(
+          // 🔒 Regla Estricta: 1 Correo = 1 Tienda Única (búsqueda exclusiva por ownerEmail)
+          const qEmail = query(
             collection(db, "stores"),
-            where("ownerId", "==", userUid)
+            where("ownerEmail", "==", targetEmail)
           );
-          let querySnapshot = await getDocs(q);
-          if (querySnapshot.empty) {
-            const qEmail = query(
-              collection(db, "stores"),
-              where("ownerEmail", "==", targetEmail)
-            );
-            querySnapshot = await getDocs(qEmail);
-          }
+          const querySnapshot = await getDocs(qEmail);
 
           if (!querySnapshot.empty) {
             const storeDoc = querySnapshot.docs[0];
+            const storeData = storeDoc.data();
+            // Auto-sincronizar ownerId con el UID del dueño actual
+            if (storeData.ownerId !== userUid) {
+              await updateDoc(doc(db, "stores", storeDoc.id), {
+                ownerId: userUid,
+              }).catch(err => console.warn("No se pudo actualizar ownerId tras reset:", err));
+            }
             navigate(`/${storeDoc.id}/admin`);
             return;
           } else if (isSuperAdmin) {

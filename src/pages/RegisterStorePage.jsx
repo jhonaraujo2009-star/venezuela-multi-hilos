@@ -99,7 +99,10 @@ export default function RegisterStorePage() {
       toast.error("La contraseña debe tener al menos 6 caracteres.");
       return;
     }
-    if (RESERVED_URLS.includes(formData.storeUrl.toLowerCase())) {
+    const cleanUrl = formData.storeUrl.trim().toLowerCase();
+    const cleanEmail = formData.email.trim().toLowerCase();
+
+    if (RESERVED_URLS.includes(cleanUrl)) {
       toast.error("Este enlace o nombre está reservado por el sistema.");
       return;
     }
@@ -114,6 +117,30 @@ export default function RegisterStorePage() {
 
     setLoading(true);
     try {
+      // 🔒 Regla Estricta: 1 Correo = 1 Tienda Única
+      // Verificación directa en Firestore antes de crear usuario o tienda
+      const existingEmailQuery = query(
+        collection(db, "stores"),
+        where("ownerEmail", "==", cleanEmail)
+      );
+      const existingEmailSnap = await getDocs(existingEmailQuery);
+      if (!existingEmailSnap.empty) {
+        setEmailStatus("taken");
+        toast.error("Este correo ya tiene una tienda asociada. Cada correo solo puede tener 1 única tienda.");
+        setLoading(false);
+        return;
+      }
+
+      // Verificación directa de disponibilidad de URL
+      const storeRef = doc(db, "stores", cleanUrl);
+      const storeSnap = await getDoc(storeRef);
+      if (storeSnap.exists()) {
+        setUrlStatus("taken");
+        toast.error("El enlace de la tienda ya está en uso. Por favor elige otro.");
+        setLoading(false);
+        return;
+      }
+
       // 🌟 FASE 1: RASTREO SILENCIOSO DE IP AL REGISTRARSE
       let ipOperacion = "Desconocida";
       let paisOperacion = "Desconocido";
@@ -126,13 +153,13 @@ export default function RegisterStorePage() {
         console.warn("No se pudo obtener la ubicación:", geoError);
       }
 
-      const userCred = await createUserWithEmailAndPassword(auth, formData.email.toLowerCase(), formData.password);
+      const userCred = await createUserWithEmailAndPassword(auth, cleanEmail, formData.password);
       const user = userCred.user;
 
-      await setDoc(doc(db, "stores", formData.storeUrl), {
-        nombre: formData.storeName,
+      await setDoc(doc(db, "stores", cleanUrl), {
+        nombre: formData.storeName.trim(),
         ownerId: user.uid,
-        ownerEmail: formData.email.toLowerCase(),
+        ownerEmail: cleanEmail,
         primaryColor: "#ec4899", 
         createdAt: serverTimestamp(),
         verification: { status: "none" }, 
@@ -151,15 +178,15 @@ export default function RegisterStorePage() {
       toast.success("¡Tu tienda ha sido creada con éxito! 🚀");
       
       // Interceptor para el Super Admin
-      if (formData.email.toLowerCase() === SUPER_ADMIN_EMAIL?.toLowerCase()) {
+      if (cleanEmail === SUPER_ADMIN_EMAIL?.toLowerCase()) {
         const choice = window.confirm("¡Bienvenido, Jefe! 👑\n\n¿Deseas entrar al PANEL DE CONTROL TOTAL (Súper Admin)?\n\n(Aceptar = Súper Admin / Cancelar = Administrar mi Tienda)");
         if (choice) {
           navigate("/super-admin");
         } else {
-          navigate(`/${formData.storeUrl}/admin`);
+          navigate(`/${cleanUrl}/admin`);
         }
       } else {
-        navigate(`/${formData.storeUrl}/admin`);
+        navigate(`/${cleanUrl}/admin`);
       }
 
     } catch (error) {
