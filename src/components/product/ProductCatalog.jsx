@@ -1,15 +1,108 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import ProductCard from "./ProductCard";
 import { useApp } from "../../context/AppContext"; 
 import { motion, AnimatePresence } from "framer-motion"; // 🌟 MAGIA: Importamos framer-motion para las animaciones Premium
 
+// ═══════════════════════════════════════════════════════════════════
+// 🌟 SISTEMA INTELIGENTE DE SUB-CATEGORÍAS 🌟
+// Agrupa automáticamente los productos de cada colección por palabra
+// clave en el nombre, creando un nivel intermedio de navegación
+// con vista previa visual tipo cuadrícula premium.
+// ═══════════════════════════════════════════════════════════════════
+
+const SUBCATEGORY_KEYWORDS = [
+  { key: 'collar', label: 'Collares', emoji: '📿' },
+  { key: 'gargantilla', label: 'Gargantillas', emoji: '💫' },
+  { key: 'cadena', label: 'Cadenas', emoji: '⛓️' },
+  { key: 'zarcillo', label: 'Zarcillos', emoji: '💎' },
+  { key: 'arete', label: 'Aretes', emoji: '✨' },
+  { key: 'anillo', label: 'Anillos', emoji: '💍' },
+  { key: 'sortija', label: 'Sortijas', emoji: '💍' },
+  { key: 'pulsera', label: 'Pulseras', emoji: '🔗' },
+  { key: 'brazalete', label: 'Brazaletes', emoji: '💪' },
+  { key: 'dije', label: 'Dijes', emoji: '🔮' },
+  { key: 'tobillera', label: 'Tobilleras', emoji: '🦶' },
+  { key: 'reloj', label: 'Relojes', emoji: '⌚' },
+  { key: 'piercing', label: 'Piercings', emoji: '🔩' },
+  { key: 'broche', label: 'Broches', emoji: '📌' },
+  { key: 'cintillo', label: 'Cintillos', emoji: '👑' },
+  { key: 'lente', label: 'Lentes', emoji: '🕶️' },
+  { key: 'gafa', label: 'Gafas', emoji: '🕶️' },
+  { key: 'sombrero', label: 'Sombreros', emoji: '🎩' },
+  { key: 'gorra', label: 'Gorras', emoji: '🧢' },
+  { key: 'bolso', label: 'Bolsos', emoji: '👜' },
+  { key: 'cartera', label: 'Carteras', emoji: '👛' },
+  { key: 'cinturon', label: 'Cinturones', emoji: '🔗' },
+  { key: 'bufanda', label: 'Bufandas', emoji: '🧣' },
+  { key: 'pantalon', label: 'Pantalones', emoji: '👖' },
+  { key: 'camisa', label: 'Camisas', emoji: '👔' },
+  { key: 'franela', label: 'Franelas', emoji: '👕' },
+  { key: 'zapato', label: 'Zapatos', emoji: '👟' },
+  { key: 'sandalia', label: 'Sandalias', emoji: '👡' },
+  { key: 'vestido', label: 'Vestidos', emoji: '👗' },
+  { key: 'falda', label: 'Faldas', emoji: '👗' },
+  { key: 'short', label: 'Shorts', emoji: '🩳' },
+  { key: 'conjunto', label: 'Conjuntos', emoji: '🎁' },
+  { key: 'set', label: 'Sets', emoji: '🎁' },
+];
+
+// 🌟 Detecta la sub-categoría de un producto basándose en su nombre
+const detectSubcategory = (productName) => {
+  const nameLower = (productName || '')
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  
+  for (const sub of SUBCATEGORY_KEYWORDS) {
+    const keyNormalized = sub.key
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    if (nameLower.includes(keyNormalized)) {
+      return sub;
+    }
+  }
+  return { key: 'otros', label: 'Otros', emoji: '🛍️' };
+};
+
+// 🌟 Obtiene la info de una sub-categoría por su clave
+const getSubcategoryInfo = (key) => {
+  if (key === 'otros') return { key: 'otros', label: 'Otros', emoji: '🛍️' };
+  const found = SUBCATEGORY_KEYWORDS.find(s => s.key === key);
+  return found || { key, label: key.charAt(0).toUpperCase() + key.slice(1), emoji: '🛍️' };
+};
+
+// 🌟 Agrupa productos de una colección en sub-categorías con vista previa
+const buildSubcategories = (sessionProducts) => {
+  const groups = {};
+  sessionProducts.forEach(p => {
+    const sub = detectSubcategory(p.name);
+    if (!groups[sub.key]) {
+      groups[sub.key] = { ...sub, products: [], preview: null };
+    }
+    groups[sub.key].products.push(p);
+    if (!groups[sub.key].preview) {
+      const img = p.image || p.imageUrl || (Array.isArray(p.images) && p.images[0]);
+      if (img) groups[sub.key].preview = img;
+    }
+  });
+  // Ordenar: más productos primero, "otros" siempre al final
+  return Object.values(groups).sort((a, b) => {
+    if (a.key === 'otros') return 1;
+    if (b.key === 'otros') return -1;
+    return b.products.length - a.products.length;
+  });
+};
+
+const SPECIAL_FILTERS = ['all', 'top', 'new', 'ofertas', 'wishlist'];
+
 export default function ProductCatalog({ activeFilter, onProductClick, onFilter }) {
   const [sessions, setSessions] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(8);
+  const [activeSubcategory, setActiveSubcategory] = useState(null);
   
   const { storeData } = useApp();
 
@@ -17,6 +110,11 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
 
   useEffect(() => { 
     setVisibleCount(8); 
+  }, [activeFilter, activeSubcategory]);
+
+  // 🌟 RESETEAR SUB-CATEGORÍA AL CAMBIAR DE COLECCIÓN O FILTRO
+  useEffect(() => {
+    setActiveSubcategory(null);
   }, [activeFilter]);
 
   useEffect(() => {
@@ -75,6 +173,18 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
       unsubProducts(); 
     };
   }, [storeData?.id]); 
+
+  // 🌟 CÓMPUTO DE SUB-CATEGORÍAS para la colección activa
+  const isSessionFilter = activeFilter && !SPECIAL_FILTERS.includes(activeFilter);
+  const subcategories = useMemo(() => {
+    if (!activeFilter || SPECIAL_FILTERS.includes(activeFilter) || activeSubcategory) return [];
+    const sessionProds = products.filter(p => p.sessionId === activeFilter);
+    if (sessionProds.length === 0) return [];
+    const subcats = buildSubcategories(sessionProds);
+    // Solo mostrar la cuadrícula de sub-categorías si hay 2+ grupos distintos
+    return subcats.length > 1 ? subcats : [];
+  }, [activeSubcategory, products, activeFilter]);
+  const showSubcategoryGrid = isSessionFilter && !activeSubcategory && subcategories.length > 0;
 
   if (loading) {
     return (
@@ -149,7 +259,15 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
     filtered = products.filter(p => likedItems[p.id]);
 
   } else if (activeFilter && activeFilter !== "all") {
-    filtered = products.filter(p => p.sessionId === activeFilter);
+    if (activeSubcategory) {
+      // 🌟 Filtrar por sub-categoría dentro de la colección
+      filtered = products.filter(p => 
+        p.sessionId === activeFilter && 
+        detectSubcategory(p.name).key === activeSubcategory
+      );
+    } else {
+      filtered = products.filter(p => p.sessionId === activeFilter);
+    }
   }
 
   // 🌟 DEFINIMOS LAS ANIMACIONES PARA LAS TARJETAS 🌟
@@ -230,6 +348,96 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
 
   const visibleProducts = filtered.slice(0, visibleCount);
 
+  // ═══════════════════════════════════════════════════════════════
+  // 🌟 VISTA DE SUB-CATEGORÍAS (Nivel intermedio premium)
+  // Cuando el usuario hace click en una colección y hay 2+ tipos
+  // de productos, mostramos una cuadrícula de sub-categorías
+  // con vista previa antes de mostrar los productos.
+  // ═══════════════════════════════════════════════════════════════
+  if (showSubcategoryGrid) {
+    const sessionName = sessions.find(s => s.id === activeFilter)?.name || 'Colección';
+    
+    return (
+      <div className="px-4 pb-24">
+        {/* 🌟 HEADER PREMIUM DE SUB-CATEGORÍAS */}
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex flex-col items-center py-10"
+        >
+          <h2 className="text-[10px] font-black tracking-[0.5em] text-gray-400 uppercase mb-2 text-center">
+            {sessionName}
+          </h2>
+          <h1 className="text-2xl font-serif italic text-gray-900 text-center mb-1">
+            Elige tu Categoría
+          </h1>
+          <p className="text-[10px] text-gray-400 font-medium tracking-wider uppercase mb-4">
+            {subcategories.reduce((sum, s) => sum + s.products.length, 0)} piezas en {subcategories.length} categorías
+          </p>
+          <button 
+            onClick={() => onFilter("all")} 
+            className="text-[9px] font-black text-pink-500 border-b border-pink-200 pb-1 uppercase tracking-widest hover:text-pink-600 transition-colors"
+          >
+            ← Regresar a Colecciones
+          </button>
+        </motion.div>
+
+        {/* 🌟 CUADRÍCULA PREMIUM DE SUB-CATEGORÍAS */}
+        <motion.div 
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-2 gap-4"
+        >
+          {subcategories.map((subcat) => (
+            <motion.div
+              variants={itemVariants}
+              key={subcat.key}
+              onClick={() => setActiveSubcategory(subcat.key)}
+              className="group relative aspect-[4/5] rounded-[2rem] overflow-hidden shadow-xl hover:shadow-2xl transition-all active:scale-95 cursor-pointer"
+            >
+              {/* 🌟 Imagen de Vista Previa */}
+              {subcat.preview ? (
+                <img 
+                  src={subcat.preview} 
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-[3s] group-hover:scale-110" 
+                  alt={subcat.label} 
+                  loading="lazy"
+                />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-pink-50 via-gray-100 to-purple-50 flex items-center justify-center">
+                  <span className="text-6xl opacity-30">{subcat.emoji}</span>
+                </div>
+              )}
+              
+              {/* 🌟 Gradiente Overlay Premium */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/5 group-hover:from-black/90 transition-all duration-500" />
+              
+              {/* 🌟 Badge de Cantidad */}
+              <div className="absolute top-3 right-3 z-10">
+                <span className="bg-white/90 backdrop-blur-md text-gray-800 text-[9px] font-black px-2.5 py-1 rounded-full shadow-lg border border-white/50 uppercase tracking-wider">
+                  {subcat.products.length}
+                </span>
+              </div>
+              
+              {/* 🌟 Contenido Central */}
+              <div className="absolute inset-0 flex flex-col items-center justify-end pb-5">
+                <span className="text-3xl mb-2 drop-shadow-lg transform group-hover:scale-110 group-hover:-translate-y-1 transition-all duration-300">{subcat.emoji}</span>
+                <h3 className="text-sm font-black text-white uppercase tracking-[0.2em] mb-1 drop-shadow-md">
+                  {subcat.label}
+                </h3>
+                <span className="text-[9px] text-white/60 font-bold uppercase tracking-widest">
+                  {subcat.products.length === 1 ? '1 pieza' : `${subcat.products.length} piezas`}
+                </span>
+              </div>
+            </motion.div>
+          ))}
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="px-4 pb-24">
       <div className="flex flex-col items-center py-12">
@@ -238,13 +446,20 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
            isNewArrivals ? "✨ Lo Nuevo" : 
            isOfertas ? "🔥 Ofertas Hot" : 
            isWishlist ? "💖 Mis Favoritos" : 
+           activeSubcategory ? `${getSubcategoryInfo(activeSubcategory).emoji} ${getSubcategoryInfo(activeSubcategory).label}` :
            "Colección"}
         </h2>
         <button 
-          onClick={() => onFilter("all")} 
+          onClick={() => {
+            if (activeSubcategory) {
+              setActiveSubcategory(null);
+            } else {
+              onFilter("all");
+            }
+          }} 
           className="mt-4 text-[9px] font-black text-pink-500 border-b border-pink-200 pb-1 uppercase tracking-widest hover:text-pink-600 transition-colors"
         >
-          ← Regresar a Tienda
+          ← {activeSubcategory ? `Regresar a ${sessions.find(s => s.id === activeFilter)?.name || 'Categorías'}` : 'Regresar a Tienda'}
         </button>
       </div>
 
@@ -273,7 +488,7 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
         ) : (
           /* 🌟 APLICAMOS ANIMACIÓN EN CASCADA A LA GRILLA DE PRODUCTOS */
           <motion.div 
-            key={activeFilter} // 🌟 Importante: El key cambia con el filtro, forzando la re-animación
+            key={`${activeFilter}-${activeSubcategory || 'all'}`} // 🌟 Importante: El key cambia con el filtro y subcategoría, forzando la re-animación
             variants={containerVariants}
             initial="hidden"
             animate="show"
