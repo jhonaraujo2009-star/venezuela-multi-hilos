@@ -138,6 +138,10 @@ const buildSubcategories = (sessionProducts) => {
     const topItemWithImage = sorted.find(p => !!getProductImage(p));
     if (topItemWithImage) {
       group.preview = getProductImage(topItemWithImage);
+    } else if (sorted[0]?.images?.[0]) {
+      group.preview = sorted[0].images[0];
+    } else if (sorted[0]?.image) {
+      group.preview = sorted[0].image;
     }
   });
 
@@ -451,55 +455,51 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
               variants={itemVariants}
               key={subcat.key}
               onClick={() => setActiveSubcategory(subcat.key)}
-              className="group relative aspect-[4/5] rounded-[2.5rem] overflow-hidden shadow-[0_8px_25px_rgba(0,0,0,0.06)] hover:shadow-[0_20px_40px_rgba(236,72,153,0.18)] transition-all duration-500 active:scale-95 cursor-pointer bg-gradient-to-b from-white via-stone-50/90 to-pink-50/40 border border-pink-100/70 hover:border-pink-300 flex flex-col justify-between p-3.5"
+              className="group relative aspect-[4/5] rounded-[2rem] overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-500 active:scale-95 cursor-pointer bg-neutral-900 border border-gray-100"
             >
-              {/* 🌟 Resplandor estético sutil para realzar la joya */}
-              <div className="absolute inset-0 bg-radial from-pink-100/50 via-transparent to-transparent opacity-70 pointer-events-none" />
+              {/* 🌟 1. IMAGEN DE FONDO REAL (El artículo más caro de la categoría) */}
+              {subcat.preview ? (
+                <img 
+                  src={subcat.preview} 
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+                  alt={subcat.label} 
+                />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-pink-500/20 via-purple-600/30 to-black flex items-center justify-center">
+                  <span className="text-6xl opacity-30">{subcat.emoji}</span>
+                </div>
+              )}
 
-              {/* 🌟 Badges Superiores */}
-              <div className="relative z-10 flex items-center justify-between w-full">
-                {/* Badge del Valor Más Caro (Referencia Top) */}
-                {subcat.topPrice > 0 ? (
-                  <span className="bg-white/95 backdrop-blur-md text-gray-900 text-[10px] font-black px-2.5 py-1 rounded-full shadow-sm border border-pink-100/80 flex items-center gap-1">
-                    <span className="text-amber-500">⭐</span> Top ${subcat.topPrice.toFixed(2)}
+              {/* 🌟 2. GRADIENTE DEGRADADO SUAVE (Transparente arriba para ver la joya nítida; oscuro abajo para leer el texto) */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent transition-opacity group-hover:from-black/90 pointer-events-none" />
+
+              {/* 🌟 3. BADGE SUPERIOR IZQUIERDO: EL VALOR MÁS CARO */}
+              {subcat.topPrice > 0 && (
+                <div className="absolute top-3 left-3 z-10">
+                  <span className="bg-black/65 backdrop-blur-md text-amber-300 text-[10px] font-black px-2.5 py-1 rounded-full border border-white/20 shadow-md flex items-center gap-1 uppercase tracking-wider">
+                    <span>⭐</span> Top ${subcat.topPrice.toFixed(2)}
                   </span>
-                ) : <div />}
+                </div>
+              )}
 
-                {/* Badge de Cantidad de Piezas */}
-                <span className="bg-pink-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-xs uppercase tracking-wider">
-                  {subcat.products.length}
+              {/* 🌟 4. BADGE SUPERIOR DERECHO: CANTIDAD DE PIEZAS */}
+              <div className="absolute top-3 right-3 z-10">
+                <span className="bg-pink-600/95 backdrop-blur-md text-white text-[9px] font-black px-2.5 py-1 rounded-full shadow-md uppercase tracking-wider border border-white/20">
+                  {subcat.products.length} {subcat.products.length === 1 ? 'pieza' : 'piezas'}
                 </span>
               </div>
 
-              {/* 🌟 Imagen de Referencia de Fondo (El collar / zarcillo más caro) */}
-              <div className="absolute inset-0 pt-7 pb-14 px-3 flex items-center justify-center overflow-hidden pointer-events-none">
-                {subcat.preview ? (
-                  <img 
-                    src={subcat.preview} 
-                    className="max-w-full max-h-full object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.12)] transition-transform duration-700 group-hover:scale-110" 
-                    alt={subcat.label} 
-                    loading="lazy"
-                  />
-                ) : (
-                  <span className="text-6xl opacity-15">{subcat.emoji}</span>
-                )}
-              </div>
-
-              {/* 🌟 Zona Inferior (Nombre de categoría y detalle de precio de referencia) */}
-              <div className="relative z-10 w-full pt-4 bg-gradient-to-t from-white via-white/95 to-transparent rounded-b-[2rem] flex flex-col items-center text-center -mx-3.5 -mb-3.5 px-3.5 pb-3">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <span className="text-sm drop-shadow-xs">{subcat.emoji}</span>
-                  <h3 className="text-xs sm:text-sm font-black text-gray-800 uppercase tracking-wider group-hover:text-pink-600 transition-colors">
-                    {subcat.label}
-                  </h3>
-                </div>
-                {subcat.topPrice > 0 ? (
-                  <span className="text-[10px] font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-full border border-pink-100/60 tracking-wider">
+              {/* 🌟 5. ZONA INFERIOR: NOMBRE DE LA CATEGORÍA Y PRECIO DE REFERENCIA */}
+              <div className="absolute inset-x-0 bottom-0 p-4 flex flex-col items-center text-center z-10">
+                <span className="text-2xl mb-1 drop-shadow-md transform group-hover:scale-110 transition-transform">
+                  {subcat.emoji}
+                </span>
+                <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-[0.15em] drop-shadow-md mb-0.5">
+                  {subcat.label}
+                </h3>
+                {subcat.topPrice > 0 && (
+                  <span className="text-[10px] text-white/90 font-bold uppercase tracking-widest drop-shadow-sm">
                     Desde ${subcat.topPrice.toFixed(2)}
-                  </span>
-                ) : (
-                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
-                    {subcat.products.length === 1 ? '1 pieza' : `${subcat.products.length} piezas`}
                   </span>
                 )}
               </div>
