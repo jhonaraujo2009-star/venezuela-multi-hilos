@@ -32,6 +32,11 @@ const SUBCATEGORY_KEYWORDS = [
   { key: 'piercing', label: 'Piercings', emoji: '🔩' },
   { key: 'broche', label: 'Broches', emoji: '📌' },
   { key: 'cintillo', label: 'Cintillos', emoji: '👑' },
+  { key: 'bandana', label: 'Bandanas', emoji: '🎀' },
+  { key: 'cola', label: 'Colas y Moños', emoji: '🎀' },
+  { key: 'moño', label: 'Colas y Moños', emoji: '🎀' },
+  { key: 'gancho', label: 'Ganchos', emoji: '✨' },
+  { key: 'pinza', label: 'Pinzas', emoji: '✨' },
   { key: 'lente', label: 'Lentes', emoji: '🕶️' },
   { key: 'gafa', label: 'Gafas', emoji: '🕶️' },
   { key: 'sombrero', label: 'Sombreros', emoji: '🎩' },
@@ -126,14 +131,13 @@ const buildSubcategories = (sessionProducts) => {
     // Ordenamos de mayor a menor precio
     const sorted = [...group.products].sort((a, b) => getProductPrice(b) - getProductPrice(a));
     
-    // Buscamos el artículo más costoso con imagen válida
+    // El valor más alto de la categoría
+    group.topPrice = sorted.length > 0 ? getProductPrice(sorted[0]) : 0;
+
+    // Buscamos el artículo más costoso con imagen válida para mostrar de fondo
     const topItemWithImage = sorted.find(p => !!getProductImage(p));
-    
     if (topItemWithImage) {
       group.preview = getProductImage(topItemWithImage);
-      group.topPrice = getProductPrice(topItemWithImage);
-    } else if (sorted.length > 0) {
-      group.topPrice = getProductPrice(sorted[0]);
     }
   });
 
@@ -447,55 +451,57 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
               variants={itemVariants}
               key={subcat.key}
               onClick={() => setActiveSubcategory(subcat.key)}
-              className="group relative aspect-[4/5] rounded-[2rem] overflow-hidden shadow-xl hover:shadow-2xl transition-all active:scale-95 cursor-pointer bg-neutral-900"
+              className="group relative aspect-[4/5] rounded-[2.5rem] overflow-hidden shadow-[0_8px_25px_rgba(0,0,0,0.06)] hover:shadow-[0_20px_40px_rgba(236,72,153,0.18)] transition-all duration-500 active:scale-95 cursor-pointer bg-gradient-to-b from-white via-stone-50/90 to-pink-50/40 border border-pink-100/70 hover:border-pink-300 flex flex-col justify-between p-3.5"
             >
-              {/* 🌟 Imagen de Vista Previa (Foto del artículo más caro) */}
-              {subcat.preview ? (
-                <img 
-                  src={subcat.preview} 
-                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-[3s] group-hover:scale-110" 
-                  alt={subcat.label} 
-                  loading="lazy"
-                  onError={(e) => {
-                    e.currentTarget.style.opacity = '0';
-                  }}
-                />
-              ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-pink-500/20 via-purple-600/30 to-black flex items-center justify-center">
-                  <span className="text-6xl opacity-40">{subcat.emoji}</span>
-                </div>
-              )}
-              
-              {/* 🌟 Gradiente Overlay Premium (más equilibrado para apreciar la foto del artículo más caro) */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent group-hover:from-black/90 transition-all duration-500" />
-              
-              {/* 🌟 Badge de Cantidad de Piezas */}
-              <div className="absolute top-3 right-3 z-10">
-                <span className="bg-white/95 backdrop-blur-md text-gray-900 text-[9px] font-black px-2.5 py-1 rounded-full shadow-lg border border-white/60 uppercase tracking-wider">
+              {/* 🌟 Resplandor estético sutil para realzar la joya */}
+              <div className="absolute inset-0 bg-radial from-pink-100/50 via-transparent to-transparent opacity-70 pointer-events-none" />
+
+              {/* 🌟 Badges Superiores */}
+              <div className="relative z-10 flex items-center justify-between w-full">
+                {/* Badge del Valor Más Caro (Referencia Top) */}
+                {subcat.topPrice > 0 ? (
+                  <span className="bg-white/95 backdrop-blur-md text-gray-900 text-[10px] font-black px-2.5 py-1 rounded-full shadow-sm border border-pink-100/80 flex items-center gap-1">
+                    <span className="text-amber-500">⭐</span> Top ${subcat.topPrice.toFixed(2)}
+                  </span>
+                ) : <div />}
+
+                {/* Badge de Cantidad de Piezas */}
+                <span className="bg-pink-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-xs uppercase tracking-wider">
                   {subcat.products.length}
                 </span>
               </div>
 
-              {/* 🌟 Badge de Artículo Estrella si tiene precio */}
-              {subcat.topPrice > 0 && (
-                <div className="absolute top-3 left-3 z-10">
-                  <span className="bg-black/60 backdrop-blur-md text-amber-300 text-[8px] font-bold px-2 py-1 rounded-full border border-white/10 uppercase tracking-wider flex items-center gap-1 shadow-md">
-                    <span>✨</span> Top ${subcat.topPrice.toFixed(0)}
-                  </span>
+              {/* 🌟 Imagen de Referencia de Fondo (El collar / zarcillo más caro) */}
+              <div className="absolute inset-0 pt-7 pb-14 px-3 flex items-center justify-center overflow-hidden pointer-events-none">
+                {subcat.preview ? (
+                  <img 
+                    src={subcat.preview} 
+                    className="max-w-full max-h-full object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.12)] transition-transform duration-700 group-hover:scale-110" 
+                    alt={subcat.label} 
+                    loading="lazy"
+                  />
+                ) : (
+                  <span className="text-6xl opacity-15">{subcat.emoji}</span>
+                )}
+              </div>
+
+              {/* 🌟 Zona Inferior (Nombre de categoría y detalle de precio de referencia) */}
+              <div className="relative z-10 w-full pt-4 bg-gradient-to-t from-white via-white/95 to-transparent rounded-b-[2rem] flex flex-col items-center text-center -mx-3.5 -mb-3.5 px-3.5 pb-3">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span className="text-sm drop-shadow-xs">{subcat.emoji}</span>
+                  <h3 className="text-xs sm:text-sm font-black text-gray-800 uppercase tracking-wider group-hover:text-pink-600 transition-colors">
+                    {subcat.label}
+                  </h3>
                 </div>
-              )}
-              
-              {/* 🌟 Contenido Central */}
-              <div className="absolute inset-0 flex flex-col items-center justify-end pb-5 px-3 text-center">
-                <span className="text-3xl mb-1.5 drop-shadow-lg transform group-hover:scale-110 group-hover:-translate-y-1 transition-all duration-300">
-                  {subcat.emoji}
-                </span>
-                <h3 className="text-sm font-black text-white uppercase tracking-[0.2em] mb-0.5 drop-shadow-md">
-                  {subcat.label}
-                </h3>
-                <span className="text-[9px] text-white/75 font-bold uppercase tracking-widest drop-shadow">
-                  {subcat.products.length === 1 ? '1 pieza' : `${subcat.products.length} piezas`}
-                </span>
+                {subcat.topPrice > 0 ? (
+                  <span className="text-[10px] font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-full border border-pink-100/60 tracking-wider">
+                    Desde ${subcat.topPrice.toFixed(2)}
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                    {subcat.products.length === 1 ? '1 pieza' : `${subcat.products.length} piezas`}
+                  </span>
+                )}
               </div>
             </motion.div>
           ))}
