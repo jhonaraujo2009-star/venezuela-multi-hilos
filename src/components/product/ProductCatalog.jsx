@@ -15,13 +15,17 @@ import { motion, AnimatePresence } from "framer-motion"; // 🌟 MAGIA: Importam
 const SUBCATEGORY_KEYWORDS = [
   { key: 'collar', label: 'Collares', emoji: '📿' },
   { key: 'gargantilla', label: 'Gargantillas', emoji: '💫' },
+  { key: 'choker', label: 'Chokers', emoji: '🖤' },
   { key: 'cadena', label: 'Cadenas', emoji: '⛓️' },
   { key: 'zarcillo', label: 'Zarcillos', emoji: '💎' },
   { key: 'arete', label: 'Aretes', emoji: '✨' },
+  { key: 'pendiente', label: 'Pendientes', emoji: '💎' },
+  { key: 'candonga', label: 'Candongas', emoji: '✨' },
   { key: 'anillo', label: 'Anillos', emoji: '💍' },
   { key: 'sortija', label: 'Sortijas', emoji: '💍' },
   { key: 'pulsera', label: 'Pulseras', emoji: '🔗' },
   { key: 'brazalete', label: 'Brazaletes', emoji: '💪' },
+  { key: 'manilla', label: 'Manillas', emoji: '🔗' },
   { key: 'dije', label: 'Dijes', emoji: '🔮' },
   { key: 'tobillera', label: 'Tobilleras', emoji: '🦶' },
   { key: 'reloj', label: 'Relojes', emoji: '⌚' },
@@ -48,6 +52,37 @@ const SUBCATEGORY_KEYWORDS = [
   { key: 'set', label: 'Sets', emoji: '🎁' },
 ];
 
+// 🌟 Extrae de forma robusta la primera imagen válida de un producto
+const getProductImage = (p) => {
+  if (!p) return null;
+  if (typeof p.image === 'string' && p.image.trim()) return p.image.trim();
+  if (typeof p.imageUrl === 'string' && p.imageUrl.trim()) return p.imageUrl.trim();
+  if (typeof p.imagen === 'string' && p.imagen.trim()) return p.imagen.trim();
+  if (typeof p.img === 'string' && p.img.trim()) return p.img.trim();
+  if (typeof p.thumbnail === 'string' && p.thumbnail.trim()) return p.thumbnail.trim();
+  if (typeof p.photo === 'string' && p.photo.trim()) return p.photo.trim();
+  if (typeof p.foto === 'string' && p.foto.trim()) return p.foto.trim();
+
+  const arrayCandidates = [p.images, p.imagenes, p.fotos, p.photos];
+  for (const arr of arrayCandidates) {
+    if (Array.isArray(arr) && arr.length > 0) {
+      const foundStr = arr.find(img => typeof img === 'string' && img.trim().length > 0);
+      if (foundStr) return foundStr.trim();
+      const foundObj = arr.find(img => img && typeof img.url === 'string' && img.url.trim().length > 0);
+      if (foundObj) return foundObj.url.trim();
+    }
+  }
+  return null;
+};
+
+// 🌟 Obtiene el precio numérico más alto o representativo de un producto
+const getProductPrice = (p) => {
+  if (!p) return 0;
+  const price = Number(p.price ?? p.precio ?? 0) || 0;
+  const oldPrice = Number(p.oldPrice ?? p.precioAnterior ?? 0) || 0;
+  return Math.max(price, oldPrice);
+};
+
 // 🌟 Detecta la sub-categoría de un producto basándose en su nombre
 const detectSubcategory = (productName) => {
   const nameLower = (productName || '')
@@ -73,20 +108,35 @@ const getSubcategoryInfo = (key) => {
   return found || { key, label: key.charAt(0).toUpperCase() + key.slice(1), emoji: '🛍️' };
 };
 
-// 🌟 Agrupa productos de una colección en sub-categorías con vista previa
+// 🌟 Agrupa productos de una colección en sub-categorías con la foto del artículo MÁS CARO
 const buildSubcategories = (sessionProducts) => {
   const groups = {};
+  
   sessionProducts.forEach(p => {
-    const sub = detectSubcategory(p.name);
+    const pName = p.name || p.nombre || p.title || '';
+    const sub = detectSubcategory(pName);
     if (!groups[sub.key]) {
-      groups[sub.key] = { ...sub, products: [], preview: null };
+      groups[sub.key] = { ...sub, products: [], preview: null, topPrice: 0 };
     }
     groups[sub.key].products.push(p);
-    if (!groups[sub.key].preview) {
-      const img = p.image || p.imageUrl || (Array.isArray(p.images) && p.images[0]);
-      if (img) groups[sub.key].preview = img;
+  });
+
+  // 🌟 Para cada subcategoría, encontramos el artículo MÁS CARO que tenga foto
+  Object.values(groups).forEach(group => {
+    // Ordenamos de mayor a menor precio
+    const sorted = [...group.products].sort((a, b) => getProductPrice(b) - getProductPrice(a));
+    
+    // Buscamos el artículo más costoso con imagen válida
+    const topItemWithImage = sorted.find(p => !!getProductImage(p));
+    
+    if (topItemWithImage) {
+      group.preview = getProductImage(topItemWithImage);
+      group.topPrice = getProductPrice(topItemWithImage);
+    } else if (sorted.length > 0) {
+      group.topPrice = getProductPrice(sorted[0]);
     }
   });
+
   // Ordenar: más productos primero, "otros" siempre al final
   return Object.values(groups).sort((a, b) => {
     if (a.key === 'otros') return 1;
@@ -263,7 +313,7 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
       // 🌟 Filtrar por sub-categoría dentro de la colección
       filtered = products.filter(p => 
         p.sessionId === activeFilter && 
-        detectSubcategory(p.name).key === activeSubcategory
+        detectSubcategory(p.name || p.nombre || p.title || '').key === activeSubcategory
       );
     } else {
       filtered = products.filter(p => p.sessionId === activeFilter);
@@ -312,7 +362,9 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
             const sessionProducts = products.filter(p => p.sessionId === session.id);
             if (sessionProducts.length === 0) return null;
             
-            const img = sessionProducts[0]?.image || sessionProducts[0]?.images?.[0];
+            const sortedSession = [...sessionProducts].sort((a, b) => getProductPrice(b) - getProductPrice(a));
+            const topSessionProduct = sortedSession.find(p => !!getProductImage(p)) || sessionProducts[0];
+            const img = getProductImage(topSessionProduct);
             
             return (
               <motion.div 
@@ -395,39 +447,53 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
               variants={itemVariants}
               key={subcat.key}
               onClick={() => setActiveSubcategory(subcat.key)}
-              className="group relative aspect-[4/5] rounded-[2rem] overflow-hidden shadow-xl hover:shadow-2xl transition-all active:scale-95 cursor-pointer"
+              className="group relative aspect-[4/5] rounded-[2rem] overflow-hidden shadow-xl hover:shadow-2xl transition-all active:scale-95 cursor-pointer bg-neutral-900"
             >
-              {/* 🌟 Imagen de Vista Previa */}
+              {/* 🌟 Imagen de Vista Previa (Foto del artículo más caro) */}
               {subcat.preview ? (
                 <img 
                   src={subcat.preview} 
                   className="absolute inset-0 w-full h-full object-cover transition-transform duration-[3s] group-hover:scale-110" 
                   alt={subcat.label} 
                   loading="lazy"
+                  onError={(e) => {
+                    e.currentTarget.style.opacity = '0';
+                  }}
                 />
               ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-pink-50 via-gray-100 to-purple-50 flex items-center justify-center">
-                  <span className="text-6xl opacity-30">{subcat.emoji}</span>
+                <div className="absolute inset-0 bg-gradient-to-br from-pink-500/20 via-purple-600/30 to-black flex items-center justify-center">
+                  <span className="text-6xl opacity-40">{subcat.emoji}</span>
                 </div>
               )}
               
-              {/* 🌟 Gradiente Overlay Premium */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/5 group-hover:from-black/90 transition-all duration-500" />
+              {/* 🌟 Gradiente Overlay Premium (más equilibrado para apreciar la foto del artículo más caro) */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent group-hover:from-black/90 transition-all duration-500" />
               
-              {/* 🌟 Badge de Cantidad */}
+              {/* 🌟 Badge de Cantidad de Piezas */}
               <div className="absolute top-3 right-3 z-10">
-                <span className="bg-white/90 backdrop-blur-md text-gray-800 text-[9px] font-black px-2.5 py-1 rounded-full shadow-lg border border-white/50 uppercase tracking-wider">
+                <span className="bg-white/95 backdrop-blur-md text-gray-900 text-[9px] font-black px-2.5 py-1 rounded-full shadow-lg border border-white/60 uppercase tracking-wider">
                   {subcat.products.length}
                 </span>
               </div>
+
+              {/* 🌟 Badge de Artículo Estrella si tiene precio */}
+              {subcat.topPrice > 0 && (
+                <div className="absolute top-3 left-3 z-10">
+                  <span className="bg-black/60 backdrop-blur-md text-amber-300 text-[8px] font-bold px-2 py-1 rounded-full border border-white/10 uppercase tracking-wider flex items-center gap-1 shadow-md">
+                    <span>✨</span> Top ${subcat.topPrice.toFixed(0)}
+                  </span>
+                </div>
+              )}
               
               {/* 🌟 Contenido Central */}
-              <div className="absolute inset-0 flex flex-col items-center justify-end pb-5">
-                <span className="text-3xl mb-2 drop-shadow-lg transform group-hover:scale-110 group-hover:-translate-y-1 transition-all duration-300">{subcat.emoji}</span>
-                <h3 className="text-sm font-black text-white uppercase tracking-[0.2em] mb-1 drop-shadow-md">
+              <div className="absolute inset-0 flex flex-col items-center justify-end pb-5 px-3 text-center">
+                <span className="text-3xl mb-1.5 drop-shadow-lg transform group-hover:scale-110 group-hover:-translate-y-1 transition-all duration-300">
+                  {subcat.emoji}
+                </span>
+                <h3 className="text-sm font-black text-white uppercase tracking-[0.2em] mb-0.5 drop-shadow-md">
                   {subcat.label}
                 </h3>
-                <span className="text-[9px] text-white/60 font-bold uppercase tracking-widest">
+                <span className="text-[9px] text-white/75 font-bold uppercase tracking-widest drop-shadow">
                   {subcat.products.length === 1 ? '1 pieza' : `${subcat.products.length} piezas`}
                 </span>
               </div>
