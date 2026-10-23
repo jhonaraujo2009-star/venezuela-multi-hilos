@@ -80,12 +80,42 @@ const getProductImage = (p) => {
   return null;
 };
 
+// 🌟 Calcula el precio final con descuentos aplicados y precio tachado
+const calculateProductPricing = (p) => {
+  if (!p) return { finalPrice: 0, oldPrice: 0, hasDiscount: false, discountPerc: 0, baseValuation: 0 };
+  
+  const rawPrice = Number(p.price ?? p.precio ?? 0) || 0;
+  const rawOldPrice = Number(p.oldPrice ?? p.precioAnterior ?? 0) || 0;
+  const discountPerc = Number(p.discount || p.offerDiscount || 0);
+
+  // Precio final real con descuento aplicado
+  const finalPrice = discountPerc > 0 
+    ? Number((rawPrice - (rawPrice * (discountPerc / 100))).toFixed(2))
+    : rawPrice;
+
+  // Precio anterior tachado si existía
+  const displayOldPrice = rawOldPrice > rawPrice 
+    ? rawOldPrice 
+    : (discountPerc > 0 && rawPrice > finalPrice ? rawPrice : 0);
+
+  const hasDiscount = displayOldPrice > finalPrice || discountPerc > 0;
+  const effectiveDiscountPerc = discountPerc > 0 
+    ? discountPerc 
+    : (rawOldPrice > rawPrice ? Math.round(((rawOldPrice - rawPrice) / rawOldPrice) * 100) : 0);
+
+  return {
+    finalPrice,
+    oldPrice: displayOldPrice,
+    hasDiscount,
+    discountPerc: effectiveDiscountPerc,
+    baseValuation: Math.max(rawPrice, rawOldPrice)
+  };
+};
+
 // 🌟 Obtiene el precio numérico más alto o representativo de un producto
 const getProductPrice = (p) => {
   if (!p) return 0;
-  const price = Number(p.price ?? p.precio ?? 0) || 0;
-  const oldPrice = Number(p.oldPrice ?? p.precioAnterior ?? 0) || 0;
-  return Math.max(price, oldPrice);
+  return calculateProductPricing(p).finalPrice;
 };
 
 // 🌟 Detecta la sub-categoría de un producto basándose en su nombre
@@ -113,7 +143,7 @@ const getSubcategoryInfo = (key) => {
   return found || { key, label: key.charAt(0).toUpperCase() + key.slice(1), emoji: '🛍️' };
 };
 
-// 🌟 Agrupa productos de una colección en sub-categorías con la foto del artículo MÁS CARO
+// 🌟 Agrupa productos de una colección en sub-categorías con la foto del artículo MÁS CARO y su precio final
 const buildSubcategories = (sessionProducts) => {
   const groups = {};
   
@@ -121,27 +151,38 @@ const buildSubcategories = (sessionProducts) => {
     const pName = p.name || p.nombre || p.title || '';
     const sub = detectSubcategory(pName);
     if (!groups[sub.key]) {
-      groups[sub.key] = { ...sub, products: [], preview: null, topPrice: 0 };
+      groups[sub.key] = {
+        ...sub,
+        products: [],
+        preview: null,
+        finalPrice: 0,
+        oldPrice: 0,
+        hasDiscount: false,
+        discountPerc: 0
+      };
     }
     groups[sub.key].products.push(p);
   });
 
-  // 🌟 Para cada subcategoría, encontramos el artículo MÁS CARO que tenga foto
+  // 🌟 Para cada subcategoría, encontramos el artículo MÁS CARO y su precio final con descuento
   Object.values(groups).forEach(group => {
-    // Ordenamos de mayor a menor precio
-    const sorted = [...group.products].sort((a, b) => getProductPrice(b) - getProductPrice(a));
+    // Ordenamos de mayor a menor valor de referencia
+    const sorted = [...group.products].sort((a, b) => {
+      const valA = calculateProductPricing(a).baseValuation;
+      const valB = calculateProductPricing(b).baseValuation;
+      return valB - valA;
+    });
     
-    // El valor más alto de la categoría
-    group.topPrice = sorted.length > 0 ? getProductPrice(sorted[0]) : 0;
+    // Buscamos el artículo de referencia para portada
+    const topItem = sorted.find(p => !!getProductImage(p)) || sorted[0];
 
-    // Buscamos el artículo más costoso con imagen válida para mostrar de fondo
-    const topItemWithImage = sorted.find(p => !!getProductImage(p));
-    if (topItemWithImage) {
-      group.preview = getProductImage(topItemWithImage);
-    } else if (sorted[0]?.images?.[0]) {
-      group.preview = sorted[0].images[0];
-    } else if (sorted[0]?.image) {
-      group.preview = sorted[0].image;
+    if (topItem) {
+      group.preview = getProductImage(topItem) || topItem.images?.[0] || topItem.image;
+      const pricing = calculateProductPricing(topItem);
+      group.finalPrice = pricing.finalPrice;
+      group.oldPrice = pricing.oldPrice;
+      group.hasDiscount = pricing.hasDiscount;
+      group.discountPerc = pricing.discountPerc;
     }
   });
 
@@ -473,12 +514,23 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
               {/* 🌟 2. GRADIENTE DEGRADADO SUAVE (Transparente arriba para ver la joya nítida; oscuro abajo para leer el texto) */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent transition-opacity group-hover:from-black/90 pointer-events-none" />
 
-              {/* 🌟 3. BADGE SUPERIOR IZQUIERDO: EL VALOR MÁS CARO */}
-              {subcat.topPrice > 0 && (
-                <div className="absolute top-3 left-3 z-10">
-                  <span className="bg-black/65 backdrop-blur-md text-amber-300 text-[10px] font-black px-2.5 py-1 rounded-full border border-white/20 shadow-md flex items-center gap-1 uppercase tracking-wider">
-                    <span>⭐</span> Top ${subcat.topPrice.toFixed(2)}
-                  </span>
+              {/* 🌟 3. BADGE SUPERIOR IZQUIERDO: PRECIO FINAL CON DESCUENTO */}
+              {subcat.finalPrice > 0 && (
+                <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5">
+                  <div className="bg-black/65 backdrop-blur-md text-white text-[10px] font-black px-2.5 py-1 rounded-full border border-white/20 shadow-md flex items-center gap-1.5 uppercase tracking-wider">
+                    <span className="text-amber-300">⭐</span>
+                    <span>${subcat.finalPrice.toFixed(2)}</span>
+                    {subcat.hasDiscount && subcat.oldPrice > subcat.finalPrice && (
+                      <span className="line-through text-gray-400 text-[9px] font-medium">
+                        ${subcat.oldPrice.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                  {subcat.discountPerc > 0 && (
+                    <span className="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
+                      -{subcat.discountPerc}%
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -489,7 +541,7 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
                 </span>
               </div>
 
-              {/* 🌟 5. ZONA INFERIOR: NOMBRE DE LA CATEGORÍA Y PRECIO DE REFERENCIA */}
+              {/* 🌟 5. ZONA INFERIOR: NOMBRE DE LA CATEGORÍA Y PRECIO FINAL */}
               <div className="absolute inset-x-0 bottom-0 p-4 flex flex-col items-center text-center z-10">
                 <span className="text-2xl mb-1 drop-shadow-md transform group-hover:scale-110 transition-transform">
                   {subcat.emoji}
@@ -497,10 +549,22 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
                 <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-[0.15em] drop-shadow-md mb-0.5">
                   {subcat.label}
                 </h3>
-                {subcat.topPrice > 0 && (
-                  <span className="text-[10px] text-white/90 font-bold uppercase tracking-widest drop-shadow-sm">
-                    Desde ${subcat.topPrice.toFixed(2)}
-                  </span>
+                {subcat.finalPrice > 0 && (
+                  <div className="flex items-center gap-1.5 drop-shadow-sm mt-0.5">
+                    <span className="text-[11px] text-white font-black tracking-wider">
+                      ${subcat.finalPrice.toFixed(2)}
+                    </span>
+                    {subcat.hasDiscount && subcat.oldPrice > subcat.finalPrice && (
+                      <span className="line-through text-gray-300 text-[9px] font-medium">
+                        ${subcat.oldPrice.toFixed(2)}
+                      </span>
+                    )}
+                    {subcat.discountPerc > 0 && (
+                      <span className="bg-red-600/90 text-white text-[8px] font-black px-1.5 py-0.5 rounded-sm uppercase tracking-tighter">
+                        Oferta
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
             </motion.div>
