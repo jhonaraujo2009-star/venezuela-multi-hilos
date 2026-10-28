@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, query, limit } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
+import { calculateProductPricing } from "../utils/pricing";
 
 export default function FlashOffersPage() {
   const [products, setProducts] = useState([]);
@@ -20,12 +21,12 @@ export default function FlashOffersPage() {
             .map(d => d.id)
         );
 
-        const prodSnap = await getDocs(query(collection(db, "products"), limit(60)));
-        const allProducts = prodSnap.docs
+        const prodSnap = await getDocs(query(collection(db, "products"), limit(120)));
+        const allOffers = prodSnap.docs
           .map(d => ({ id: d.id, ...d.data() }))
-          .filter(p => activeStoreIds.has(p.storeId));
+          .filter(p => activeStoreIds.has(p.storeId) && calculateProductPricing(p).hasDiscount);
 
-        setProducts(allProducts);
+        setProducts(allOffers);
       } catch (error) {
         console.error("Error buscando ofertas:", error);
       } finally {
@@ -117,22 +118,7 @@ export default function FlashOffersPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
             {filteredOffers.map((p, idx) => {
               const pImg = p.image || p.images?.[0] || null;
-              const currentPrice = Number(p.price || 0);
-              const rawOldPrice = Number(p.oldPrice || 0);
-              const extraDiscountPerc = Number(p.discount) || Number(p.offerDiscount) || 0;
-
-              let originalPrice = rawOldPrice > currentPrice 
-                ? rawOldPrice 
-                : (extraDiscountPerc > 0 && extraDiscountPerc < 100 
-                  ? currentPrice / (1 - extraDiscountPerc / 100) 
-                  : currentPrice * 1.25);
-
-              let discountPerc = 0;
-              if (originalPrice > currentPrice && originalPrice > 0) {
-                discountPerc = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
-              } else if (extraDiscountPerc > 0) {
-                discountPerc = Math.round(extraDiscountPerc);
-              }
+              const pricing = calculateProductPricing(p);
               
               return (
                 <div 
@@ -141,7 +127,7 @@ export default function FlashOffersPage() {
                   className="group bg-white rounded-lg p-3 hover:shadow-lg transition-all duration-300 cursor-pointer flex flex-col h-full relative border border-gray-200 overflow-hidden"
                 >
                   <div className="absolute top-2 left-2 z-10 bg-red-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">
-                    {discountPerc > 0 ? `${discountPerc}% OFF` : "OFERTA"}
+                    {pricing.discountPerc > 0 ? `${pricing.discountPerc}% OFF` : "OFERTA"}
                   </div>
 
                   <div className="aspect-[1/1] bg-white relative overflow-hidden mb-3 flex items-center justify-center p-2">
@@ -154,10 +140,14 @@ export default function FlashOffersPage() {
                   
                   <div className="flex flex-col flex-1 px-1">
                     <div className="mt-auto">
-                      <span className="text-xs text-gray-400 line-through decoration-gray-400 block">${originalPrice.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                      {pricing.oldPrice > pricing.finalPrice ? (
+                        <span className="text-xs text-gray-400 line-through decoration-gray-400 block">${pricing.oldPrice.toFixed(2)}</span>
+                      ) : (
+                        <span className="text-xs text-transparent block select-none">$0.00</span>
+                      )}
                       <div className="flex items-baseline gap-1 text-gray-900 mb-0.5">
                         <span className="text-sm font-normal">$</span>
-                        <span className="text-xl font-bold tracking-tight text-red-600">{currentPrice.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                        <span className="text-xl font-bold tracking-tight text-red-600">{pricing.finalPrice.toFixed(2)}</span>
                       </div>
                       <span className="text-green-600 font-medium text-[11px] block mt-1 flex items-center gap-1">
                         <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" /><path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H14a1 1 0 001-1v-2.158A2.5 2.5 0 0113 10.5V8a1 1 0 00-1-1H3V4z" /></svg> Envío gratis

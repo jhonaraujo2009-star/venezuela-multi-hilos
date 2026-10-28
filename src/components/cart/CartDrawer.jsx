@@ -6,7 +6,7 @@ import { useApp } from "../../context/AppContext";
 import { useBackButton } from "../../hooks/useBackButton";
 import toast from "react-hot-toast";
 
-export default function CartDrawer() {
+export default function CartDrawer({ onSelectProduct }) {
   const { 
     items, 
     removeItem, 
@@ -129,23 +129,38 @@ export default function CartDrawer() {
 
       setRealtimeStock(stockMap);
 
-      // Auto-corregir cantidades si en BD el stock disminuyó por debajo de lo que hay en bolsa
+      // Auto-corregir cantidades si en BD el stock disminuyó por debajo de lo que hay en bolsa (sumando todos los modelos de cada variante)
+      const groupedByVariant = {};
       items.forEach((item) => {
-        const pStockInfo = stockMap[item.product.id];
-        if (pStockInfo) {
-          let maxDbStock = pStockInfo.totalStock;
-          if (item.variant) {
-            const vMatch = pStockInfo.variants.find((v) => v.id === item.variant.id);
-            if (vMatch) maxDbStock = Number(vMatch.stock ?? 0);
-          }
-          if (item.quantity > maxDbStock) {
-            if (maxDbStock > 0) {
-              toast(`Ajustamos "${item.product.name}" al stock disponible (${maxDbStock})`);
-              updateQuantity(item.key, maxDbStock);
-            } else {
-              toast.error(`"${item.product.name}" se encuentra agotado`);
-              updateQuantity(item.key, 0);
-            }
+        const baseKey = `${item.product.id}-${item.variant?.id || "default"}`;
+        if (!groupedByVariant[baseKey]) groupedByVariant[baseKey] = [];
+        groupedByVariant[baseKey].push(item);
+      });
+
+      Object.values(groupedByVariant).forEach((groupItems) => {
+        const first = groupItems[0];
+        const pStockInfo = stockMap[first.product.id];
+        if (!pStockInfo) return;
+
+        let maxDbStock = pStockInfo.totalStock;
+        if (first.variant) {
+          const vMatch = pStockInfo.variants.find((v) => v.id === first.variant.id);
+          if (vMatch) maxDbStock = Number(vMatch.stock ?? 0);
+        }
+
+        const totalQty = groupItems.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+        if (totalQty > maxDbStock) {
+          if (maxDbStock <= 0) {
+            toast.error(`"${first.product.name}" se encuentra agotado`);
+            groupItems.forEach((i) => updateQuantity(i.key, 0));
+          } else {
+            toast(`Ajustamos "${first.product.name}" al stock disponible (${maxDbStock})`);
+            let remainingToAllocate = maxDbStock;
+            groupItems.forEach((i) => {
+              const allowed = Math.min(i.quantity, remainingToAllocate);
+              remainingToAllocate = Math.max(0, remainingToAllocate - allowed);
+              if (allowed !== i.quantity) updateQuantity(i.key, allowed);
+            });
           }
         }
       });
@@ -305,7 +320,9 @@ export default function CartDrawer() {
         const rBase = Number(i.product?.price ?? 0);
         const crossed = rOld > uPrice ? rOld : (rBase > uPrice ? rBase : 0);
         const offerTag = crossed > uPrice ? ` 🏷️ ~(Antes $${crossed.toFixed(2)})~ *¡Oferta!*` : "";
-        return `🔹 *${i.product.name}*${i.variant ? ` [${i.variant.label}]` : ""} (x${i.quantity}) ➔ $${(uPrice * i.quantity).toFixed(2)}${offerTag}`;
+        const modelTag = i.selectedModelLabel ? ` [${i.selectedModelLabel}]` : "";
+        const variantTag = i.variant ? ` [${i.variant.label || i.variant}]` : "";
+        return `🔹 *${i.product.name}*${modelTag}${variantTag} (x${i.quantity}) ➔ $${(uPrice * i.quantity).toFixed(2)}${offerTag}`;
       }).join("\n");
       
       const storeDisplayName = (activeStoreData?.nombre || activeCheckoutStoreId || "TIENDA").toUpperCase();
@@ -501,8 +518,12 @@ _Por favor, adjunte el capture o comprobante de su transferencia/pago móvil por
                         <div className="p-3 space-y-3">
                           {group.items.map((item) => {
                             const maxStock = getItemMax(item);
+                            const baseKeyPrefix = `${item.product?.id}-${item.variant?.id || "default"}`;
+                            const totalVariantQtyInCart = items
+                              .filter((i) => i.key === baseKeyPrefix || i.key.startsWith(`${baseKeyPrefix}-mod`))
+                              .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
                             const isSelected = item.selected !== false;
-                            const isMaxReached = item.quantity >= maxStock;
+                            const isMaxReached = totalVariantQtyInCart >= maxStock;
 
                             const unitPrice = Number(item.price ?? item.product?.price ?? 0);
                             const rawOldPrice = Number(item.oldPrice ?? item.product?.oldPrice ?? 0);
@@ -536,13 +557,32 @@ _Por favor, adjunte el capture o comprobante de su transferencia/pago móvil por
                                   />
                                 </div>
 
-                                {/* Miniatura */}
-                                <div className="w-16 h-20 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0 shadow-xs relative">
+                                {/* Miniatura Clickeable para reabrir producto */}
+                                <div 
+                                  onClick={() => {
+                                    setIsOpen(false);
+                                    if (onSelectProduct) {
+                                      onSelectProduct({
+                                        ...item.product,
+                                        selectedImageIndex: item.selectedImageIndex ?? 0
+                                      });
+                                    } else {
+                                      window.dispatchEvent(new CustomEvent("open_product_modal", {
+                                        detail: { ...item.product, selectedImageIndex: item.selectedImageIndex ?? 0 }
+                                      }));
+                                    }
+                                  }}
+                                  className="w-16 h-20 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0 shadow-xs relative cursor-pointer hover:opacity-85 hover:ring-2 hover:ring-pink-400 transition-all group/thumb"
+                                  title="Toca para ver este producto"
+                                >
                                   <img 
-                                    src={item.product.image || item.product.images?.[0]} 
-                                    className="w-full h-full object-cover" 
-                                    alt={item.product.name} 
+                                    src={item.selectedImage || item.image || item.product?.selectedImage || item.product?.image || item.product?.images?.[0]} 
+                                    className="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform" 
+                                    alt={item.product?.name || "Producto"} 
                                   />
+                                  <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/15 transition-colors flex items-center justify-center">
+                                    <span className="opacity-0 group-hover/thumb:opacity-100 text-white text-[10px] drop-shadow-md bg-black/60 rounded-full w-5 h-5 flex items-center justify-center">🔍</span>
+                                  </div>
                                   {hasOffer && maxStock > 0 && (
                                     <div className="absolute top-1 left-1 bg-gradient-to-r from-pink-600 to-rose-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter shadow-sm flex items-center gap-0.5">
                                       <span>⚡</span>
@@ -560,8 +600,24 @@ _Por favor, adjunte el capture o comprobante de su transferencia/pago móvil por
                                 <div className="flex-1 flex flex-col justify-between py-0.5 min-w-0">
                                   <div>
                                     <div className="flex justify-between items-start gap-1">
-                                      <h4 className="text-xs font-black text-gray-800 uppercase line-clamp-1 leading-snug">
-                                        {item.product.name}
+                                      <h4 
+                                        onClick={() => {
+                                          setIsOpen(false);
+                                          if (onSelectProduct) {
+                                            onSelectProduct({
+                                              ...item.product,
+                                              selectedImageIndex: item.selectedImageIndex ?? 0
+                                            });
+                                          } else {
+                                            window.dispatchEvent(new CustomEvent("open_product_modal", {
+                                              detail: { ...item.product, selectedImageIndex: item.selectedImageIndex ?? 0 }
+                                            }));
+                                          }
+                                        }}
+                                        className="text-xs font-black text-gray-800 uppercase line-clamp-1 leading-snug cursor-pointer hover:text-pink-600 transition-colors"
+                                        title="Ver producto"
+                                      >
+                                        {item.product?.name || item.product?.nombre || "Producto"}
                                       </h4>
                                       <button 
                                         onClick={() => removeItem(item.key)} 
@@ -571,9 +627,14 @@ _Por favor, adjunte el capture o comprobante de su transferencia/pago móvil por
                                         ✕
                                       </button>
                                     </div>
+                                    {item.selectedModelLabel && (
+                                      <span className="inline-block text-[9px] font-bold text-pink-600 bg-pink-50 border border-pink-100 px-1.5 py-0.5 rounded-md mt-0.5">
+                                        🎨 {item.selectedModelLabel}
+                                      </span>
+                                    )}
                                     {item.variant && (
-                                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block">
-                                        {item.variant.label}
+                                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block mt-0.5">
+                                        {item.variant.label || item.variant}
                                       </span>
                                     )}
                                     
@@ -636,7 +697,7 @@ _Por favor, adjunte el capture o comprobante de su transferencia/pago móvil por
                                       <button 
                                         type="button"
                                         onClick={() => {
-                                          if (item.quantity >= maxStock) {
+                                          if (totalVariantQtyInCart >= maxStock) {
                                             toast.error(`Máximo disponible alcanzado (${maxStock} unidades en inventario)`);
                                             return;
                                           }

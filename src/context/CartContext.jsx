@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useEffect, useMemo } 
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useApp } from "./AppContext"; // 🌟 MAGIA: Conectamos el carrito con el cerebro
+import { prepareProductForCart } from "../utils/pricing";
 import toast from "react-hot-toast";
 
 const CartContext = createContext(null);
@@ -109,11 +110,11 @@ export function CartProvider({ children }) {
     );
   }, []);
 
-  // 🌟 AÑADIR A LA BOLSA (Con verificación estricta de stock disponible en BD)
+  // 🌟 AÑADIR A LA BOLSA (Con verificación estricta de stock disponible en BD y precio unificado)
   const addItem = useCallback((product, variant, quantity) => {
-    const origenVentaActual = sessionStorage.getItem("origenVenta") || null;
     const sId = product.storeId || storeData?.id || "tienda";
     const sName = product.storeName || (sId === storeData?.id ? storeData?.nombre : null) || sId;
+    const prepared = prepareProductForCart(product);
 
     // Obtener stock máximo según variantes o totalStock de BD
     const maxStock = variant
@@ -128,46 +129,69 @@ export function CartProvider({ children }) {
     let addedSuccessfully = true;
 
     setItems((prev) => {
-      const key = `${product.id}-${variant?.id || "default"}`;
+      const baseKeyPrefix = `${product.id}-${variant?.id || "default"}`;
+      const imgSuffix = product.selectedImageIndex !== undefined ? `-mod${product.selectedImageIndex}` : "";
+      const key = `${baseKeyPrefix}${imgSuffix}`;
       const existing = prev.find((i) => i.key === key);
 
-      if (existing) {
-        const totalDesired = existing.quantity + quantity;
-        if (totalDesired > maxStock) {
-          const allowedToAdd = Math.max(0, maxStock - existing.quantity);
-          if (allowedToAdd <= 0) {
-            toast.error(`Ya tienes el límite disponible (${maxStock} unidades) en tu bolsa`);
-            addedSuccessfully = false;
-            return prev;
-          }
-          toast.error(`Solo puedes agregar ${allowedToAdd} más. Stock máximo alcanzado (${maxStock})`);
+      // Sumar cantidad de todos los modelos del mismo producto/variante ya en la bolsa (comparten el mismo stock físico)
+      const totalInCartForVariant = prev
+        .filter((i) => i.key === baseKeyPrefix || i.key.startsWith(`${baseKeyPrefix}-mod`))
+        .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+
+      if (totalInCartForVariant + quantity > maxStock) {
+        const allowedToAdd = Math.max(0, maxStock - totalInCartForVariant);
+        if (allowedToAdd <= 0) {
+          toast.error(`Ya tienes el límite disponible (${maxStock} unidades) en tu bolsa`);
+          addedSuccessfully = false;
+          return prev;
+        }
+        toast.error(`Solo puedes agregar ${allowedToAdd} más. Stock máximo alcanzado (${maxStock})`);
+        if (existing) {
           return prev.map((i) =>
-            i.key === key ? { ...i, quantity: maxStock, selected: true } : i
+            i.key === key ? { ...i, quantity: existing.quantity + allowedToAdd, selected: true } : i
           );
         }
+        quantity = allowedToAdd;
+      }
+
+      if (existing) {
         return prev.map((i) =>
-          i.key === key ? { ...i, quantity: totalDesired, selected: true } : i
+          i.key === key ? { ...i, quantity: existing.quantity + quantity, selected: true } : i
         );
       }
 
-      const finalQuantity = Math.min(quantity, maxStock);
+      const finalQuantity = Math.min(quantity, Math.max(0, maxStock - totalInCartForVariant));
       if (quantity > maxStock) {
         toast.error(`Solo hay ${maxStock} unidades disponibles en inventario`);
       }
+
+      const chosenImg = product.selectedImage || product.image || prepared.image;
 
       return [
         ...prev,
         {
           key,
-          product,
+          product: {
+            ...prepared,
+            image: chosenImg,
+            selectedImage: chosenImg,
+            selectedImageIndex: product.selectedImageIndex ?? 0,
+            selectedModelLabel: product.selectedModelLabel ?? null
+          },
           variant,
           quantity: finalQuantity,
-          price: product.price,
-          oldPrice: product.oldPrice || null,
+          price: prepared.price,
+          oldPrice: prepared.oldPrice || null,
+          selectedImage: chosenImg,
+          selectedImageIndex: product.selectedImageIndex ?? 0,
+          selectedModelLabel: product.selectedModelLabel ?? null,
+          _rawPrice: prepared._rawPrice,
+          _rawOldPrice: prepared._rawOldPrice,
           storeId: sId,
           storeName: sName,
           selected: true,
-          _origenVenta: origenVentaActual // Guardamos la firma del SuperAdmin en la bolsa
+          _origenVenta: prepared._origenVenta
         },
       ];
     });
@@ -179,26 +203,36 @@ export function CartProvider({ children }) {
     setItems((prev) => prev.filter((i) => i.key !== key));
   }, []);
 
-  // 🌟 ACTUALIZAR CANTIDAD (Con verificación estricta de stock máximo en BD)
+  // 🌟 ACTUALIZAR CANTIDAD (Con verificación estricta de stock máximo en BD compartido entre modelos)
   const updateQuantity = useCallback((key, quantity) => {
     if (quantity <= 0) {
       setItems((prev) => prev.filter((i) => i.key !== key));
       return;
     }
-    setItems((prev) =>
-      prev.map((i) => {
-        if (i.key !== key) return i;
-        const maxStock = i.variant
-          ? Number(i.variant.stock ?? 0)
-          : Number(i.product?.totalStock ?? i.product?.stock ?? 0);
+    setItems((prev) => {
+      const targetItem = prev.find((i) => i.key === key);
+      if (!targetItem) return prev;
 
-        if (quantity > maxStock) {
+      const baseKeyPrefix = `${targetItem.product?.id}-${targetItem.variant?.id || "default"}`;
+      const otherModelsQty = prev
+        .filter((i) => i.key !== key && (i.key === baseKeyPrefix || i.key.startsWith(`${baseKeyPrefix}-mod`)))
+        .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+
+      const maxStock = targetItem.variant
+        ? Number(targetItem.variant.stock ?? 0)
+        : Number(targetItem.product?.totalStock ?? targetItem.product?.stock ?? 0);
+
+      const maxAllowedForThisItem = Math.max(0, maxStock - otherModelsQty);
+
+      return prev.map((i) => {
+        if (i.key !== key) return i;
+        if (quantity > maxAllowedForThisItem) {
           toast.error(`Límite alcanzado: solo hay ${maxStock} unidades disponibles en inventario`);
-          return { ...i, quantity: maxStock };
+          return { ...i, quantity: maxAllowedForThisItem };
         }
         return { ...i, quantity };
-      })
-    );
+      });
+    });
   }, []);
 
   const clearCart = useCallback(() => setItems([]), []);
@@ -220,14 +254,17 @@ export function CartProvider({ children }) {
         paymentId: customerData.paymentId || "acordar_vendedor",
         paymentMethod: customerData.paymentMethod || customerData.paymentId || "Acordar con vendedor",
         items: itemsToOrder.map((i) => ({
-          id: i.product.id,
-          name: i.product.name,
+          id: i.product?.id || i.key?.split('-')[0],
+          productId: i.product?.id || i.key?.split('-')[0],
+          name: i.product?.name || i.product?.nombre || i.product?.title || "Producto",
+          image: i.selectedImage || i.image || i.product?.selectedImage || i.product?.image || i.product?.imageUrl || (Array.isArray(i.product?.images) ? i.product.images[0] : null) || null,
+          selectedModelLabel: i.selectedModelLabel || i.product?.selectedModelLabel || null,
           qty: Number(i.quantity) || 1,
           quantity: Number(i.quantity) || 1,
           price: Number(i.price) || 0,
-          variant: i.variant?.label || null,
+          variant: i.variant?.label || (typeof i.variant === "string" ? i.variant : null),
           storeId: i.storeId || effectiveStoreId,
-          _origenVenta: i._origenVenta || i.product._origenVenta || primaryOrigin
+          _origenVenta: i._origenVenta || i.product?._origenVenta || primaryOrigin
         })),
         totalAmount: Number(effectiveTotal.toFixed(2)),
         total: Number(effectiveTotal.toFixed(2)),

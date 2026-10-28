@@ -9,16 +9,20 @@ import ProductModal from "../components/product/ProductModal";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion"; // 🌟 LÓGICA ULTRA PREMIUM
 import VerifiedBadge from "../components/shared/VerifiedBadge";
+import { calculateProductPricing } from "../utils/pricing";
 
 const ProductCard = ({ p, onClick, onAddToCart, onGoToStore, storeName, isFlash = false, extraClasses = "" }) => {
   const getThumbnail = () => {
+    if (Array.isArray(p.images) && p.images.length > 0 && p.images[0]) return p.images[0];
     if (p.image) return p.image;
     if (p.imageUrl) return p.imageUrl;
-    if (Array.isArray(p.images) && p.images.length > 0 && p.images[0]) return p.images[0];
     return null;
   };
   const pImg = getThumbnail();
   const displayName = storeName || p.storeName || p.storeId;
+  const imageCount = (Array.isArray(p.images) ? p.images.filter(Boolean).length : 0) || (p.image || p.imageUrl ? 1 : 0);
+  const hasMultipleModels = imageCount > 1;
+  const pricing = calculateProductPricing(p);
 
   return (
     <div 
@@ -26,9 +30,11 @@ const ProductCard = ({ p, onClick, onAddToCart, onGoToStore, storeName, isFlash 
       className={`group bg-white p-3 hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-shadow duration-300 cursor-pointer flex flex-col h-full relative z-10 hover:z-20 border border-gray-100 rounded-lg sm:border-0 sm:border-r sm:border-b ${extraClasses}`}
     >
       <div className="w-full aspect-square bg-white relative overflow-hidden mb-3 border-b border-gray-50/50 pb-2 flex items-center justify-center">
-        {isFlash && (
+        {(isFlash || pricing.hasDiscount) && (
           <div className="absolute top-2 right-2 z-10">
-             <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm animate-pulse-subtle">FLASH</span>
+             <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm animate-pulse-subtle">
+               {pricing.discountPerc > 0 ? `-${pricing.discountPerc}%` : "FLASH"}
+             </span>
           </div>
         )}
         {pImg ? (
@@ -40,16 +46,31 @@ const ProductCard = ({ p, onClick, onAddToCart, onGoToStore, storeName, isFlash 
       
       <div className="flex flex-col flex-1 px-1 text-left">
         <div className="mt-auto">
+          {pricing.hasDiscount && pricing.oldPrice > pricing.finalPrice && (
+            <span className="text-[11px] text-gray-400 line-through block leading-none mb-0.5">
+              ${pricing.oldPrice.toLocaleString('en-US', {minimumFractionDigits: 2})}
+            </span>
+          )}
           <div className="flex items-baseline gap-1 text-gray-900 mb-0.5">
             <span className="text-sm font-normal">$</span>
-            <span className="text-xl sm:text-[22px] font-normal tracking-tight">{Number(p.price || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+            <span className="text-xl sm:text-[22px] font-normal tracking-tight">{Number(pricing.finalPrice || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
           </div>
-          {isFlash && (
-            <span className="text-green-500 font-medium text-[11px] block mt-0.5">Hasta 20% OFF</span>
+          {(isFlash || pricing.hasDiscount) && (
+            <span className="text-green-500 font-medium text-[11px] block mt-0.5">
+              {pricing.discountPerc > 0 ? `${pricing.discountPerc}% OFF` : "Hasta 20% OFF"}
+            </span>
           )}
           <span className="text-green-600 font-medium text-[11px] block mt-1">Llega gratis mañana</span>
         </div>
-        <h3 className="text-[12px] sm:text-[13px] font-normal text-gray-500 line-clamp-2 leading-snug mt-2 group-hover:text-pink-600 transition-colors">
+
+        {hasMultipleModels && (
+          <span className="inline-flex items-center gap-1 text-[9px] font-bold text-pink-700 bg-pink-50 border border-pink-200/80 px-2 py-0.5 rounded-full mt-2 w-fit">
+            <span>✨</span>
+            <span>Este producto posee varios modelos</span>
+          </span>
+        )}
+
+        <h3 className="text-[12px] sm:text-[13px] font-normal text-gray-500 line-clamp-2 leading-snug mt-1 group-hover:text-pink-600 transition-colors">
           {p.name}
         </h3>
 
@@ -152,6 +173,14 @@ export default function HomePage() {
   const { itemCount, total, setIsOpen, isOpen, addItem, items } = useCart();
   const [selectedProduct, setSelectedProduct] = useState(null);
 
+  useEffect(() => {
+    const handleOpenModal = (e) => {
+      if (e.detail) setSelectedProduct(e.detail);
+    };
+    window.addEventListener("open_product_modal", handleOpenModal);
+    return () => window.removeEventListener("open_product_modal", handleOpenModal);
+  }, []);
+
   const handleAddToCartFromHome = (p) => {
     // Si tiene variantes (tallas/colores), abrir modal para que elija su talla
     if (p.variants && p.variants.length > 0) {
@@ -159,7 +188,10 @@ export default function HomePage() {
       return;
     }
     const stock = Number(p.totalStock ?? p.stock ?? 0);
-    const inCart = items.find((i) => i.key === `${p.id}-default`)?.quantity || 0;
+    const baseKeyPrefix = `${p.id}-default`;
+    const inCart = items
+      .filter((i) => i.key === baseKeyPrefix || i.key.startsWith(`${baseKeyPrefix}-mod`))
+      .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
     if (stock <= 0) {
       toast.error("Este producto se encuentra agotado");
       return;
@@ -168,7 +200,7 @@ export default function HomePage() {
       toast.error(`Ya tienes el límite disponible (${stock} unidades) en tu bolsa`);
       return;
     }
-    const added = addItem(p, null, 1);
+    const added = addItem({ ...p, _origenVenta: "index_super_admin" }, null, 1);
     if (added !== false) {
       toast.success(`¡"${p.name}" agregado a tu bolsa! 🛍️`);
     }
@@ -300,7 +332,7 @@ export default function HomePage() {
 
         const prodSnap = await getDocs(query(collection(db, "products"), limit(100)));
         const allActiveProducts = prodSnap.docs
-          .map(d => ({ id: d.id, ...d.data() }))
+          .map(d => ({ id: d.id, ...d.data(), _origenVenta: "index_super_admin" }))
           .filter(p => allActiveStoreIds.includes(p.storeId));
         
         setAllProducts(allActiveProducts);
@@ -314,12 +346,7 @@ export default function HomePage() {
           setBestSellers(bsList);
         }
         if (currentSections.offers) {
-          const actualOffers = allActiveProducts.filter(p => {
-            const oldP = Number(p.oldPrice) || 0;
-            const curP = Number(p.price) || 0;
-            const extraD = Number(p.discount) || Number(p.offerDiscount) || 0;
-            return oldP > curP || extraD > 0 || (p.offerEndsAt && p.offerEndsAt > Date.now());
-          });
+          const actualOffers = allActiveProducts.filter(p => calculateProductPricing(p).hasDiscount);
           const offersList = actualOffers.length > 0 
             ? actualOffers.slice(0, 12) 
             : [...allActiveProducts].sort(() => 0.5 - Math.random()).slice(0, 12);
@@ -1092,7 +1119,7 @@ export default function HomePage() {
       </AnimatePresence>
 
       {/* 🌟 BOLSA DE COMPRAS MULTITIENDA */}
-      <CartDrawer />
+      <CartDrawer onSelectProduct={setSelectedProduct} />
 
       {/* 🌟 BOTÓN FLOTANTE DE BOLSA SI HAY PRODUCTOS */}
       {!isOpen && !selectedProduct && itemCount > 0 && (

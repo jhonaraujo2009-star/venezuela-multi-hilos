@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { useCart } from "../../context/CartContext";
+import { calculateProductPricing, prepareProductForCart } from "../../utils/pricing";
 import toast from "react-hot-toast";
 
 export default function ProductCard({ product, onClick, rank }) {
@@ -48,12 +49,14 @@ export default function ProductCard({ product, onClick, rank }) {
   };
 
   const getThumbnail = () => {
+    if (Array.isArray(product.images) && product.images.length > 0 && product.images[0]) return product.images[0];
     if (product.image) return product.image;
     if (product.imageUrl) return product.imageUrl;
-    if (Array.isArray(product.images) && product.images.length > 0 && product.images[0]) return product.images[0];
     return null;
   };
   const productThumbnail = getThumbnail();
+  const imageCount = (Array.isArray(product.images) ? product.images.filter(Boolean).length : 0) || (product.image || product.imageUrl ? 1 : 0);
+  const hasMultipleModels = imageCount > 1;
 
   const totalStock = product.variants?.length
     ? product.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
@@ -62,39 +65,17 @@ export default function ProductCard({ product, onClick, rank }) {
   const isSoldOut = totalStock === 0;
   const lowStock = totalStock > 0 && totalStock <= 5;
 
-  // 🌟 LÓGICA DE DESCUENTOS APILADOS (STACKED DISCOUNTS) 🌟
-  const rawOldPrice = Number(product.oldPrice) || 0; 
-  const rawPrice = Number(product.price) || 0;       
-  
-  const extraDiscountPerc = Number(product.discount) || Number(product.offerDiscount) || 0; 
-
-  const finalPrice = extraDiscountPerc > 0 
-    ? rawPrice - (rawPrice * (extraDiscountPerc / 100)) 
-    : rawPrice;
-
-  const displayCrossedPrice = rawOldPrice > rawPrice ? rawOldPrice : (extraDiscountPerc > 0 ? rawPrice : 0);
-
-  // 🌟 CÁLCULO DE ETIQUETAS (BADGES) 🌟
-  let baseDiscountPerc = 0;
-  if (rawOldPrice > rawPrice) {
-    baseDiscountPerc = Math.round(((rawOldPrice - rawPrice) / rawOldPrice) * 100);
-  } else if (extraDiscountPerc > 0 && rawOldPrice === 0) {
-    baseDiscountPerc = extraDiscountPerc; 
-  }
-
-  // 🌟 DETECTIVE DE OFERTAS 🌟
-  let endTime = product.parsedOfferEndsAt || 0;
-  if (!endTime) {
-    if (product.offerEndsAt) {
-      endTime = product.offerEndsAt?.toMillis ? product.offerEndsAt.toMillis() : new Date(product.offerEndsAt).getTime();
-      if (endTime < 100000) endTime = (product.createdAtMs || Date.now()) + (endTime * 60 * 60 * 1000);
-    } else if (product.horas || product.duracion || product.hours) {
-      endTime = (product.createdAtMs || Date.now()) + (Number(product.horas || product.duracion || product.hours) * 60 * 60 * 1000);
-    }
-  }
-
-  const isFlashOffer = endTime > Date.now();
-  const hasDiscount = (displayCrossedPrice > finalPrice) || isFlashOffer;
+  // 🌟 LÓGICA DE PRECIOS Y DESCUENTOS CENTRALIZADA 🌟
+  const pricing = calculateProductPricing(product);
+  const finalPrice = pricing.finalPrice;
+  const displayCrossedPrice = pricing.oldPrice;
+  const baseDiscountPerc = pricing.discountPerc;
+  const rawOldPrice = pricing.rawOldPrice;
+  const rawPrice = pricing.rawPrice;
+  const extraDiscountPerc = Number(product.discount || product.offerDiscount || 0);
+  const isFlashOffer = pricing.isFlashOffer;
+  const hasDiscount = pricing.hasDiscount;
+  const endTime = pricing.endTime;
 
   // RELOJ EN VIVO
   useEffect(() => {
@@ -117,19 +98,12 @@ export default function ProductCard({ product, onClick, rank }) {
   // ------------------------------------------------------------------
   // 🌟 FASE 2: EL CHISMOSO (Rastreador de Origen) 🌟
   // ------------------------------------------------------------------
-  // Detectamos si el cliente está viendo este producto en tu página principal (/) o vino referido
-  const isFromSuperAdmin = window.location.pathname === "/";
+  const isFromSuperAdmin = typeof window !== "undefined" && window.location.pathname === "/";
   const savedOrigin = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("origenVenta") : null;
   const originToUse = isFromSuperAdmin ? "index_super_admin" : (savedOrigin || "tienda_directa");
 
-  // Clonamos el producto con los precios matemáticos y LA ETIQUETA INVISIBLE
-  const productWithFinalPrice = {
-    ...product,
-    price: Number(finalPrice.toFixed(2)),
-    oldPrice: displayCrossedPrice,
-    // Aquí inyectamos el GPS para cobrar la comisión luego
-    _origenVenta: originToUse
-  };
+  // Clonamos el producto con los precios matemáticos unificados y la firma invisible
+  const productWithFinalPrice = prepareProductForCart(product, originToUse);
   // ------------------------------------------------------------------
 
   // 🌟 FUNCIÓN DE AGREGADO RÁPIDO
@@ -141,7 +115,10 @@ export default function ProductCard({ product, onClick, rank }) {
       onClick(productWithFinalPrice);
     } else {
       const stock = Number(productWithFinalPrice.totalStock ?? productWithFinalPrice.stock ?? 0);
-      const inCart = items.find((i) => i.key === `${productWithFinalPrice.id}-default`)?.quantity || 0;
+      const baseKeyPrefix = `${productWithFinalPrice.id}-default`;
+      const inCart = items
+        .filter((i) => i.key === baseKeyPrefix || i.key.startsWith(`${baseKeyPrefix}-mod`))
+        .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
       if (inCart >= stock) {
         toast.error(`Ya tienes el máximo disponible (${stock} unidades) en tu bolsa`);
         return;
@@ -278,6 +255,13 @@ export default function ProductCard({ product, onClick, rank }) {
       </div>
 
       <div className="p-4 bg-transparent">
+        {hasMultipleModels && (
+          <div className="mb-1.5 flex items-center gap-1 text-[10px] font-bold text-pink-700 bg-pink-50/90 border border-pink-200/80 px-2.5 py-0.5 rounded-full w-fit shadow-xs">
+            <span>✨</span>
+            <span>Este producto posee varios modelos</span>
+          </div>
+        )}
+
         <h3 className="text-[13px] font-bold text-gray-800 leading-tight truncate w-full block mb-1 group-hover:text-pink-600 transition-colors uppercase">
           {product.name}
         </h3>

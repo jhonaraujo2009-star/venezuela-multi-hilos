@@ -33,7 +33,15 @@ export default function StorePage() {
   const isBlockedByDebt = storeData?.deuda_comision > 20;
   const isStoreDisabled = storeData?.isActive === false;
 
-  // 🌟 MAGIA: DETECTAR Y MARCAR ORIGEN DEL TRÁFICO
+  // 🌟 MAGIA: DETECTAR Y MARCAR ORIGEN DEL TRÁFICO + ESCUCHAR EVENTO DE REAPERTURA DE PRODUCTO DESDE LA BOLSA
+  useEffect(() => {
+    const handleOpenModal = (e) => {
+      if (e.detail) setSelectedProduct(e.detail);
+    };
+    window.addEventListener("open_product_modal", handleOpenModal);
+    return () => window.removeEventListener("open_product_modal", handleOpenModal);
+  }, []);
+
   useEffect(() => {
     if (storeData?.id) {
       // Si el visitante entra desde la página principal de MegaStore, debe haber una cookie/session marcando index_super_admin.
@@ -163,7 +171,7 @@ export default function StorePage() {
       <AnimatePresence>
         {selectedProduct && <ProductModal product={selectedProduct} onClose={() => setSelectedProduct(null)} />}
       </AnimatePresence>
-      <CartDrawer />
+      <CartDrawer onSelectProduct={setSelectedProduct} />
       {showFloatingElements && <WhatsAppVIP />}
       <InstallButton />
 

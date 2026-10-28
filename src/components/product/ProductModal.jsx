@@ -5,6 +5,7 @@ import { db } from "../../config/firebase";
 import { useApp } from "../../context/AppContext";
 import { useCart } from "../../context/CartContext";
 import { useBackButton } from "../../hooks/useBackButton";
+import { calculateProductPricing } from "../../utils/pricing";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -17,7 +18,9 @@ export default function ProductModal({ product, onClose }) {
   const [relatedProducts, setRelatedProducts] = useState([]);
   const [timeLeft, setTimeLeft] = useState("");
 
-  const [activeImage, setActiveImage] = useState(0);
+  const [activeImage, setActiveImage] = useState(() => {
+    return Number(product?.selectedImageIndex ?? 0) || 0;
+  });
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [direction, setDirection] = useState(0);
@@ -48,37 +51,30 @@ export default function ProductModal({ product, onClose }) {
     ? (selectedVariant ? Number(selectedVariant.stock ?? 0) : 0)
     : Number(currentProduct?.totalStock ?? currentProduct?.stock ?? 0);
 
-  // 🌟 LÍMITE ESTRICTO DE BASE DE DATOS TENIENDO EN CUENTA LO YA AGREGADO EN LA BOLSA
-  const currentKey = `${currentProduct?.id}-${selectedVariant?.id || "default"}`;
-  const itemInCart = items.find((i) => i.key === currentKey);
-  const alreadyInCart = itemInCart ? itemInCart.quantity : 0;
+  // 🌟 LÍMITE ESTRICTO DE BASE DE DATOS TENIENDO EN CUENTA LO YA AGREGADO EN LA BOLSA (Todos los modelos del producto/variante)
+  const baseKeyPrefix = `${currentProduct?.id}-${selectedVariant?.id || "default"}`;
+  const alreadyInCart = items
+    .filter((i) => i.key === baseKeyPrefix || i.key.startsWith(`${baseKeyPrefix}-mod`))
+    .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
   const remainingStock = Math.max(0, availableStock - alreadyInCart);
 
-  const oldPrice = Number(currentProduct?.oldPrice) || 0;
-  const currentPrice = Number(currentProduct?.price) || 0;
-  const isFlashOffer = currentProduct?.offerEndsAt && currentProduct?.offerEndsAt > Date.now();
-  const hasDiscount = (oldPrice > currentPrice) || isFlashOffer;
-  
-  let discountPercentage = 0;
-  if (isFlashOffer && currentProduct?.offerDiscount) {
-    discountPercentage = Number(currentProduct.offerDiscount);
-  } else if (oldPrice > currentPrice) {
-    discountPercentage = Math.round(((oldPrice - currentPrice) / oldPrice) * 100);
-  }
+  // 🌟 PRECIOS CENTRALIZADOS Y UNIFICADOS
+  const pricing = calculateProductPricing(currentProduct);
+  const oldPrice = pricing.oldPrice;
+  const currentPrice = pricing.rawPrice;
+  const finalPrice = pricing.finalPrice;
+  const isFlashOffer = pricing.isFlashOffer;
+  const hasDiscount = pricing.hasDiscount;
+  const discountPercentage = pricing.discountPerc;
 
-  // 🌟 PRECIO FINAL EXACTO CON DESCUENTO RELÁMPAGO (Si aplica)
-  const finalPrice = (isFlashOffer && discountPercentage > 0)
-    ? currentPrice - (currentPrice * (discountPercentage / 100))
-    : currentPrice;
-
-  // 🌟 TOTAL DINÁMICO PARA EL BOTÓN AGRESIVO
+  // 🌟 TOTAL DINÁMICO PARA EL BOTÓN DE COMPRA
   const effectiveQuantity = remainingStock <= 0 ? 0 : quantity;
   const totalPrice = (finalPrice * effectiveQuantity).toFixed(2);
 
   useEffect(() => {
     if (!product) return;
     setCurrentProduct(product);
-    setActiveImage(0);
+    setActiveImage(Number(product?.selectedImageIndex ?? 0) || 0);
     setSelectedVariant(null);
     setQuantity(1);
     setDirection(0);
@@ -86,7 +82,7 @@ export default function ProductModal({ product, onClose }) {
     const likedProducts = JSON.parse(localStorage.getItem(likedKey) || "{}");
     setHasLiked(!!likedProducts[product.id]);
     document.getElementById('modalScrollArea')?.scrollTo(0,0);
-  }, [product?.id, likedKey]);
+  }, [product?.id, product?.selectedImageIndex, likedKey]);
 
   // 🌟 ESCUCHADOR EN TIEMPO REAL DESDE FIRESTORE: ACTUALIZA STOCK Y VARIANTES DE LA BD
   useEffect(() => {
@@ -107,10 +103,10 @@ export default function ProductModal({ product, onClose }) {
   }, [currentProduct?.id, selectedVariant?.id]);
 
   useEffect(() => {
-    if (!isFlashOffer) return;
+    if (!isFlashOffer || !pricing.endTime) return;
     const interval = setInterval(() => {
       const now = Date.now();
-      const distance = currentProduct.offerEndsAt - now;
+      const distance = pricing.endTime - now;
       if (distance <= 0) {
         setTimeLeft("Oferta Terminada");
         clearInterval(interval);
@@ -122,7 +118,7 @@ export default function ProductModal({ product, onClose }) {
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [isFlashOffer, currentProduct?.offerEndsAt]);
+  }, [isFlashOffer, pricing.endTime]);
 
   useEffect(() => {
     const fetchRelated = async () => {
@@ -182,21 +178,42 @@ export default function ProductModal({ product, onClose }) {
     setIsLiking(false);
   };
 
+  const getImagesArray = () => {
+    let raw = currentProduct;
+    if (Array.isArray(raw.images) && raw.images.length > 0 && raw.images[0]) return raw.images.filter(Boolean);
+    if (raw.image) return [raw.image];
+    if (raw.imageUrl) return [raw.imageUrl];
+    return [];
+  };
+
+  const images = getImagesArray();
+  const hasMultipleImages = images.length > 1;
+
   const handleAddToCart = () => {
     if (hasVariants && !selectedVariant) return toast.error("Selecciona una talla primero");
     if (availableStock <= 0) return toast.error("Este producto se encuentra agotado");
     if (remainingStock <= 0) return toast.error(`Ya tienes el límite disponible (${availableStock} unidades) en tu bolsa`);
     if (quantity > remainingStock) return toast.error(`Solo puedes agregar hasta ${remainingStock} unidades más`);
 
-    const displayOldPrice = oldPrice > finalPrice ? oldPrice : (finalPrice < currentPrice ? currentPrice : (Number(currentProduct?.oldPrice) || 0));
+    const originToUse = currentProduct._origenVenta || (typeof sessionStorage !== "undefined" ? sessionStorage.getItem("origenVenta") : null) || "tienda_directa";
+    const selectedImageUrl = images[activeImage] || currentProduct.image || currentProduct.imageUrl;
+
     const productToAdd = { 
       ...currentProduct, 
+      image: selectedImageUrl,
+      imageUrl: selectedImageUrl,
+      selectedImage: selectedImageUrl,
+      selectedImageIndex: activeImage,
+      selectedModelLabel: hasMultipleImages ? `Modelo #${activeImage + 1}` : null,
       price: finalPrice,
-      oldPrice: displayOldPrice > finalPrice ? displayOldPrice : 0
+      oldPrice: oldPrice > finalPrice ? oldPrice : null,
+      _rawPrice: currentPrice,
+      _rawOldPrice: pricing.rawOldPrice,
+      _origenVenta: originToUse
     };
     const added = addItem(productToAdd, selectedVariant, quantity);
     if (added !== false) {
-      toast.success("¡Agregado a tu bolsa! 🛍️");
+      toast.success(hasMultipleImages ? `¡Modelo #${activeImage + 1} agregado a tu bolsa! 🛍️` : "¡Agregado a tu bolsa! 🛍️");
       onClose();
     }
   };
@@ -213,17 +230,6 @@ export default function ProductModal({ product, onClose }) {
   };
 
   if (!currentProduct) return null;
-
-  const getImagesArray = () => {
-    let raw = currentProduct;
-    if (Array.isArray(raw.images) && raw.images.length > 0 && raw.images[0]) return raw.images;
-    if (raw.image) return [raw.image];
-    if (raw.imageUrl) return [raw.imageUrl];
-    return [];
-  };
-
-  const images = getImagesArray();
-  const hasMultipleImages = images.length > 1;
 
   const paginate = (newDirection) => {
     setDirection(newDirection);
@@ -270,6 +276,7 @@ export default function ProductModal({ product, onClose }) {
         <button
           onClick={onClose}
           className="absolute top-5 right-5 z-[60] w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center text-gray-950 shadow-lg hover:bg-white hover:scale-110 transition-all active:scale-95 border border-gray-100"
+          title="Cerrar"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
         </button>
@@ -277,13 +284,21 @@ export default function ProductModal({ product, onClose }) {
         <div id="modalScrollArea" className="flex-1 overflow-y-auto scrollbar-hide pb-32">
           <div className="flex flex-col md:flex-row">
             
-            {/* GALERÍA */}
-            <div className="w-full md:w-1/2 md:sticky md:top-0 md:h-fit">
-              <div className="relative w-full aspect-[4/5] bg-gray-50 overflow-hidden group border-b border-gray-100 md:border-b-0 md:border-r">
+            {/* 🌟 GALERÍA CON ESTILO INSTAGRAM DE ALTO CONTRASTE 🌟 */}
+            <div className="w-full md:w-1/2 md:sticky md:top-0 md:h-fit flex flex-col bg-slate-50 border-b border-gray-100 md:border-b-0 md:border-r">
+              <div className="relative w-full aspect-[4/5] bg-gradient-to-b from-gray-100 via-gray-50 to-gray-100 overflow-hidden group select-none">
                 
                 {hasDiscount && discountPercentage > 0 && (
-                  <div className="absolute top-6 left-6 z-20 bg-red-500 text-white px-4 py-2 rounded-full text-[11px] font-black uppercase tracking-widest shadow-xl">
+                  <div className="absolute top-4 left-4 z-30 bg-red-600 text-white px-3.5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl border border-white/20">
                     -{discountPercentage}% Dto
+                  </div>
+                )}
+
+                {/* 🌟 CONTADOR ESTILO INSTAGRAM (Ej: 📷 1/4) */}
+                {hasMultipleImages && (
+                  <div className="absolute top-4 right-4 z-30 bg-black/65 backdrop-blur-md text-white text-[11px] font-black px-3 py-1 rounded-full shadow-xl border border-white/20 flex items-center gap-1.5 pointer-events-none">
+                    <span>📷</span>
+                    <span>{activeImage + 1}/{images.length}</span>
                   </div>
                 )}
 
@@ -308,7 +323,7 @@ export default function ProductModal({ product, onClose }) {
                           else if (swipe > swipeConfidenceThreshold) paginate(-1);
                         }}
                         className="absolute inset-0 w-full h-full object-cover cursor-grab active:cursor-grabbing"
-                        alt={currentProduct.name}
+                        alt={`${currentProduct.name} - Modelo ${activeImage + 1}`}
                       />
                     )}
                   </AnimatePresence>
@@ -322,25 +337,82 @@ export default function ProductModal({ product, onClose }) {
                   )
                 )}
 
+                {/* 🌟 FLECHAS DE NAVEGACIÓN ESTILO INSTAGRAM (Visibles en móvil y desktop con alto contraste) */}
                 {hasMultipleImages && (
                   <>
-                    <div className="absolute inset-y-0 left-0 w-1/5 hidden md:flex items-center justify-start pl-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                      <button onClick={() => paginate(-1)} className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center text-gray-950 shadow-xl hover:scale-110 transition-transform">❮</button>
-                    </div>
-                    <div className="absolute inset-y-0 right-0 w-1/5 hidden md:flex items-center justify-end pr-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                      <button onClick={() => paginate(1)} className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center text-gray-950 shadow-xl hover:scale-110 transition-transform">❯</button>
-                    </div>
+                    <button 
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); paginate(-1); }}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-black/55 hover:bg-black/80 backdrop-blur-md text-white flex items-center justify-center shadow-2xl active:scale-90 transition-all border border-white/20 cursor-pointer"
+                      title="Modelo anterior"
+                    >
+                      <svg className="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7"/></svg>
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); paginate(1); }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-black/55 hover:bg-black/80 backdrop-blur-md text-white flex items-center justify-center shadow-2xl active:scale-90 transition-all border border-white/20 cursor-pointer"
+                      title="Siguiente modelo"
+                    >
+                      <svg className="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
+                    </button>
                   </>
                 )}
 
+                {/* 🌟 PUNTOS INDICADORES ESTILO INSTAGRAM EN CÁPSULA OSCURA (Inmunes a fotos de fondo blanco) */}
                 {hasMultipleImages && (
-                  <div className="absolute bottom-6 left-0 right-0 flex justify-center gap-2 z-20">
-                    {images.map((_, i) => (
-                      <div key={i} className={`h-2 rounded-full transition-all duration-300 ${i === activeImage ? "w-7 bg-white shadow-lg" : "w-2 bg-white/70"}`} />
-                    ))}
+                  <div className="absolute bottom-4 left-0 right-0 flex justify-center z-30 pointer-events-auto">
+                    <div className="bg-black/65 backdrop-blur-md px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shadow-2xl border border-white/20">
+                      {images.map((_, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => {
+                            setDirection(i > activeImage ? 1 : -1);
+                            setActiveImage(i);
+                          }}
+                          className={`rounded-full transition-all duration-300 ${
+                            i === activeImage 
+                              ? "w-6 h-2 bg-white shadow-md" 
+                              : "w-2 h-2 bg-white/45 hover:bg-white/80"
+                          }`}
+                          title={`Ver modelo #${i + 1}`}
+                        />
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
+
+              {/* 🌟 TIRA DE MINIATURAS INTERACTIVAS DE TODOS LOS MODELOS */}
+              {hasMultipleImages && (
+                <div className="p-3 bg-gray-50/90 border-t border-gray-200/80 flex items-center gap-2.5 overflow-x-auto scrollbar-hide">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider shrink-0 mr-1">
+                    Modelos:
+                  </span>
+                  {images.map((img, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setDirection(idx > activeImage ? 1 : -1);
+                        setActiveImage(idx);
+                      }}
+                      className={`relative w-14 h-16 sm:w-16 sm:h-20 rounded-xl overflow-hidden shrink-0 transition-all duration-200 border-2 active:scale-95 ${
+                        idx === activeImage 
+                          ? "border-pink-600 ring-2 ring-pink-200 shadow-md scale-105" 
+                          : "border-gray-200 opacity-60 hover:opacity-100 hover:border-gray-400"
+                      }`}
+                      title={`Elegir Modelo #${idx + 1}`}
+                    >
+                      <img src={img} alt={`Modelo #${idx + 1}`} className="w-full h-full object-cover" />
+                      <span className="absolute bottom-0 inset-x-0 bg-black/70 text-[9px] font-black text-white text-center py-0.5">
+                        #{idx + 1}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* INFO Y FLUJO DE COMPRA */}
@@ -360,8 +432,17 @@ export default function ProductModal({ product, onClose }) {
               <div className="p-6 md:p-8">
                 
                 {/* 1. CABECERA: NOMBRE, PRECIO Y SOCIAL */}
-                <div className="flex justify-between items-start gap-5 mb-8">
+                <div className="flex justify-between items-start gap-5 mb-6">
                   <div className="flex-1">
+                    
+                    {/* 🌟 INDICADOR: ESTE PRODUCTO POSEE VARIOS MODELOS */}
+                    {hasMultipleImages && (
+                      <div className="mb-2.5 flex items-center gap-1.5 text-xs font-bold text-pink-700 bg-pink-50 border border-pink-200/90 px-3 py-1 rounded-full w-fit shadow-xs">
+                        <span>✨</span>
+                        <span>Este producto posee varios modelos ({images.length} disponibles)</span>
+                      </div>
+                    )}
+
                     <h2 className="text-2xl sm:text-3xl font-black text-gray-950 leading-tight mb-2 tracking-tighter">
                       {currentProduct.name}
                     </h2>
@@ -414,6 +495,25 @@ export default function ProductModal({ product, onClose }) {
                     </button>
                   </div>
                 </div>
+
+                {/* 🌟 INDICADOR VISUAL DEL MODELO ACTUALMENTE SELECCIONADO 🌟 */}
+                {hasMultipleImages && (
+                  <div className="mb-6 p-3.5 bg-gradient-to-r from-pink-50/90 via-pink-50/50 to-purple-50/80 border border-pink-200/90 rounded-2xl flex items-center justify-between gap-3 shadow-xs">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-12 h-14 rounded-xl overflow-hidden bg-white border border-pink-300 shadow-sm shrink-0">
+                        <img src={images[activeImage]} alt={`Modelo #${activeImage + 1}`} className="w-full h-full object-cover" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-black text-pink-600 uppercase tracking-widest block leading-tight">Modelo Seleccionado</span>
+                        <span className="text-sm font-black text-gray-900 block truncate">Modelo #{activeImage + 1}</span>
+                        <span className="text-[10px] text-gray-500 block truncate">Desliza la foto para elegir tu modelo preferido</span>
+                      </div>
+                    </div>
+                    <span className="text-xs font-black text-pink-700 bg-white px-2.5 py-1.5 rounded-xl border border-pink-100 shadow-xs shrink-0">
+                      #{activeImage + 1} de {images.length}
+                    </span>
+                  </div>
+                )}
 
                 {/* 🌟 2. EL FLUJO DE ORO: TALLAS INMEDIATAMENTE DESPUÉS DEL PRECIO */}
                 {hasVariants && (
@@ -563,19 +663,37 @@ export default function ProductModal({ product, onClose }) {
                       ref={relatedScrollRef}
                       className="flex gap-4 overflow-x-auto hide-scrollbar pb-2 scroll-smooth snap-x snap-mandatory"
                     >
-                      {relatedProducts.map(rp => (
-                        <button 
-                          key={rp.id} 
-                          onClick={() => setCurrentProduct(rp)} 
-                          className="w-[calc(33.333%-11px)] flex-shrink-0 text-left group active:scale-95 transition-transform snap-start"
-                        >
-                          <div className="w-full aspect-[4/5] bg-white rounded-2xl mb-2.5 overflow-hidden border border-gray-100 shadow-sm">
-                            <img src={rp.images?.[0] || rp.image} alt={rp.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                          </div>
-                          <p className="text-[11px] font-bold text-gray-950 truncate leading-tight group-hover:text-pink-600 transition-colors">{rp.name}</p>
-                          <p className="text-[10px] font-black text-gray-500 mt-1">${rp.price}</p>
-                        </button>
-                      ))}
+                      {relatedProducts.map(rp => {
+                        const rpPricing = calculateProductPricing(rp);
+                        return (
+                          <button 
+                            key={rp.id} 
+                            onClick={() => {
+                              setCurrentProduct(rp);
+                              setActiveImage(0);
+                              setSelectedVariant(null);
+                              setQuantity(1);
+                              setDirection(0);
+                              setShowDescription(false);
+                              const likedProducts = JSON.parse(localStorage.getItem(likedKey) || "{}");
+                              setHasLiked(!!likedProducts[rp.id]);
+                              document.getElementById('modalScrollArea')?.scrollTo(0, 0);
+                            }} 
+                            className="w-[calc(33.333%-11px)] flex-shrink-0 text-left group active:scale-95 transition-transform snap-start"
+                          >
+                            <div className="w-full aspect-[4/5] bg-white rounded-2xl mb-2.5 overflow-hidden border border-gray-100 shadow-sm">
+                              <img src={rp.images?.[0] || rp.image || rp.imageUrl} alt={rp.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                            </div>
+                            <p className="text-[11px] font-bold text-gray-950 truncate leading-tight group-hover:text-pink-600 transition-colors">{rp.name}</p>
+                            <div className="flex items-baseline gap-1.5 mt-1">
+                              <p className="text-[11px] font-black text-gray-900">${rpPricing.finalPrice.toFixed(2)}</p>
+                              {rpPricing.hasDiscount && rpPricing.oldPrice > rpPricing.finalPrice && (
+                                <span className="text-[9px] font-medium text-gray-400 line-through">${rpPricing.oldPrice.toFixed(2)}</span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

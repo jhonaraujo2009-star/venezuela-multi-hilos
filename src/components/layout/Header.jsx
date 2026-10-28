@@ -6,6 +6,7 @@ import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../context/AuthContext";
 import { useApp } from "../../context/AppContext";
 import { SUPER_ADMIN_EMAIL } from "../../config/constants"; 
+import { calculateProductPricing } from "../../utils/pricing";
 
 export default function Header({ onProductClick, onFilter }) {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -169,23 +170,32 @@ export default function Header({ onProductClick, onFilter }) {
                 <div className="text-sm font-bold text-gray-300 tracking-widest uppercase animate-pulse">Buscando...</div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {searchResults.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => { onProductClick(p); setSearchOpen(false); setSearchQuery(""); }}
-                      className="w-full flex items-center gap-5 p-4 bg-white hover:bg-gray-50 rounded-3xl border border-gray-100 transition-all active:scale-95 group shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
-                    >
-                      {p.images?.[0] ? (
-                        <img src={p.images[0]} alt={p.name} className="w-16 h-20 object-cover rounded-2xl shadow-sm group-hover:scale-105 transition-transform" />
-                      ) : (
-                        <div className="w-16 h-20 bg-gray-100 rounded-2xl" />
-                      )}
-                      <div className="flex-1 text-left">
-                        <p className="text-base font-black text-gray-900 leading-tight mb-1">{p.name}</p>
-                        <p className="text-sm font-bold text-gray-500">${p.price}</p>
-                      </div>
-                    </button>
-                  ))}
+                  {searchResults.map((p) => {
+                    const pricing = calculateProductPricing(p);
+                    const thumb = p.image || p.imageUrl || p.images?.[0];
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => { onProductClick(p); setSearchOpen(false); setSearchQuery(""); }}
+                        className="w-full flex items-center gap-5 p-4 bg-white hover:bg-gray-50 rounded-3xl border border-gray-100 transition-all active:scale-95 group shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
+                      >
+                        {thumb ? (
+                          <img src={thumb} alt={p.name} className="w-16 h-20 object-cover rounded-2xl shadow-sm group-hover:scale-105 transition-transform" />
+                        ) : (
+                          <div className="w-16 h-20 bg-gray-100 rounded-2xl" />
+                        )}
+                        <div className="flex-1 text-left">
+                          <p className="text-base font-black text-gray-900 leading-tight mb-1">{p.name}</p>
+                          <div className="flex items-baseline gap-2">
+                            <p className="text-sm font-bold text-gray-900">${pricing.finalPrice.toFixed(2)}</p>
+                            {pricing.hasDiscount && pricing.oldPrice > pricing.finalPrice && (
+                              <span className="text-xs font-medium text-gray-400 line-through">${pricing.oldPrice.toFixed(2)}</span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

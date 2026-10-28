@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, query } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import { calculateProductPricing } from "../utils/pricing";
 
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -139,6 +140,7 @@ export default function SearchPage() {
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden divide-y divide-gray-100">
                   {products.map(p => {
                     const pImg = p.image || p.images?.[0] || null;
+                    const pricing = calculateProductPricing(p);
                     return (
                       <div 
                         key={p.id} 
@@ -158,8 +160,14 @@ export default function SearchPage() {
                                 {p.name}
                               </h2>
                               <p className="text-xs text-gray-400 mt-1 uppercase tracking-wide">Vendido por: <span className="font-bold">{p.storeId}</span></p>
-                              <div className="flex items-center gap-1 mt-4">
-                                 <span className="text-2xl font-normal tracking-tight text-gray-900">${Number(p.price || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                              <div className="flex items-baseline gap-2 mt-4">
+                                 <span className="text-2xl font-normal tracking-tight text-gray-900">${Number(pricing.finalPrice || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                                 {pricing.hasDiscount && pricing.oldPrice > pricing.finalPrice && (
+                                   <span className="text-sm text-gray-400 line-through">${Number(pricing.oldPrice).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                                 )}
+                                 {pricing.discountPerc > 0 && (
+                                   <span className="text-xs font-bold text-green-600">{pricing.discountPerc}% OFF</span>
+                                 )}
                               </div>
                               <span className="text-green-600 font-medium text-[13px] block mt-1">Llega gratis mañana</span>
                             </div>

@@ -4,6 +4,7 @@ import { db } from "../../config/firebase";
 import ProductCard from "./ProductCard";
 import { useApp } from "../../context/AppContext"; 
 import { motion, AnimatePresence } from "framer-motion"; // 🌟 MAGIA: Importamos framer-motion para las animaciones Premium
+import { calculateProductPricing } from "../../utils/pricing";
 
 // ═══════════════════════════════════════════════════════════════════
 // 🌟 SISTEMA INTELIGENTE DE SUB-CATEGORÍAS 🌟
@@ -12,49 +13,23 @@ import { motion, AnimatePresence } from "framer-motion"; // 🌟 MAGIA: Importam
 // con vista previa visual tipo cuadrícula premium.
 // ═══════════════════════════════════════════════════════════════════
 
-const SUBCATEGORY_KEYWORDS = [
-  { key: 'collar', label: 'Collares', emoji: '📿' },
-  { key: 'gargantilla', label: 'Gargantillas', emoji: '💫' },
-  { key: 'choker', label: 'Chokers', emoji: '🖤' },
-  { key: 'cadena', label: 'Cadenas', emoji: '⛓️' },
-  { key: 'zarcillo', label: 'Zarcillos', emoji: '💎' },
-  { key: 'arete', label: 'Aretes', emoji: '✨' },
-  { key: 'pendiente', label: 'Pendientes', emoji: '💎' },
-  { key: 'candonga', label: 'Candongas', emoji: '✨' },
-  { key: 'anillo', label: 'Anillos', emoji: '💍' },
-  { key: 'sortija', label: 'Sortijas', emoji: '💍' },
-  { key: 'pulsera', label: 'Pulseras', emoji: '🔗' },
-  { key: 'brazalete', label: 'Brazaletes', emoji: '💪' },
-  { key: 'manilla', label: 'Manillas', emoji: '🔗' },
-  { key: 'dije', label: 'Dijes', emoji: '🔮' },
-  { key: 'tobillera', label: 'Tobilleras', emoji: '🦶' },
-  { key: 'reloj', label: 'Relojes', emoji: '⌚' },
-  { key: 'piercing', label: 'Piercings', emoji: '🔩' },
-  { key: 'broche', label: 'Broches', emoji: '📌' },
-  { key: 'cintillo', label: 'Cintillos', emoji: '👑' },
-  { key: 'bandana', label: 'Bandanas', emoji: '🎀' },
-  { key: 'cola', label: 'Colas y Moños', emoji: '🎀' },
-  { key: 'moño', label: 'Colas y Moños', emoji: '🎀' },
-  { key: 'gancho', label: 'Ganchos', emoji: '✨' },
-  { key: 'pinza', label: 'Pinzas', emoji: '✨' },
-  { key: 'lente', label: 'Lentes', emoji: '🕶️' },
-  { key: 'gafa', label: 'Gafas', emoji: '🕶️' },
-  { key: 'sombrero', label: 'Sombreros', emoji: '🎩' },
-  { key: 'gorra', label: 'Gorras', emoji: '🧢' },
-  { key: 'bolso', label: 'Bolsos', emoji: '👜' },
-  { key: 'cartera', label: 'Carteras', emoji: '👛' },
-  { key: 'cinturon', label: 'Cinturones', emoji: '🔗' },
-  { key: 'bufanda', label: 'Bufandas', emoji: '🧣' },
-  { key: 'pantalon', label: 'Pantalones', emoji: '👖' },
-  { key: 'camisa', label: 'Camisas', emoji: '👔' },
-  { key: 'franela', label: 'Franelas', emoji: '👕' },
-  { key: 'zapato', label: 'Zapatos', emoji: '👟' },
-  { key: 'sandalia', label: 'Sandalias', emoji: '👡' },
-  { key: 'vestido', label: 'Vestidos', emoji: '👗' },
-  { key: 'falda', label: 'Faldas', emoji: '👗' },
-  { key: 'short', label: 'Shorts', emoji: '🩳' },
-  { key: 'conjunto', label: 'Conjuntos', emoji: '🎁' },
-  { key: 'set', label: 'Sets', emoji: '🎁' },
+const SUBCATEGORY_DEFINITIONS = [
+  { key: 'collares', label: 'Collares', emoji: '📿', keywords: ['collar', 'collares', 'gargantilla', 'gargantillas', 'choker', 'chokers'] },
+  { key: 'cadenas', label: 'Cadenas', emoji: '⛓️', keywords: ['cadena', 'cadenas'] },
+  { key: 'zarcillos', label: 'Zarcillos', emoji: '💎', keywords: ['zarcillo', 'zarcillos', 'sarcillo', 'sarcillos', 'arete', 'aretes', 'pendiente', 'pendientes', 'candonga', 'candongas'] },
+  { key: 'pulseras', label: 'Pulseras', emoji: '🔗', keywords: ['pulsera', 'pulseras', 'brazalete', 'brazaletes', 'manilla', 'manillas', 'esclava', 'esclavas'] },
+  { key: 'anillos', label: 'Anillos', emoji: '💍', keywords: ['anillo', 'anillos', 'sortija', 'sortijas'] },
+  { key: 'dijes', label: 'Dijes', emoji: '🔮', keywords: ['dije', 'dijes'] },
+  { key: 'tobilleras', label: 'Tobilleras', emoji: '🦶', keywords: ['tobillera', 'tobilleras'] },
+  { key: 'relojes', label: 'Relojes', emoji: '⌚', keywords: ['reloj', 'relojes'] },
+  { key: 'piercings', label: 'Piercings', emoji: '🔩', keywords: ['piercing', 'piercings'] },
+  { key: 'broches', label: 'Broches', emoji: '📌', keywords: ['broche', 'broches', 'pin', 'pines'] },
+  { key: 'cabello', label: 'Accesorios Cabello', emoji: '🎀', keywords: ['cintillo', 'cintillos', 'bandana', 'bandanas', 'cola', 'colas', 'moño', 'moños', 'gancho', 'ganchos', 'pinza', 'pinzas', 'coleta', 'coletas'] },
+  { key: 'lentes', label: 'Lentes y Gafas', emoji: '🕶️', keywords: ['lente', 'lentes', 'gafa', 'gafas'] },
+  { key: 'bolsos', label: 'Bolsos y Carteras', emoji: '👜', keywords: ['bolso', 'bolsos', 'cartera', 'carteras', 'mochila', 'mochilas', 'billetera', 'billeteras'] },
+  { key: 'calzado', label: 'Calzado', emoji: '👟', keywords: ['zapato', 'zapatos', 'sandalia', 'sandalias', 'bota', 'botas'] },
+  { key: 'ropa', label: 'Prendas de Vestir', emoji: '👗', keywords: ['vestido', 'vestidos', 'falda', 'faldas', 'pantalon', 'pantalones', 'camisa', 'camisas', 'franela', 'franelas', 'short', 'shorts', 'blusa', 'blusas', 'top'] },
+  { key: 'sets', label: 'Sets y Conjuntos', emoji: '🎁', keywords: ['conjunto', 'conjuntos', 'set', 'sets', 'combo', 'combos'] },
 ];
 
 // 🌟 Extrae de forma robusta la primera imagen válida de un producto
@@ -80,57 +55,19 @@ const getProductImage = (p) => {
   return null;
 };
 
-// 🌟 Calcula el precio final con descuentos aplicados y precio tachado
-const calculateProductPricing = (p) => {
-  if (!p) return { finalPrice: 0, oldPrice: 0, hasDiscount: false, discountPerc: 0, baseValuation: 0 };
-  
-  const rawPrice = Number(p.price ?? p.precio ?? 0) || 0;
-  const rawOldPrice = Number(p.oldPrice ?? p.precioAnterior ?? 0) || 0;
-  const discountPerc = Number(p.discount || p.offerDiscount || 0);
-
-  // Precio final real con descuento aplicado
-  const finalPrice = discountPerc > 0 
-    ? Number((rawPrice - (rawPrice * (discountPerc / 100))).toFixed(2))
-    : rawPrice;
-
-  // Precio anterior tachado si existía
-  const displayOldPrice = rawOldPrice > rawPrice 
-    ? rawOldPrice 
-    : (discountPerc > 0 && rawPrice > finalPrice ? rawPrice : 0);
-
-  const hasDiscount = displayOldPrice > finalPrice || discountPerc > 0;
-  const effectiveDiscountPerc = discountPerc > 0 
-    ? discountPerc 
-    : (rawOldPrice > rawPrice ? Math.round(((rawOldPrice - rawPrice) / rawOldPrice) * 100) : 0);
-
-  return {
-    finalPrice,
-    oldPrice: displayOldPrice,
-    hasDiscount,
-    discountPerc: effectiveDiscountPerc,
-    baseValuation: Math.max(rawPrice, rawOldPrice)
-  };
-};
-
-// 🌟 Obtiene el precio numérico más alto o representativo de un producto
-const getProductPrice = (p) => {
-  if (!p) return 0;
-  return calculateProductPricing(p).finalPrice;
-};
-
-// 🌟 Detecta la sub-categoría de un producto basándose en su nombre
+// 🌟 Detecta la sub-categoría canónica de un producto basándose en su nombre
 const detectSubcategory = (productName) => {
   const nameLower = (productName || '')
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
-  
-  for (const sub of SUBCATEGORY_KEYWORDS) {
-    const keyNormalized = sub.key
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-    if (nameLower.includes(keyNormalized)) {
-      return sub;
+
+  for (const def of SUBCATEGORY_DEFINITIONS) {
+    for (const kw of def.keywords) {
+      const kwNorm = kw.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (nameLower.includes(kwNorm)) {
+        return { key: def.key, label: def.label, emoji: def.emoji };
+      }
     }
   }
   return { key: 'otros', label: 'Otros', emoji: '🛍️' };
@@ -139,7 +76,7 @@ const detectSubcategory = (productName) => {
 // 🌟 Obtiene la info de una sub-categoría por su clave
 const getSubcategoryInfo = (key) => {
   if (key === 'otros') return { key: 'otros', label: 'Otros', emoji: '🛍️' };
-  const found = SUBCATEGORY_KEYWORDS.find(s => s.key === key);
+  const found = SUBCATEGORY_DEFINITIONS.find(s => s.key === key);
   return found || { key, label: key.charAt(0).toUpperCase() + key.slice(1), emoji: '🛍️' };
 };
 
@@ -327,28 +264,13 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
       
   } else if (isOfertas) {
     filtered = products.filter(p => {
-      const pOld = Number(p.oldPrice) || 0;
-      const pPrice = Number(p.price) || 0;
-      const pExtra = Number(p.discount) || Number(p.offerDiscount) || 0;
-      const finalPrice = pExtra > 0 ? pPrice - (pPrice * (pExtra / 100)) : pPrice;
-      
-      const hasDiscount = pOld > finalPrice || pExtra > 0;
-      const isFlashOffer = p.parsedOfferEndsAt && p.parsedOfferEndsAt > liveTime;
-      
-      return hasDiscount || isFlashOffer;
+      const pricing = calculateProductPricing(p);
+      return pricing.hasDiscount || pricing.isFlashOffer;
     }).sort((a, b) => {
-      const aOld = Number(a.oldPrice) || Number(a.price);
-      const aPrice = Number(a.price) || 0;
-      const aExtra = Number(a.discount) || Number(a.offerDiscount) || 0;
-      const aFinal = aExtra > 0 ? aPrice - (aPrice * (aExtra / 100)) : aPrice;
-      const ahorroA = aOld - aFinal;
-
-      const bOld = Number(b.oldPrice) || Number(b.price);
-      const bPrice = Number(b.price) || 0;
-      const bExtra = Number(b.discount) || Number(b.offerDiscount) || 0;
-      const bFinal = bExtra > 0 ? bPrice - (bPrice * (bExtra / 100)) : bPrice;
-      const ahorroB = bOld - bFinal;
-
+      const pricingA = calculateProductPricing(a);
+      const pricingB = calculateProductPricing(b);
+      const ahorroA = (pricingA.oldPrice || pricingA.rawPrice) - pricingA.finalPrice;
+      const ahorroB = (pricingB.oldPrice || pricingB.rawPrice) - pricingB.finalPrice;
       return ahorroB - ahorroA;
     });
 
@@ -411,7 +333,7 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
             const sessionProducts = products.filter(p => p.sessionId === session.id);
             if (sessionProducts.length === 0) return null;
             
-            const sortedSession = [...sessionProducts].sort((a, b) => getProductPrice(b) - getProductPrice(a));
+            const sortedSession = [...sessionProducts].sort((a, b) => calculateProductPricing(b).baseValuation - calculateProductPricing(a).baseValuation);
             const topSessionProduct = sortedSession.find(p => !!getProductImage(p)) || sessionProducts[0];
             const img = getProductImage(topSessionProduct);
             
