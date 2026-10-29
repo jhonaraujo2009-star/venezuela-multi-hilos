@@ -1,15 +1,26 @@
 import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from "../config/constants";
 
+// Límite máximo: 2 Megabytes
+const MAX_FILE_BYTES = 2 * 1024 * 1024;
+
 /**
- * Comprime una imagen en el navegador antes de subirla.
- * Reduce fotos pesadas de celulares (3MB - 10MB) a un peso pluma (~150KB - 250KB)
- * en formato WebP de alta fidelidad, ahorrando hasta un 95% de los créditos de Cloudinary.
+ * Mantiene la foto en ALTA DEFINICIÓN (2K/QHD).
+ * Si la foto ya pesa 2 MB o menos, NO se comprime y se sube 100% original.
+ * Si supera los 2 MB (ej: fotos de 6MB a 12MB tomadas con celular),
+ * se optimiza en alta resolución (hasta 2560px con calidad 90%)
+ * garantizando que quede por debajo de 2 MB sin perder nitidez ni detalles.
  */
-async function compressImage(file, maxWidth = 1200, quality = 0.82) {
+async function compressImage(file, maxBytes = MAX_FILE_BYTES, maxWidth = 2560) {
   if (!file || !file.type.startsWith("image/") || file.type.includes("svg") || file.type.includes("gif")) {
     return file;
   }
 
+  // ✅ Si ya pesa 2 MB o menos, se conserva 100% intacta y original
+  if (file.size <= maxBytes) {
+    return file;
+  }
+
+  // ✅ Si pesa más de 2 MB, ajustar manteniendo alta definición (2560px, calidad 90%)
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -18,6 +29,7 @@ async function compressImage(file, maxWidth = 1200, quality = 0.82) {
         let width = img.width;
         let height = img.height;
 
+        // Mantener resolución 2K / Alta Definición
         if (width > maxWidth) {
           height = Math.round((height * maxWidth) / width);
           width = maxWidth;
@@ -28,8 +40,11 @@ async function compressImage(file, maxWidth = 1200, quality = 0.82) {
         canvas.height = height;
 
         const ctx = canvas.getContext("2d");
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
         ctx.drawImage(img, 0, 0, width, height);
 
+        // Calidad 90% (alta fidelidad para bisutería y detalles finos)
         canvas.toBlob(
           (blob) => {
             if (blob && blob.size < file.size) {
@@ -43,7 +58,7 @@ async function compressImage(file, maxWidth = 1200, quality = 0.82) {
             }
           },
           "image/webp",
-          quality
+          0.90
         );
       };
       img.onerror = () => resolve(file);
@@ -55,7 +70,7 @@ async function compressImage(file, maxWidth = 1200, quality = 0.82) {
 }
 
 /**
- * Sube una imagen optimizada directamente a Cloudinary.
+ * Sube una imagen en alta definición directamente a Cloudinary.
  * @param {File} file Archivo binario de la imagen
  * @param {string} folder Carpeta destino (ej: 'tienda_maquillaje/bisuterajhon')
  * @returns {Promise<string>} URL pública HTTPS de la imagen
@@ -63,12 +78,12 @@ async function compressImage(file, maxWidth = 1200, quality = 0.82) {
 export async function uploadImage(file, folder = "general") {
   if (!file) throw new Error("No se proporcionó archivo.");
 
-  // 1. Optimización y compresión previa en el navegador
-  const optimizedFile = await compressImage(file);
+  // 1. Respetar límite de 2 MB manteniendo máxima resolución
+  const fileToUpload = await compressImage(file);
 
   // 2. Envío directo a Cloudinary mediante upload preset unsigned
   const formData = new FormData();
-  formData.append("file", optimizedFile);
+  formData.append("file", fileToUpload);
   formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
   if (folder) {
     formData.append("folder", folder);
