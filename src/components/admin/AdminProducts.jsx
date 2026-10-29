@@ -5,7 +5,7 @@ import {
 import { db } from "../../config/firebase";
 import toast from "react-hot-toast";
 import { useApp } from "../../context/AppContext"; // 🌟 INYECTAMOS EL CEREBRO
-import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from "../../config/constants";
+import { uploadImage } from "../../utils/imageUploader";
 import JSZip from "jszip";
 
 // ==========================================
@@ -90,27 +90,14 @@ function ProductForm({ sessions, product, onClose, storeData }) {
     try {
       const urls = await Promise.all(
         files.map(async (f) => {
-          const formData = new FormData();
-          formData.append("file", f);
-          formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET); 
-
-          // 🌟 MAGIA CLOUDINARY: Le decimos que cree una sub-carpeta con el ID de la tienda
-          formData.append("folder", `tienda_maquillaje/${storeData.id}`);
-
-          const res = await fetch(
-            `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, 
-            { method: "POST", body: formData }
-          );
-          const data = await res.json();
-          // 🌟 Usamos la URL original sin transformaciones para preservar calidad máxima
-          return data.secure_url;
+          return await uploadImage(f, `tienda_maquillaje/${storeData.id}`);
         })
       );
       setForm((prev) => ({ ...prev, images: [...prev.images, ...urls] }));
-      toast.success("Imágenes listas");
+      toast.success("Imágenes listas en tu servidor local");
     } catch (error) {
       console.error(error);
-      toast.error("Error al subir a Cloudinary");
+      toast.error("Error al subir imagen");
     } finally {
       setUploading(false);
     }

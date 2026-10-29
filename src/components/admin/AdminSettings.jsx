@@ -1,6 +1,6 @@
-import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from "../../config/constants";
 import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
+import { uploadImage } from "../../utils/imageUploader";
 import toast from "react-hot-toast";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
@@ -69,17 +69,10 @@ export default function AdminSettings() {
     }
 
     setUploading(type);
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET); 
-
-    formData.append("folder", `tienda_maquillaje/${storeData.id}`);
-
     try {
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
-      const data = await res.json();
-      setForm(prev => ({ ...prev, [category]: { ...prev[category], [type]: data.secure_url } }));
-      toast.success("Logo subido con éxito");
+      const url = await uploadImage(file, `tienda_maquillaje/${storeData.id}`);
+      setForm(prev => ({ ...prev, [category]: { ...prev[category], [type]: url } }));
+      toast.success("Logo subido con éxito a tu servidor");
     } catch {
       toast.error("Error al subir");
     } finally {

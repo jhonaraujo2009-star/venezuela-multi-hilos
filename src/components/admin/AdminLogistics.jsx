@@ -3,7 +3,7 @@ import {
   collection, doc, setDoc, onSnapshot, addDoc, updateDoc, deleteDoc, serverTimestamp, query, where
 } from "firebase/firestore";
 import { db } from "../../config/firebase";
-import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from "../../config/constants";
+import { uploadImage } from "../../utils/imageUploader";
 import toast from "react-hot-toast";
 import { useApp } from "../../context/AppContext"; // 🌟 INYECTAMOS LA TIENDA
 
@@ -45,18 +45,7 @@ export default function AdminLogistics() {
     setUploading({ ...uploading, [id]: true });
     try {
       const realDocId = `${storeData.id}_${id}`;
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-      formData.append("folder", `tienda_maquillaje/${storeData.id}`);
-
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
-        method: "POST",
-        body: formData
-      });
-      if (!res.ok) throw new Error("Error en la subida a Cloudinary");
-      const data = await res.json();
-      const url = data.secure_url;
+      const url = await uploadImage(file, `tienda_maquillaje/${storeData.id}`);
 
       await setDoc(doc(db, "logistics", realDocId), {
         name: id.toUpperCase(),

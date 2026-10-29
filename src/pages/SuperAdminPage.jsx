@@ -5,7 +5,8 @@ import { onAuthStateChanged } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
-import { SUPER_ADMIN_EMAIL, CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from "../config/constants";
+import { SUPER_ADMIN_EMAIL } from "../config/constants";
+import { uploadImage } from "../utils/imageUploader";
 import VerifiedBadge from "../components/shared/VerifiedBadge";
 
 export default function SuperAdminPage() {
@@ -269,14 +270,8 @@ export default function SuperAdminPage() {
     if (!file) return;
     setUploadingLogo(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET); 
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
-      if (!res.ok) throw new Error("Error en la subida");
-      const data = await res.json();
+      const newLogoUrl = await uploadImage(file, "super_admin_branding");
       
-      const newLogoUrl = data.secure_url;
       setGlobalCompanyLogo(newLogoUrl);
       await setDoc(doc(db, "settings", "global"), { companyLogo: newLogoUrl }, { merge: true });
       toast.success("Logo de la Empresa actualizado 👑");
