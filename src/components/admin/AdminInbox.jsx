@@ -32,7 +32,7 @@ export default function AdminInbox() {
     
     const unsubOrders = onSnapshot(qOrders, (snap) => {
       const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      data.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+      data.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
       setOrders(data);
       setLoading(false);
     });

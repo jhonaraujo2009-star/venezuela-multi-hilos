@@ -42,23 +42,31 @@ export function AppProvider({ children }) {
   });
 
   useEffect(() => {
-    const unsubConfig = onSnapshot(doc(db, "config", "settings"), (snap) => {
-      if (snap.exists()) setSettings((prev) => ({ ...prev, ...snap.data() }));
-    });
-    const unsubGlobal = onSnapshot(doc(db, "settings", "global"), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        const updated = {
-          companyName: data.companyName || "",
-          companyLogo: data.companyLogo || "",
-          homepageSections: data.homepageSections || null
-        };
-        setGlobalBranding(updated);
-        try {
-          localStorage.setItem("global_branding", JSON.stringify(updated));
-        } catch (e) {}
-      }
-    });
+    const unsubConfig = onSnapshot(
+      doc(db, "config", "settings"),
+      (snap) => {
+        if (snap.exists()) setSettings((prev) => ({ ...prev, ...snap.data() }));
+      },
+      (err) => console.warn("Aviso leyendo config/settings:", err)
+    );
+    const unsubGlobal = onSnapshot(
+      doc(db, "settings", "global"),
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          const updated = {
+            companyName: data.companyName || "",
+            companyLogo: data.companyLogo || "",
+            homepageSections: data.homepageSections || null
+          };
+          setGlobalBranding(updated);
+          try {
+            localStorage.setItem("global_branding", JSON.stringify(updated));
+          } catch (e) {}
+        }
+      },
+      (err) => console.warn("Aviso leyendo settings/global:", err)
+    );
     return () => {
       unsubConfig();
       unsubGlobal();
@@ -69,13 +77,13 @@ export function AppProvider({ children }) {
     setLoading(true);
     const pathParts = location.pathname.split('/').filter(Boolean);
     
-    // 🌟 MAGIA: Rutas seguras completas
-    const reservedPaths = ['admin', 'login', 'registro-vendedor', 'super-admin', 'search', 'ofertas']; 
+    // 🌟 MAGIA: Rutas seguras completas (incluyendo 'api' para evitar conflictos con store-og)
+    const reservedPaths = ['admin', 'login', 'registro-vendedor', 'super-admin', 'search', 'ofertas', 'api']; 
     
     let storeId = null; 
     
-    if (pathParts.length > 0 && !reservedPaths.includes(pathParts[0])) {
-      storeId = pathParts[0].toLowerCase(); 
+    if (pathParts.length > 0 && !reservedPaths.includes(pathParts[0].toLowerCase())) {
+      storeId = decodeURIComponent(pathParts[0]).trim().toLowerCase(); 
     }
 
     if (!storeId) {
@@ -84,20 +92,27 @@ export function AppProvider({ children }) {
       return;
     }
 
-    const unsubStore = onSnapshot(doc(db, "stores", storeId), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setStoreData({ 
-          id: snap.id, 
-          ...data,
-          verification: data.verification || { status: 'none' } 
-        });
-      } else {
-        setStoreData(null);
-        navigate("/", { replace: true });
+    const unsubStore = onSnapshot(
+      doc(db, "stores", storeId),
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          setStoreData({ 
+            id: snap.id, 
+            ...data,
+            verification: data.verification || { status: 'none' } 
+          });
+        } else {
+          setStoreData(null);
+          navigate("/", { replace: true });
+        }
+        setLoading(false);
+      },
+      (err) => {
+        console.error("Error cargando tienda:", err);
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    );
 
     return () => unsubStore();
   }, [location.pathname, navigate]);

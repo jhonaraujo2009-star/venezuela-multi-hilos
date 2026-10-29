@@ -111,11 +111,12 @@ export default async function handler(req, res) {
   <meta name="twitter:description" content="${safeDesc}" />
   <meta name="twitter:image"       content="${safeImage}" />
 
-  <!-- Redirige a la tienda real automáticamente (humanos) -->
+  <!-- Redirige a la tienda real automáticamente (humanos) sin ensuciar el historial -->
   <meta http-equiv="refresh" content="0;url=${targetRedirect}" />
+  <script>window.location.replace(${JSON.stringify(targetRedirect)});</script>
 </head>
-<body>
-  <p>Redirigiendo a <a href="${targetRedirect}">${safeTitle}</a>...</p>
+<body style="font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#fafafa;color:#555;">
+  <p>Abriendo <a href="${targetRedirect}" style="color:#ec4899;font-weight:bold;text-decoration:none;">${safeTitle}</a>...</p>
 </body>
 </html>`;
 

@@ -39,8 +39,12 @@ export default function ProductModal({ product, onClose }) {
   const relatedScrollRef = useRef(null);
 
   const [hasLiked, setHasLiked] = useState(() => {
-    const likedProducts = JSON.parse(localStorage.getItem(likedKey) || "{}");
-    return !!likedProducts[currentProduct?.id];
+    try {
+      const likedProducts = JSON.parse(localStorage.getItem(likedKey) || "{}") || {};
+      return !!likedProducts[currentProduct?.id];
+    } catch (e) {
+      return false;
+    }
   });
 
   const [likesCount, setLikesCount] = useState(currentProduct?.likes || 0);
@@ -80,8 +84,12 @@ export default function ProductModal({ product, onClose }) {
     setQuantity(1);
     setDirection(0);
     setShowDescription(false); // Cierra la descripción al cambiar de producto
-    const likedProducts = JSON.parse(localStorage.getItem(likedKey) || "{}");
-    setHasLiked(!!likedProducts[product.id]);
+    try {
+      const likedProducts = JSON.parse(localStorage.getItem(likedKey) || "{}") || {};
+      setHasLiked(!!likedProducts[product.id]);
+    } catch (e) {
+      setHasLiked(false);
+    }
     document.getElementById('modalScrollArea')?.scrollTo(0,0);
   }, [product?.id, product?.selectedImageIndex, likedKey]);
 
@@ -89,17 +97,21 @@ export default function ProductModal({ product, onClose }) {
   useEffect(() => {
     if (!currentProduct?.id) return;
     const productRef = doc(db, "products", currentProduct.id);
-    const unsubscribe = onSnapshot(productRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const freshData = { id: docSnap.id, ...docSnap.data() };
-        setCurrentProduct((prev) => ({ ...prev, ...freshData }));
-        if (freshData.likes !== undefined) setLikesCount(freshData.likes);
-        if (selectedVariant) {
-          const freshV = freshData.variants?.find((v) => v.id === selectedVariant.id);
-          if (freshV) setSelectedVariant(freshV);
+    const unsubscribe = onSnapshot(
+      productRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const freshData = { id: docSnap.id, ...docSnap.data() };
+          setCurrentProduct((prev) => ({ ...prev, ...freshData }));
+          if (freshData.likes !== undefined) setLikesCount(freshData.likes);
+          if (selectedVariant) {
+            const freshV = freshData.variants?.find((v) => v.id === selectedVariant.id);
+            if (freshV) setSelectedVariant(freshV);
+          }
         }
-      }
-    });
+      },
+      (err) => console.warn("Aviso al escuchar producto en tiempo real:", err)
+    );
     return () => unsubscribe();
   }, [currentProduct?.id, selectedVariant?.id]);
 
@@ -155,14 +167,17 @@ export default function ProductModal({ product, onClose }) {
     if (isLiking || !currentProduct?.id) return;
     setIsLiking(true);
 
-    const likedProducts = JSON.parse(localStorage.getItem(likedKey) || "{}");
+    let likedProducts = {};
+    try {
+      likedProducts = JSON.parse(localStorage.getItem(likedKey) || "{}") || {};
+    } catch (e) {}
     const productRef = doc(db, "products", currentProduct.id);
 
     if (hasLiked) {
       setHasLiked(false);
       setLikesCount((prev) => Math.max(0, prev - 1));
       delete likedProducts[currentProduct.id]; 
-      localStorage.setItem(likedKey, JSON.stringify(likedProducts));
+      try { localStorage.setItem(likedKey, JSON.stringify(likedProducts)); } catch (e) {}
       window.dispatchEvent(new CustomEvent("likes_updated"));
       window.dispatchEvent(new CustomEvent("wishlist_updated"));
       try { await updateDoc(productRef, { likes: increment(-1) }); } catch (error) {}
@@ -170,7 +185,7 @@ export default function ProductModal({ product, onClose }) {
       setHasLiked(true);
       setLikesCount((prev) => prev + 1);
       likedProducts[currentProduct.id] = true; 
-      localStorage.setItem(likedKey, JSON.stringify(likedProducts));
+      try { localStorage.setItem(likedKey, JSON.stringify(likedProducts)); } catch (e) {}
       window.dispatchEvent(new CustomEvent("likes_updated"));
       window.dispatchEvent(new CustomEvent("wishlist_updated"));
       try { await updateDoc(productRef, { likes: increment(1) }); } 
@@ -677,8 +692,12 @@ export default function ProductModal({ product, onClose }) {
                               setQuantity(1);
                               setDirection(0);
                               setShowDescription(false);
-                              const likedProducts = JSON.parse(localStorage.getItem(likedKey) || "{}");
-                              setHasLiked(!!likedProducts[rp.id]);
+                              try {
+                                const likedProducts = JSON.parse(localStorage.getItem(likedKey) || "{}") || {};
+                                setHasLiked(!!likedProducts[rp.id]);
+                              } catch (e) {
+                                setHasLiked(false);
+                              }
                               document.getElementById('modalScrollArea')?.scrollTo(0, 0);
                             }} 
                             className="w-[calc(33.333%-11px)] flex-shrink-0 text-left group active:scale-95 transition-transform snap-start"

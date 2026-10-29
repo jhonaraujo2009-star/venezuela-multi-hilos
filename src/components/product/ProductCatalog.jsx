@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import ProductCard from "./ProductCard";
 import { useApp } from "../../context/AppContext"; 
+import { useBackButton } from "../../hooks/useBackButton";
 import { motion, AnimatePresence } from "framer-motion"; // 🌟 MAGIA: Importamos framer-motion para las animaciones Premium
 import { calculateProductPricing } from "../../utils/pricing";
 import { normalizeImageUrl } from "../../utils/imageNormalizer";
@@ -141,6 +142,19 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
 
   const [liveTime, setLiveTime] = useState(Date.now());
 
+  // 🌟 HISTORIAL DEL BOTÓN ATRÁS DEL TELÉFONO POR NIVELES:
+  // Nivel 1: Si está en una Colección o Filtro -> vuelve a la vista principal de Colecciones ("all")
+  useBackButton(Boolean(activeFilter && activeFilter !== "all"), () => {
+    onFilter("all");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  // Nivel 2: Si está dentro de una Categoría (Sub-categoría) -> vuelve a las Categorías de esa Colección
+  useBackButton(Boolean(activeSubcategory), () => {
+    setActiveSubcategory(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
   useEffect(() => { 
     setVisibleCount(8); 
   }, [activeFilter, activeSubcategory]);
@@ -158,48 +172,63 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
   }, [activeFilter]);
 
   useEffect(() => {
-    let sessionsQuery = query(collection(db, "sessions"), where("hidden", "==", false));
-    if (storeData?.id) {
-      sessionsQuery = query(
-        collection(db, "sessions"), 
-        where("hidden", "==", false),
-        where("storeId", "==", storeData.id)
-      );
-    }
+    if (!storeData?.id) return;
 
-    const unsubSessions = onSnapshot(sessionsQuery, (snap) => {
-      setSessions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
+    setLoading(true);
+    const sessionsQuery = query(
+      collection(db, "sessions"), 
+      where("hidden", "==", false),
+      where("storeId", "==", storeData.id)
+    );
 
-    let productsQuery = collection(db, "products");
-    
-    if (storeData?.id) {
-      productsQuery = query(collection(db, "products"), where("storeId", "==", storeData.id));
-    }
+    const unsubSessions = onSnapshot(
+      sessionsQuery,
+      (snap) => {
+        setSessions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      (err) => console.warn("Aviso al cargar colecciones:", err)
+    );
 
-    const unsubProducts = onSnapshot(productsQuery, (snap) => {
-      const rawProducts = snap.docs.map((d) => {
-        const data = d.data();
-        const createdAtMs = data.createdAt?.toMillis() || Date.now();
-        
-        let endTime = 0;
-        if (data.offerEndsAt) {
-          endTime = data.offerEndsAt?.toMillis ? data.offerEndsAt.toMillis() : new Date(data.offerEndsAt).getTime();
-          if (endTime < 100000) endTime = createdAtMs + (endTime * 60 * 60 * 1000);
-        } else if (data.horas || data.hours || data.duracion) {
-          endTime = createdAtMs + (Number(data.horas || data.hours || data.duracion) * 60 * 60 * 1000);
-        }
+    const productsQuery = query(
+      collection(db, "products"),
+      where("storeId", "==", storeData.id)
+    );
 
-        return { 
-          id: d.id, 
-          ...data, 
-          createdAtMs, 
-          parsedOfferEndsAt: endTime 
-        };
-      });
-      setProducts(rawProducts);
-      setLoading(false);
-    });
+    const unsubProducts = onSnapshot(
+      productsQuery,
+      (snap) => {
+        const rawProducts = snap.docs.map((d) => {
+          const data = d.data();
+          const createdAtMs =
+            typeof data.createdAt?.toMillis === "function"
+              ? data.createdAt.toMillis()
+              : (Number(new Date(data.createdAt).getTime()) || Date.now());
+          
+          let endTime = 0;
+          if (data.offerEndsAt) {
+            endTime = typeof data.offerEndsAt?.toMillis === "function"
+              ? data.offerEndsAt.toMillis()
+              : (Number(new Date(data.offerEndsAt).getTime()) || 0);
+            if (endTime > 0 && endTime < 100000) endTime = createdAtMs + (endTime * 60 * 60 * 1000);
+          } else if (data.horas || data.hours || data.duracion) {
+            endTime = createdAtMs + (Number(data.horas || data.hours || data.duracion) * 60 * 60 * 1000);
+          }
+
+          return { 
+            id: d.id, 
+            ...data, 
+            createdAtMs, 
+            parsedOfferEndsAt: endTime 
+          };
+        });
+        setProducts(rawProducts);
+        setLoading(false);
+      },
+      (err) => {
+        console.warn("Aviso al cargar productos:", err);
+        setLoading(false);
+      }
+    );
 
     return () => { 
       unsubSessions(); 
@@ -273,7 +302,10 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
 
   } else if (isWishlist) {
     const likedKey = `userLikes_${storeData?.id || "global"}`;
-    const likedItems = JSON.parse(localStorage.getItem(likedKey) || "{}");
+    let likedItems = {};
+    try {
+      likedItems = JSON.parse(localStorage.getItem(likedKey) || "{}") || {};
+    } catch (e) {}
     filtered = products.filter(p => likedItems[p.id]);
 
   } else if (activeFilter && activeFilter !== "all") {

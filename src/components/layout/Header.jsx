@@ -5,6 +5,7 @@ import { db } from "../../config/firebase";
 import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../context/AuthContext";
 import { useApp } from "../../context/AppContext";
+import { useBackButton } from "../../hooks/useBackButton";
 import { SUPER_ADMIN_EMAIL } from "../../config/constants"; 
 import { calculateProductPricing } from "../../utils/pricing";
 
@@ -22,6 +23,12 @@ export default function Header({ onProductClick, onFilter }) {
   
   const { storeData } = useApp(); 
   const navigate = useNavigate();
+
+  // 🌟 Cerrar buscador de pantalla completa al presionar el botón Atrás del teléfono
+  useBackButton(searchOpen, () => {
+    setSearchOpen(false);
+    setSearchQuery("");
+  });
 
   // 🌟 ESTADO PARA EL BRANDING MATRIZ EN TIEMPO REAL
   const [globalBranding, setGlobalBranding] = useState(() => {
@@ -66,15 +73,19 @@ export default function Header({ onProductClick, onFilter }) {
 
   // 🌟 ESCUCHAMOS DIRECTAMENTE AL SUPER ADMIN (settings/global)
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, "settings", "global"), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setGlobalBranding({
-          name: data.companyName || "",
-          logo: data.companyLogo || null
-        });
-      }
-    });
+    const unsub = onSnapshot(
+      doc(db, "settings", "global"),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setGlobalBranding({
+            name: data.companyName || "",
+            logo: data.companyLogo || null
+          });
+        }
+      },
+      (err) => console.warn("Aviso leyendo branding global:", err)
+    );
     return () => unsub(); 
   }, []);
 
@@ -82,13 +93,17 @@ export default function Header({ onProductClick, onFilter }) {
   useEffect(() => {
     if (!storeData?.id) return;
     const fetchSessions = async () => {
-      const q = query(
-        collection(db, "sessions"), 
-        where("hidden", "==", false),
-        where("storeId", "==", storeData.id) 
-      );
-      const snap = await getDocs(q);
-      setSessions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      try {
+        const q = query(
+          collection(db, "sessions"), 
+          where("hidden", "==", false),
+          where("storeId", "==", storeData.id) 
+        );
+        const snap = await getDocs(q);
+        setSessions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch (e) {
+        console.warn("Aviso leyendo sesiones en Header:", e);
+      }
     };
     fetchSessions();
   }, [storeData?.id]);
@@ -254,7 +269,9 @@ export default function Header({ onProductClick, onFilter }) {
               onClick={() => { 
                 if(onFilter) onFilter("wishlist"); 
                 window.scrollTo(0, 0); 
-                if(storeData?.id) navigate(`/${storeData.id}`);
+                if(storeData?.id && window.location.pathname !== `/${storeData.id}`) {
+                  navigate(`/${storeData.id}`);
+                }
               }} 
               className="relative p-2 sm:p-2.5 rounded-full hover:bg-pink-50 hover:text-pink-500 transition-colors active:scale-90 text-gray-800"
               title="Mis Favoritos"

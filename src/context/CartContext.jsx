@@ -13,13 +13,15 @@ export function CartProvider({ children }) {
   const [coupon, setCoupon] = useState(null);
   const [selectedStoreId, setSelectedStoreId] = useState(null);
 
-  // 🌟 MAGIA: Cargar la bolsa unificada de marketplace o migrar claves anteriores
+  // 🌟 MAGIA: Cargar la bolsa unificada de marketplace o migrar claves anteriores (filtrando datos corruptos)
   const [items, setItems] = useState(() => {
     try {
       const unified = localStorage.getItem("marketplace_cart");
       if (unified) {
         const parsed = JSON.parse(unified);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((item) => item && item.product && item.product.id && item.key);
+        }
       }
       // Migración desde carritos por tienda individuales
       const merged = [];
@@ -32,6 +34,7 @@ export function CartProvider({ children }) {
             if (Array.isArray(parsed)) {
               const sId = k.replace("cart_", "");
               parsed.forEach((item) => {
+                if (!item || !item.product || !item.product.id || !item.key) return;
                 if (!item.storeId) item.storeId = sId;
                 if (!merged.some((m) => m.key === item.key)) {
                   merged.push(item);

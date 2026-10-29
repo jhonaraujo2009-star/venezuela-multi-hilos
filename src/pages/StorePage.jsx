@@ -44,13 +44,12 @@ export default function StorePage() {
 
   useEffect(() => {
     if (storeData?.id) {
-      // Si el visitante entra desde la página principal de MegaStore, debe haber una cookie/session marcando index_super_admin.
-      // Si entra usando el link directo /oscar y NO tiene un rastro de index_super_admin, lo mandamos como tienda_directa.
-      const currentOrigin = sessionStorage.getItem("origenVenta");
-      if (!currentOrigin) {
-        // Entró directo (ej. link de Instagram o WhatsApp a la tienda /oscar)
-        sessionStorage.setItem("origenVenta", "tienda_directa");
-      }
+      try {
+        const currentOrigin = sessionStorage.getItem("origenVenta");
+        if (!currentOrigin) {
+          sessionStorage.setItem("origenVenta", "tienda_directa");
+        }
+      } catch (e) {}
     }
   }, [storeData?.id]);
 
@@ -60,21 +59,24 @@ export default function StorePage() {
     
     // Si viene en la URL un producto y ya cargó la info de la tienda...
     if (productId && storeData?.id) {
+      let isMounted = true;
       const fetchDirectProduct = async () => {
         try {
           const productSnap = await getDoc(doc(db, "products", productId));
+          if (!isMounted) return;
           if (productSnap.exists()) {
             const data = { id: productSnap.id, ...productSnap.data() };
             // Doble Seguridad: Confirmamos que el producto que intentan abrir realmente le pertenezca a este vendedor
             if (data.storeId === storeData.id) {
-               
-               // Inyectar firma en el producto para que mantenga el rastreo exacto
-               const sourceOrigin = sessionStorage.getItem("origenVenta") || "tienda_directa";
+               let sourceOrigin = "tienda_directa";
+               try {
+                 sourceOrigin = sessionStorage.getItem("origenVenta") || "tienda_directa";
+               } catch (e) {}
                data._origenVenta = sourceOrigin;
 
                setSelectedProduct(data);
-               // Limpiar URL para que si cierran y recargan, no vuelva a abrir (Mejora la UX)
-               setSearchParams({}); 
+               // Limpiar URL con replace: true para no alterar el historial ni chocar con useBackButton
+               setSearchParams({}, { replace: true }); 
             }
           }
         } catch (error) {
@@ -83,6 +85,7 @@ export default function StorePage() {
       };
       
       fetchDirectProduct();
+      return () => { isMounted = false; };
     }
   }, [searchParams, storeData?.id, setSearchParams]);
 
@@ -111,7 +114,7 @@ export default function StorePage() {
   }, [storeData]);
 
   // 🌟 LÓGICA DE RECORTE DEL NOMBRE DE TIENDA (< 30 caracteres)
-  const rawStoreName = storeData?.nombre || storeData?.id || "Mi Tienda";
+  const rawStoreName = String(storeData?.nombre || storeData?.id || "Mi Tienda");
   const displayStoreName = rawStoreName.length > 30 ? rawStoreName.substring(0, 30) + "..." : rawStoreName;
 
   // 🌟 PANTALLA DE BLOQUEO (Si debe dinero o fue apagada)

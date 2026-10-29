@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useSearchParams, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 
 // Contextos
@@ -12,19 +12,43 @@ import ProtectedRoute from "./components/shared/ProtectedRoute";
 import ErrorBoundary from "./components/shared/ErrorBoundary";
 import ScrollToTop from "./components/shared/ScrollToTop";
 
-// Páginas importadas mediante Lazy Loading (carga diferida)
-const HomePage = lazy(() => import("./pages/HomePage"));
-const StorePage = lazy(() => import("./pages/StorePage"));
-const AdminPage = lazy(() => import("./pages/AdminPage"));
-const LoginPage = lazy(() => import("./pages/LoginPage"));
-const QuestionsPage = lazy(() => import("./pages/QuestionsPage"));
-const RegisterStorePage = lazy(() => import("./pages/RegisterStorePage"));
-const SuperAdminPage = lazy(() => import("./pages/SuperAdminPage"));
-const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
+// 🌟 FUNCIÓN SALVAVIDAS: Auto-recuperación de Chunks Dinámicos (Evita el "¡Ups! Algo salió mal")
+// Cuando el usuario entra desde un hipervínculo o tras un nuevo deploy, el navegador puede
+// intentar cargar un chunk viejo con hash obsoleto. Esta función detecta el fallo y recarga limpio.
+function lazyWithRetry(componentImport) {
+  return lazy(async () => {
+    const pageHasBeenForceRefreshed = JSON.parse(
+      window.sessionStorage.getItem("chunk_retry_refreshed") || "false"
+    );
+
+    try {
+      const component = await componentImport();
+      window.sessionStorage.setItem("chunk_retry_refreshed", "false");
+      return component;
+    } catch (error) {
+      if (!pageHasBeenForceRefreshed) {
+        window.sessionStorage.setItem("chunk_retry_refreshed", "true");
+        window.location.reload();
+        return { default: () => null };
+      }
+      throw error;
+    }
+  });
+}
+
+// Páginas importadas con Auto-Recuperación
+const HomePage = lazyWithRetry(() => import("./pages/HomePage"));
+const StorePage = lazyWithRetry(() => import("./pages/StorePage"));
+const AdminPage = lazyWithRetry(() => import("./pages/AdminPage"));
+const LoginPage = lazyWithRetry(() => import("./pages/LoginPage"));
+const QuestionsPage = lazyWithRetry(() => import("./pages/QuestionsPage"));
+const RegisterStorePage = lazyWithRetry(() => import("./pages/RegisterStorePage"));
+const SuperAdminPage = lazyWithRetry(() => import("./pages/SuperAdminPage"));
+const NotFoundPage = lazyWithRetry(() => import("./pages/NotFoundPage"));
 
 // Nuevas Páginas Premium
-const SearchPage = lazy(() => import("./pages/SearchPage"));
-const FlashOffersPage = lazy(() => import("./pages/FlashOffersPage"));
+const SearchPage = lazyWithRetry(() => import("./pages/SearchPage"));
+const FlashOffersPage = lazyWithRetry(() => import("./pages/FlashOffersPage"));
 
 // Indicador de carga global durante transiciones
 const GlobalLoader = () => (
@@ -32,6 +56,17 @@ const GlobalLoader = () => (
     <div className="w-12 h-12 border-4 border-pink-200 border-t-pink-600 rounded-full animate-spin"></div>
   </div>
 );
+
+// 🌟 Componente puente para hipervínculos que apunten a /api/store-og
+function ApiStoreOgRedirect() {
+  const [params] = useSearchParams();
+  const storeId = params.get("storeId");
+  const product = params.get("product");
+
+  if (!storeId) return <Navigate to="/" replace />;
+  const target = product ? `/${storeId}?product=${encodeURIComponent(product)}` : `/${storeId}`;
+  return <Navigate to={target} replace />;
+}
 
 export default function App() {
   return (
@@ -63,11 +98,14 @@ export default function App() {
                     <Route path="/search" element={<SearchPage />} />
                     <Route path="/ofertas" element={<FlashOffersPage />} />
                     
+                    {/* Redirección salvavidas por si se abre un link directo de /api/store-og */}
+                    <Route path="/api/store-og" element={<ApiStoreOgRedirect />} />
+                    
                     <Route path="/:storeId/preguntas" element={<QuestionsPage />} />
                     
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/registro-vendedor" element={<RegisterStorePage />} />
-                    <Route path="/super-admin" element={<SuperAdminPage />} /> {/* 🌟 Recuperado */}
+                    <Route path="/super-admin" element={<SuperAdminPage />} />
                     
                     <Route
                       path="/:storeId/admin/*"

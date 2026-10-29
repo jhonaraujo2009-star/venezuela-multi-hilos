@@ -11,9 +11,9 @@ export default function QuickButtons({ onFilter }) {
   ];
 
   const currentButtons = storeData?.quickButtons || settings?.quickButtons;
-  const savedButtons = Array.isArray(currentButtons) ? currentButtons : [];
+  const savedButtons = Array.isArray(currentButtons) ? currentButtons.filter(Boolean) : [];
   
-  const isValid = savedButtons.some(b => b.filter === 'top') && savedButtons.some(b => b.filter === 'new');
+  const isValid = savedButtons.some(b => b?.filter === 'top') && savedButtons.some(b => b?.filter === 'new');
   const buttons = isValid ? savedButtons : defaultButtons;
 
   return (

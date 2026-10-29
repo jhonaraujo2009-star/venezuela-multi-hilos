@@ -4,6 +4,7 @@ import { db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
+import { useBackButton } from "../hooks/useBackButton";
 import CartDrawer from "../components/cart/CartDrawer";
 import ProductModal from "../components/product/ProductModal";
 import toast from "react-hot-toast";
@@ -174,6 +175,13 @@ export default function HomePage() {
   // 🌟 CONEXIÓN CON LA BOLSA DE COMPRAS MULTITIENDA
   const { itemCount, total, setIsOpen, isOpen, addItem, items } = useCart();
   const [selectedProduct, setSelectedProduct] = useState(null);
+
+  // 🌟 HISTORIAL DEL BOTÓN ATRÁS EN LA PÁGINA PRINCIPAL
+  useBackButton(Boolean(selectedCategory), () => {
+    setSelectedCategory(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+  useBackButton(isMobileMenuOpen, () => setIsMobileMenuOpen(false));
 
   useEffect(() => {
     const handleOpenModal = (e) => {

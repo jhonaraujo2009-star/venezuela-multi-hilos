@@ -110,7 +110,7 @@ export default function CartDrawer({ onSelectProduct }) {
     if (!isOpen || items.length === 0) return;
 
     const checkRealStock = async () => {
-      const uniqueProductIds = [...new Set(items.map((i) => i.product.id))];
+      const uniqueProductIds = [...new Set(items.map((i) => i.product?.id).filter(Boolean))];
       const stockMap = {};
 
       for (const pId of uniqueProductIds) {
@@ -133,6 +133,7 @@ export default function CartDrawer({ onSelectProduct }) {
       // Auto-corregir cantidades si en BD el stock disminuyó por debajo de lo que hay en bolsa (sumando todos los modelos de cada variante)
       const groupedByVariant = {};
       items.forEach((item) => {
+        if (!item.product?.id) return;
         const baseKey = `${item.product.id}-${item.variant?.id || "default"}`;
         if (!groupedByVariant[baseKey]) groupedByVariant[baseKey] = [];
         groupedByVariant[baseKey].push(item);
@@ -140,6 +141,7 @@ export default function CartDrawer({ onSelectProduct }) {
 
       Object.values(groupedByVariant).forEach((groupItems) => {
         const first = groupItems[0];
+        if (!first?.product?.id) return;
         const pStockInfo = stockMap[first.product.id];
         if (!pStockInfo) return;
 
@@ -151,11 +153,12 @@ export default function CartDrawer({ onSelectProduct }) {
 
         const totalQty = groupItems.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
         if (totalQty > maxDbStock) {
+          const pName = first.product?.name || first.product?.nombre || "Producto";
           if (maxDbStock <= 0) {
-            toast.error(`"${first.product.name}" se encuentra agotado`);
+            toast.error(`"${pName}" se encuentra agotado`);
             groupItems.forEach((i) => updateQuantity(i.key, 0));
           } else {
-            toast(`Ajustamos "${first.product.name}" al stock disponible (${maxDbStock})`);
+            toast(`Ajustamos "${pName}" al stock disponible (${maxDbStock})`);
             let remainingToAllocate = maxDbStock;
             groupItems.forEach((i) => {
               const allowed = Math.min(i.quantity, remainingToAllocate);
@@ -172,7 +175,8 @@ export default function CartDrawer({ onSelectProduct }) {
 
   // 🌟 OBTENER STOCK MÁXIMO DISPONIBLE DE UN ÍTEM
   const getItemMax = useCallback((item) => {
-    const liveInfo = realtimeStock[item.product.id];
+    const pId = item.product?.id;
+    const liveInfo = pId ? realtimeStock[pId] : null;
     if (liveInfo) {
       if (item.variant) {
         const v = liveInfo.variants.find((vr) => vr.id === item.variant.id);
