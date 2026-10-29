@@ -5,5 +5,5 @@
 export const SUPER_ADMIN_EMAIL = import.meta.env.VITE_SUPER_ADMIN_EMAIL;
 
 // Cloudinary (upload preset público — esto SÍ puede estar aquí, es público por diseño)
-export const CLOUDINARY_CLOUD_NAME = "dp3abweme";
-export const CLOUDINARY_UPLOAD_PRESET = "tienda_maquillaje";
+export const CLOUDINARY_CLOUD_NAME = "cxgqjlnq";
+export const CLOUDINARY_UPLOAD_PRESET = "tienda_preset";
