@@ -14,13 +14,37 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-// Carpeta raíz de subidas en tu disco local
 const UPLOADS_DIR = path.join(__dirname, "uploads");
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
-// Habilitar CORS para que tu app React pueda subir y leer imágenes
+// Mapa rápido en memoria de archivos descargados por nombre base
+// Esto permite que /uploads/nombre.jpg o /uploads/folder/nombre.jpg lo encuentre de inmediato
+let fileIndex = new Map();
+
+function rebuildIndex() {
+  const newIndex = new Map();
+  function scan(dir, relPath = "") {
+    if (!fs.existsSync(dir)) return;
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const ent of entries) {
+      const full = path.join(dir, ent.name);
+      const rel = path.join(relPath, ent.name).replace(/\\/g, "/");
+      if (ent.isDirectory()) {
+        scan(full, rel);
+      } else {
+        newIndex.set(ent.name.toLowerCase(), full);
+        newIndex.set(rel.toLowerCase(), full);
+      }
+    }
+  }
+  scan(UPLOADS_DIR);
+  fileIndex = newIndex;
+  console.log(`📦 Índice de archivos locales listo: ${fileIndex.size} referencias indexadas.`);
+}
+rebuildIndex();
+
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "OPTIONS"],
@@ -29,16 +53,43 @@ app.use(cors({
 
 app.use(express.json());
 
-// Servir la carpeta uploads como estáticos públicos con caché
-app.use("/uploads", express.static(UPLOADS_DIR, {
-  maxAge: "7d",
-  setHeaders: (res) => {
+// Endpoint de salud
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    server: "Local Media Server",
+    filesIndexed: fileIndex.size
+  });
+});
+
+// Middleware inteligente para servir cualquier imagen solicitada
+app.use("/uploads", (req, res, next) => {
+  const reqSubPath = decodeURIComponent(req.path.replace(/^\//, ""));
+  const directPath = path.join(UPLOADS_DIR, reqSubPath);
+
+  // 1. Si existe en la ruta exacta solicitada
+  if (fs.existsSync(directPath) && fs.statSync(directPath).isFile()) {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.setHeader("Cache-Control", "public, max-age=604800");
+    return res.sendFile(directPath);
   }
-}));
 
-// Configuración de Multer para almacenamiento en disco con estructura por carpetas
+  // 2. Si no, buscar por nombre de archivo en los zips extraídos (migración transparente)
+  const filename = path.basename(reqSubPath).toLowerCase();
+  const matchedPath = fileIndex.get(filename);
+  if (matchedPath && fs.existsSync(matchedPath) && fs.statSync(matchedPath).isFile()) {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.setHeader("Cache-Control", "public, max-age=604800");
+    return res.sendFile(matchedPath);
+  }
+
+  return res.status(404).send("Imagen no encontrada");
+});
+
+// Configuración de Multer para almacenamiento en disco
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const folder = req.body.folder ? req.body.folder.replace(/[^a-zA-Z0-9_\-\/]/g, "") : "general";
@@ -58,7 +109,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 25 * 1024 * 1024 }, // Hasta 25MB por imagen
+  limits: { fileSize: 30 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (!file.mimetype.startsWith("image/")) {
       return cb(new Error("Solo se permiten archivos de imagen."));
@@ -67,12 +118,7 @@ const upload = multer({
   }
 });
 
-// Endpoint de verificación de salud
-app.get("/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString(), server: "Local Media Server" });
-});
-
-// Endpoint para subir imagen individual
+// Endpoint para subir imagen
 app.post("/api/upload", upload.single("file"), (req, res) => {
   try {
     if (!req.file) {
@@ -82,15 +128,17 @@ app.post("/api/upload", upload.single("file"), (req, res) => {
     const folder = req.body.folder ? req.body.folder.replace(/[^a-zA-Z0-9_\-\/]/g, "") : "general";
     const relPath = `${folder}/${req.file.filename}`.replace(/\/+/g, "/");
 
-    // Construcción de la URL: toma el dominio público del encabezado host o variable de entorno
     const protocol = req.headers["x-forwarded-proto"] || req.protocol || "http";
     const host = req.headers["x-forwarded-host"] || req.headers.host;
     const fullUrl = `${protocol}://${host}/uploads/${relPath}`;
 
+    // Indexar nuevo archivo al vuelo
+    fileIndex.set(req.file.filename.toLowerCase(), req.file.path);
+
     return res.json({
       success: true,
       url: fullUrl,
-      secure_url: fullUrl, // Compatibilidad con Cloudinary
+      secure_url: fullUrl,
       relative_path: `/uploads/${relPath}`,
       filename: req.file.filename,
       size: req.file.size
@@ -98,36 +146,6 @@ app.post("/api/upload", upload.single("file"), (req, res) => {
   } catch (error) {
     console.error("Error al procesar subida:", error);
     res.status(500).json({ error: "Error interno al guardar la imagen." });
-  }
-});
-
-// Endpoint para subir múltiples imágenes a la vez
-app.post("/api/upload-multiple", upload.array("files", 12), (req, res) => {
-  try {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: "No se proporcionaron archivos." });
-    }
-
-    const folder = req.body.folder ? req.body.folder.replace(/[^a-zA-Z0-9_\-\/]/g, "") : "general";
-    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "http";
-    const host = req.headers["x-forwarded-host"] || req.headers.host;
-
-    const urls = req.files.map((file) => {
-      const relPath = `${folder}/${file.filename}`.replace(/\/+/g, "/");
-      const fullUrl = `${protocol}://${host}/uploads/${relPath}`;
-      return {
-        url: fullUrl,
-        secure_url: fullUrl,
-        relative_path: `/uploads/${relPath}`,
-        filename: file.filename,
-        size: file.size
-      };
-    });
-
-    return res.json({ success: true, count: urls.length, files: urls });
-  } catch (error) {
-    console.error("Error al procesar subida múltiple:", error);
-    res.status(500).json({ error: "Error interno al guardar imágenes." });
   }
 });
 

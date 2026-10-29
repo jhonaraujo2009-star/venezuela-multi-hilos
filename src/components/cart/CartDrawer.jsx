@@ -4,6 +4,7 @@ import { db } from "../../config/firebase";
 import { useCart } from "../../context/CartContext";
 import { useApp } from "../../context/AppContext";
 import { useBackButton } from "../../hooks/useBackButton";
+import { normalizeImageUrl } from "../../utils/imageNormalizer";
 import toast from "react-hot-toast";
 
 export default function CartDrawer({ onSelectProduct }) {
@@ -576,7 +577,7 @@ _Por favor, adjunte el capture o comprobante de su transferencia/pago móvil por
                                   title="Toca para ver este producto"
                                 >
                                   <img 
-                                    src={item.selectedImage || item.image || item.product?.selectedImage || item.product?.image || item.product?.images?.[0]} 
+                                    src={normalizeImageUrl(item.selectedImage || item.image || item.product?.selectedImage || item.product?.image || item.product?.images?.[0])} 
                                     className="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform" 
                                     alt={item.product?.name || "Producto"} 
                                   />

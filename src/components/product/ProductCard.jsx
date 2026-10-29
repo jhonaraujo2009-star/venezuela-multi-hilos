@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { useCart } from "../../context/CartContext";
 import { calculateProductPricing, prepareProductForCart } from "../../utils/pricing";
+import { normalizeImageUrl } from "../../utils/imageNormalizer";
 import toast from "react-hot-toast";
 
 export default function ProductCard({ product, onClick, rank }) {
@@ -49,10 +50,11 @@ export default function ProductCard({ product, onClick, rank }) {
   };
 
   const getThumbnail = () => {
-    if (Array.isArray(product.images) && product.images.length > 0 && product.images[0]) return product.images[0];
-    if (product.image) return product.image;
-    if (product.imageUrl) return product.imageUrl;
-    return null;
+    let raw = null;
+    if (Array.isArray(product.images) && product.images.length > 0 && product.images[0]) raw = product.images[0];
+    else if (product.image) raw = product.image;
+    else if (product.imageUrl) raw = product.imageUrl;
+    return normalizeImageUrl(raw);
   };
   const productThumbnail = getThumbnail();
   const imageCount = (Array.isArray(product.images) ? product.images.filter(Boolean).length : 0) || (product.image || product.imageUrl ? 1 : 0);

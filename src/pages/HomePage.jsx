@@ -10,13 +10,15 @@ import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion"; // 🌟 LÓGICA ULTRA PREMIUM
 import VerifiedBadge from "../components/shared/VerifiedBadge";
 import { calculateProductPricing } from "../utils/pricing";
+import { normalizeImageUrl } from "../utils/imageNormalizer";
 
 const ProductCard = ({ p, onClick, onAddToCart, onGoToStore, storeName, isFlash = false, extraClasses = "" }) => {
   const getThumbnail = () => {
-    if (Array.isArray(p.images) && p.images.length > 0 && p.images[0]) return p.images[0];
-    if (p.image) return p.image;
-    if (p.imageUrl) return p.imageUrl;
-    return null;
+    let raw = null;
+    if (Array.isArray(p.images) && p.images.length > 0 && p.images[0]) raw = p.images[0];
+    else if (p.image) raw = p.image;
+    else if (p.imageUrl) raw = p.imageUrl;
+    return normalizeImageUrl(raw);
   };
   const pImg = getThumbnail();
   const displayName = storeName || p.storeName || p.storeId;

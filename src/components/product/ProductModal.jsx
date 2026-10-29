@@ -6,6 +6,7 @@ import { useApp } from "../../context/AppContext";
 import { useCart } from "../../context/CartContext";
 import { useBackButton } from "../../hooks/useBackButton";
 import { calculateProductPricing } from "../../utils/pricing";
+import { normalizeImageUrl } from "../../utils/imageNormalizer";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -180,10 +181,11 @@ export default function ProductModal({ product, onClose }) {
 
   const getImagesArray = () => {
     let raw = currentProduct;
-    if (Array.isArray(raw.images) && raw.images.length > 0 && raw.images[0]) return raw.images.filter(Boolean);
-    if (raw.image) return [raw.image];
-    if (raw.imageUrl) return [raw.imageUrl];
-    return [];
+    let list = [];
+    if (Array.isArray(raw.images) && raw.images.length > 0 && raw.images[0]) list = raw.images.filter(Boolean);
+    else if (raw.image) list = [raw.image];
+    else if (raw.imageUrl) list = [raw.imageUrl];
+    return list.map(img => normalizeImageUrl(img)).filter(Boolean);
   };
 
   const images = getImagesArray();

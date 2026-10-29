@@ -6,6 +6,18 @@ import { useApp } from "../../context/AppContext";
 import { motion, AnimatePresence } from "framer-motion"; // 🌟 MAGIA: Importamos framer-motion para las animaciones Premium
 import { calculateProductPricing } from "../../utils/pricing";
 
+// URL base del servidor local de tu PC para migración automática de URLs viejas de Cloudinary
+const LOCAL_MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || "https://armor-reduce-springs-brighton.trycloudflare.com";
+
+export const normalizeImageUrl = (url) => {
+  if (!url || typeof url !== "string") return url;
+  if (url.includes("res.cloudinary.com") || url.includes("cloudinary.com")) {
+    const filename = url.split("/").pop().split("?")[0];
+    return `${LOCAL_MEDIA_SERVER}/uploads/${filename}`;
+  }
+  return url;
+};
+
 // ═══════════════════════════════════════════════════════════════════
 // 🌟 SISTEMA INTELIGENTE DE SUB-CATEGORÍAS 🌟
 // Agrupa automáticamente los productos de cada colección por palabra
@@ -35,21 +47,16 @@ const SUBCATEGORY_DEFINITIONS = [
 // 🌟 Extrae de forma robusta la primera imagen válida de un producto
 const getProductImage = (p) => {
   if (!p) return null;
-  if (typeof p.image === 'string' && p.image.trim()) return p.image.trim();
-  if (typeof p.imageUrl === 'string' && p.imageUrl.trim()) return p.imageUrl.trim();
-  if (typeof p.imagen === 'string' && p.imagen.trim()) return p.imagen.trim();
-  if (typeof p.img === 'string' && p.img.trim()) return p.img.trim();
-  if (typeof p.thumbnail === 'string' && p.thumbnail.trim()) return p.thumbnail.trim();
-  if (typeof p.photo === 'string' && p.photo.trim()) return p.photo.trim();
-  if (typeof p.foto === 'string' && p.foto.trim()) return p.foto.trim();
+  const raw = p.image || p.imageUrl || p.imagen || p.img || p.thumbnail || p.photo || p.foto;
+  if (typeof raw === 'string' && raw.trim()) return normalizeImageUrl(raw.trim());
 
   const arrayCandidates = [p.images, p.imagenes, p.fotos, p.photos];
   for (const arr of arrayCandidates) {
     if (Array.isArray(arr) && arr.length > 0) {
       const foundStr = arr.find(img => typeof img === 'string' && img.trim().length > 0);
-      if (foundStr) return foundStr.trim();
+      if (foundStr) return normalizeImageUrl(foundStr.trim());
       const foundObj = arr.find(img => img && typeof img.url === 'string' && img.url.trim().length > 0);
-      if (foundObj) return foundObj.url.trim();
+      if (foundObj) return normalizeImageUrl(foundObj.url.trim());
     }
   }
   return null;
