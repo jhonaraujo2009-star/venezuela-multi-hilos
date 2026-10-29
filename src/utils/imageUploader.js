@@ -17,10 +17,11 @@ export async function uploadImage(file, folder = "general") {
   if (!file) throw new Error("No se proporcionó archivo.");
 
   const formData = new FormData();
-  formData.append("file", file);
+  // IMPORTANTE: "folder" debe añadirse ANTES de "file" para que Multer lo lea en destination()
   formData.append("folder", folder);
+  formData.append("file", file);
 
-  const res = await fetch(`${LOCAL_MEDIA_SERVER}/api/upload`, {
+  const res = await fetch(`${LOCAL_MEDIA_SERVER}/api/upload?folder=${encodeURIComponent(folder)}`, {
     method: "POST",
     body: formData
   });

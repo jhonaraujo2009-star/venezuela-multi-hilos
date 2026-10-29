@@ -92,7 +92,8 @@ app.use("/uploads", (req, res, next) => {
 // Configuración de Multer para almacenamiento en disco
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const folder = req.body.folder ? req.body.folder.replace(/[^a-zA-Z0-9_\-\/]/g, "") : "general";
+    const rawFolder = req.query.folder || req.body?.folder || "general";
+    const folder = String(rawFolder).replace(/[^a-zA-Z0-9_\-\/]/g, "") || "general";
     const targetDir = path.join(UPLOADS_DIR, folder);
     if (!fs.existsSync(targetDir)) {
       fs.mkdirSync(targetDir, { recursive: true });
@@ -125,7 +126,20 @@ app.post("/api/upload", upload.single("file"), (req, res) => {
       return res.status(400).json({ error: "No se proporcionó ningún archivo." });
     }
 
-    const folder = req.body.folder ? req.body.folder.replace(/[^a-zA-Z0-9_\-\/]/g, "") : "general";
+    const rawFolder = req.query.folder || req.body?.folder || "general";
+    const folder = String(rawFolder).replace(/[^a-zA-Z0-9_\-\/]/g, "") || "general";
+
+    // Si por orden del stream Multer guardó primero en general pero el body traía otra carpeta, movemos el archivo al instante
+    const expectedDir = path.join(UPLOADS_DIR, folder);
+    const expectedPath = path.join(expectedDir, req.file.filename);
+    if (req.file.path !== expectedPath) {
+      if (!fs.existsSync(expectedDir)) {
+        fs.mkdirSync(expectedDir, { recursive: true });
+      }
+      fs.renameSync(req.file.path, expectedPath);
+      req.file.path = expectedPath;
+    }
+
     const relPath = `${folder}/${req.file.filename}`.replace(/\/+/g, "/");
 
     const protocol = req.headers["x-forwarded-proto"] || req.protocol || "http";
