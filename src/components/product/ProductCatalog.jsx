@@ -5,18 +5,7 @@ import ProductCard from "./ProductCard";
 import { useApp } from "../../context/AppContext"; 
 import { motion, AnimatePresence } from "framer-motion"; // 🌟 MAGIA: Importamos framer-motion para las animaciones Premium
 import { calculateProductPricing } from "../../utils/pricing";
-
-// URL base del servidor local de tu PC para migración automática de URLs viejas de Cloudinary
-const LOCAL_MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || "https://armor-reduce-springs-brighton.trycloudflare.com";
-
-export const normalizeImageUrl = (url) => {
-  if (!url || typeof url !== "string") return url;
-  if (url.includes("res.cloudinary.com") || url.includes("cloudinary.com")) {
-    const filename = url.split("/").pop().split("?")[0];
-    return `${LOCAL_MEDIA_SERVER}/uploads/${filename}`;
-  }
-  return url;
-};
+import { normalizeImageUrl } from "../../utils/imageNormalizer";
 
 // ═══════════════════════════════════════════════════════════════════
 // 🌟 SISTEMA INTELIGENTE DE SUB-CATEGORÍAS 🌟
@@ -121,7 +110,8 @@ const buildSubcategories = (sessionProducts) => {
     const topItem = sorted.find(p => !!getProductImage(p)) || sorted[0];
 
     if (topItem) {
-      group.preview = getProductImage(topItem) || topItem.images?.[0] || topItem.image;
+      const topImg = getProductImage(topItem) || topItem.images?.[0] || topItem.image;
+      group.preview = normalizeImageUrl(topImg);
       const pricing = calculateProductPricing(topItem);
       group.finalPrice = pricing.finalPrice;
       group.oldPrice = pricing.oldPrice;

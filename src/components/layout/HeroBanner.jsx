@@ -1,10 +1,12 @@
 import { useApp } from "../../context/AppContext";
+import { normalizeImageUrl } from "../../utils/imageNormalizer";
 
 export default function HeroBanner({ activeFilter }) {
   const { settings, storeData } = useApp();
   const isExpanded = activeFilter === "all";
 
-  const profileImage = storeData?.profileImage || settings.profileImage;
+  const rawProfileImage = storeData?.profileImage || settings.profileImage;
+  const profileImage = normalizeImageUrl(rawProfileImage);
   const heroTitle = storeData?.heroTitle || storeData?.nombre || settings.heroTitle || "Mi Tienda";
   const heroDescription = storeData?.heroDescription || settings.heroDescription;
   
