@@ -3,9 +3,11 @@ import { collection, getDocs, query, limit } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
 import { calculateProductPricing } from "../utils/pricing";
+import { normalizeImageUrl } from "../utils/imageNormalizer";
 
 export default function FlashOffersPage() {
   const [products, setProducts] = useState([]);
+  const [storesMap, setStoresMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
@@ -15,11 +17,17 @@ export default function FlashOffersPage() {
       setLoading(true);
       try {
         const storesSnap = await getDocs(collection(db, "stores"));
+        const sMap = {};
         const activeStoreIds = new Set(
           storesSnap.docs
-            .filter(d => d.data().isActive !== false)
+            .filter(d => {
+              const data = d.data();
+              sMap[d.id] = data.nombre || d.id;
+              return data.isActive !== false && !(Number(data.deuda_comision || 0) > 20);
+            })
             .map(d => d.id)
         );
+        setStoresMap(sMap);
 
         const prodSnap = await getDocs(query(collection(db, "products"), limit(120)));
         const allOffers = prodSnap.docs
@@ -116,8 +124,8 @@ export default function FlashOffersPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-            {filteredOffers.map((p, idx) => {
-              const pImg = p.image || p.images?.[0] || null;
+            {filteredOffers.map((p) => {
+              const pImg = normalizeImageUrl(p.image || p.images?.[0] || null);
               const pricing = calculateProductPricing(p);
               
               return (
@@ -149,8 +157,8 @@ export default function FlashOffersPage() {
                         <span className="text-sm font-normal">$</span>
                         <span className="text-xl font-bold tracking-tight text-red-600">{pricing.finalPrice.toFixed(2)}</span>
                       </div>
-                      <span className="text-green-600 font-medium text-[11px] block mt-1 flex items-center gap-1">
-                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" /><path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H14a1 1 0 001-1v-2.158A2.5 2.5 0 0113 10.5V8a1 1 0 00-1-1H3V4z" /></svg> Envío gratis
+                      <span className="text-gray-400 font-bold text-[10px] uppercase tracking-wider block mt-1 truncate">
+                        🏪 {storesMap[p.storeId] || p.storeId}
                       </span>
                     </div>
 

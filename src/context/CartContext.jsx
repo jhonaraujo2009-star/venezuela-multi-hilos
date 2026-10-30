@@ -93,6 +93,7 @@ export function CartProvider({ children }) {
   // 🌟 FUNCIÓN TIPO ALIBABA: Seleccionar SOLO los productos de una tienda específica
   const selectStoreOnly = useCallback((storeId) => {
     setSelectedStoreId(storeId);
+    setCoupon((prevCoupon) => (prevCoupon && prevCoupon.storeId && prevCoupon.storeId !== storeId ? null : prevCoupon));
     setItems((prev) =>
       prev.map((item) => {
         const sId = item.storeId || item.product?.storeId || "tienda";
@@ -299,10 +300,22 @@ export function CartProvider({ children }) {
     () => selectedItems.reduce((sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0),
     [selectedItems]
   );
-  const discountAmount = useMemo(
-    () => (coupon ? (coupon.type === "percent" ? subtotal * ((Number(coupon.value) || 0) / 100) : (Number(coupon.value) || 0)) : 0),
-    [coupon, subtotal]
-  );
+  // Calcular subtotal elegible para el cupón (solo productos de la tienda del cupón)
+  const eligibleCouponSubtotal = useMemo(() => {
+    if (!coupon) return 0;
+    if (!coupon.storeId) return subtotal;
+    return selectedItems
+      .filter((i) => (i.storeId || i.product?.storeId) === coupon.storeId)
+      .reduce((sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0);
+  }, [coupon, selectedItems, subtotal]);
+
+  const discountAmount = useMemo(() => {
+    if (!coupon || eligibleCouponSubtotal <= 0) return 0;
+    const rawDiscount = coupon.type === "percent"
+      ? eligibleCouponSubtotal * ((Number(coupon.value) || 0) / 100)
+      : (Number(coupon.value) || 0);
+    return Math.min(eligibleCouponSubtotal, rawDiscount);
+  }, [coupon, eligibleCouponSubtotal]);
   const total = useMemo(
     () => Math.max(0, subtotal - discountAmount),
     [subtotal, discountAmount]

@@ -3,12 +3,14 @@ import { collection, getDocs, query } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { calculateProductPricing } from "../utils/pricing";
+import { normalizeImageUrl } from "../utils/imageNormalizer";
 
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const q = searchParams.get("q") || "";
   
   const [products, setProducts] = useState([]);
+  const [storesMap, setStoresMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState(q);
   const navigate = useNavigate();
@@ -18,11 +20,17 @@ export default function SearchPage() {
       setLoading(true);
       try {
         const storesSnap = await getDocs(collection(db, "stores"));
+        const sMap = {};
         const activeStoreIds = new Set(
           storesSnap.docs
-            .filter(d => d.data().isActive !== false)
+            .filter(d => {
+              const data = d.data();
+              sMap[d.id] = data.nombre || d.id;
+              return data.isActive !== false && !(Number(data.deuda_comision || 0) > 20);
+            })
             .map(d => d.id)
         );
+        setStoresMap(sMap);
 
         const prodSnap = await getDocs(query(collection(db, "products")));
         const allProducts = prodSnap.docs
@@ -139,8 +147,11 @@ export default function SearchPage() {
               ) : (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden divide-y divide-gray-100">
                   {products.map(p => {
-                    const pImg = p.image || p.images?.[0] || null;
+                    const pImg = normalizeImageUrl(p.image || p.images?.[0] || null);
                     const pricing = calculateProductPricing(p);
+                    const stock = p.variants?.length
+                      ? p.variants.reduce((acc, v) => acc + Number(v.stock || 0), 0)
+                      : Number(p.totalStock ?? p.stock ?? 0);
                     return (
                       <div 
                         key={p.id} 
@@ -159,7 +170,7 @@ export default function SearchPage() {
                               <h2 className="text-xl font-normal text-gray-800 line-clamp-2 leading-snug group-hover:text-pink-600 transition-colors">
                                 {p.name}
                               </h2>
-                              <p className="text-xs text-gray-400 mt-1 uppercase tracking-wide">Vendido por: <span className="font-bold">{p.storeId}</span></p>
+                              <p className="text-xs text-gray-400 mt-1 uppercase tracking-wide">Vendido por: <span className="font-bold text-gray-600">{storesMap[p.storeId] || p.storeId}</span></p>
                               <div className="flex items-baseline gap-2 mt-4">
                                  <span className="text-2xl font-normal tracking-tight text-gray-900">${Number(pricing.finalPrice || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
                                  {pricing.hasDiscount && pricing.oldPrice > pricing.finalPrice && (
@@ -169,7 +180,9 @@ export default function SearchPage() {
                                    <span className="text-xs font-bold text-green-600">{pricing.discountPerc}% OFF</span>
                                  )}
                               </div>
-                              <span className="text-green-600 font-medium text-[13px] block mt-1">Llega gratis mañana</span>
+                              <span className={`font-medium text-[13px] block mt-1 ${stock > 0 ? "text-green-600" : "text-red-500"}`}>
+                                {stock > 0 ? `Disponible (${stock} en stock)` : "Agotado temporalmente"}
+                              </span>
                             </div>
                          </div>
                       </div>

@@ -6,6 +6,8 @@ import { db } from "../../config/firebase";
 import toast from "react-hot-toast";
 import { useApp } from "../../context/AppContext"; // 🌟 INYECTAMOS EL CEREBRO
 import { uploadImage } from "../../utils/imageUploader";
+import { calculateProductPricing } from "../../utils/pricing";
+import { normalizeImageUrl } from "../../utils/imageNormalizer";
 import JSZip from "jszip";
 
 // ==========================================
@@ -585,23 +587,25 @@ export default function AdminProducts() {
                           const stock = p.variants?.length
                             ? p.variants.reduce((s, v) => s + (v.stock || 0), 0)
                             : (p.totalStock ?? 0);
+                          const pricing = calculateProductPricing(p);
+                          const thumbUrl = normalizeImageUrl(p.images?.[0] || p.image);
 
                           return (
                             <div key={p.id} className="flex items-center gap-4 px-6 py-4 hover:bg-pink-50/30 transition-colors group/item">
                               <div className="w-4 border-b-2 border-l-2 border-gray-100 h-8 -mt-8 ml-2 rounded-bl-lg absolute" />
                               
                               <div className="ml-8 w-12 h-12 rounded-xl overflow-hidden bg-gray-50 shadow-sm flex-shrink-0 relative">
-                                {p.images?.[0] ? <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover" /> : <span className="flex items-center justify-center h-full text-gray-300">🖼️</span>}
+                                {thumbUrl ? <img src={thumbUrl} alt={p.name} className="w-full h-full object-cover" /> : <span className="flex items-center justify-center h-full text-gray-300">🖼️</span>}
                               </div>
                               
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-bold text-gray-800 truncate flex items-center gap-2">
                                   {p.name} 
-                                  {p.offerEndsAt > Date.now() && <span className="px-1.5 py-0.5 bg-red-100 text-red-600 text-[9px] rounded-md font-black animate-pulse">⚡ OFERTA</span>}
+                                  {pricing.isFlashOfferActive && <span className="px-1.5 py-0.5 bg-red-100 text-red-600 text-[9px] rounded-md font-black animate-pulse">⚡ OFERTA {pricing.discountPerc > 0 ? `-${pricing.discountPerc}%` : ""}</span>}
                                 </p>
                                 <div className="flex items-center gap-2 mt-0.5">
-                                  <span className={`text-xs font-black ${p.oldPrice || (p.offerEndsAt > Date.now()) ? "text-pink-500" : "text-gray-500"}`}>${p.price}</span>
-                                  {p.oldPrice && <span className="line-through text-gray-300 text-[10px]">${p.oldPrice}</span>}
+                                  <span className={`text-xs font-black ${pricing.hasDiscount ? "text-pink-500" : "text-gray-500"}`}>${pricing.finalPrice.toFixed(2)}</span>
+                                  {pricing.hasDiscount && pricing.oldPrice > pricing.finalPrice && <span className="line-through text-gray-300 text-[10px]">${pricing.oldPrice.toFixed(2)}</span>}
                                   <span className="text-gray-300 text-[10px]">|</span>
                                   <span className="text-[10px] font-bold text-gray-400">Stock: {stock}</span>
                                 </div>

@@ -12,7 +12,6 @@ export default function AdminOrders() {
   
   const [expandedOrderId, setExpandedOrderId] = useState(null);
 
-  // 🌟 MAGIA: Cambié "pendiente" a "pending" para que coincida exactamente con tu base de datos
   const STATUSES = [
     { id: "pending", label: "⏳ Pendiente", color: "bg-yellow-100 text-yellow-700 border-yellow-200", badge: "bg-yellow-500" },
     { id: "pagado", label: "💸 Pagado", color: "bg-blue-100 text-blue-700 border-blue-200", badge: "bg-blue-500" },
@@ -62,36 +61,74 @@ export default function AdminOrders() {
       const batch = writeBatch(db);
       const orderRef = doc(db, "orders", orderId);
 
+      // Agrupar ítems por productId para no sobreescribir variantes del mismo producto
+      const groupOrderItemsByProduct = (itemsList) => {
+        const map = new Map();
+        for (const item of (itemsList || [])) {
+          const pId = item.id || item.productId;
+          if (!pId) continue;
+          if (!map.has(pId)) map.set(pId, []);
+          map.get(pId).push(item);
+        }
+        return map;
+      };
+
       // Si pasa a pagado/entregado/enviado y no se había descontado stock:
       if (isFinalized && !order.stockDeducted && order.items && order.items.length > 0) {
-        for (const item of order.items) {
-          const pId = item.id || item.productId;
-          if (pId) {
-            const prodRef = doc(db, "products", pId);
-            const qty = getItemQty(item);
-            if (item.variant) {
-              const pSnap = await getDoc(prodRef);
-              if (pSnap.exists() && pSnap.data().variants) {
-                const freshVariants = pSnap.data().variants.map(v => {
-                  if (v.id === item.variant?.id || v.label === (item.variant?.label || item.variant)) {
+        const groupedMap = groupOrderItemsByProduct(order.items);
+
+        for (const [pId, itemsList] of groupedMap.entries()) {
+          const prodRef = doc(db, "products", pId);
+          const pSnap = await getDoc(prodRef);
+          if (!pSnap.exists()) continue;
+
+          const pData = pSnap.data();
+          const totalQty = itemsList.reduce((acc, it) => acc + getItemQty(it), 0);
+
+          if (Array.isArray(pData.variants) && pData.variants.length > 0) {
+            let freshVariants = pData.variants.map(v => ({ ...v }));
+            for (const item of itemsList) {
+              if (item.variant) {
+                const qty = getItemQty(item);
+                const targetLabel = item.variant?.label || item.variant;
+                freshVariants = freshVariants.map(v => {
+                  if (v.id === item.variant?.id || v.label === targetLabel) {
                     return { ...v, stock: Math.max(0, Number(v.stock || 0) - qty) };
                   }
                   return v;
                 });
-                batch.update(prodRef, { variants: freshVariants });
               }
-            } else {
-              batch.update(prodRef, { totalStock: increment(-qty) });
             }
+            const newTotalStock = freshVariants.reduce((acc, v) => acc + Number(v.stock || 0), 0);
+            batch.update(prodRef, {
+              variants: freshVariants,
+              totalStock: newTotalStock,
+              salesCount: increment(totalQty)
+            });
+          } else {
+            const newTotalStock = Math.max(0, Number(pData.totalStock || 0) - totalQty);
+            batch.update(prodRef, {
+              totalStock: newTotalStock,
+              salesCount: increment(totalQty)
+            });
           }
         }
+
+        // Verificar si el cobro global de comisiones está activo
+        let isCommissionActive = false;
+        try {
+          const globalSnap = await getDoc(doc(db, "settings", "global"));
+          if (globalSnap.exists()) {
+            isCommissionActive = Boolean(globalSnap.data().isCommissionActive);
+          }
+        } catch (e) {}
 
         // Registrar venta consolidada y comisión según la tasa de la tienda
         let commissionAmount = 0;
         if (storeData?.id) {
           const storeRef = doc(db, "stores", storeData.id);
           const commissionRate = Number(storeData.comision_porcentaje ?? 5);
-          commissionAmount = commissionRate > 0 
+          commissionAmount = (isCommissionActive && commissionRate > 0)
             ? Number(((orderTotal * commissionRate) / 100).toFixed(2))
             : 0;
 
@@ -109,33 +146,49 @@ export default function AdminOrders() {
         });
       } else if (newStatus === "cancelado" && order.stockDeducted && order.items && order.items.length > 0) {
         // Restaurar inventario si se cancela un pedido que ya había restado stock
-        for (const item of order.items) {
-          const pId = item.id || item.productId;
-          if (pId) {
-            const prodRef = doc(db, "products", pId);
-            const qty = getItemQty(item);
-            if (item.variant) {
-              const pSnap = await getDoc(prodRef);
-              if (pSnap.exists() && pSnap.data().variants) {
-                const freshVariants = pSnap.data().variants.map(v => {
-                  if (v.id === item.variant?.id || v.label === (item.variant?.label || item.variant)) {
+        const groupedMap = groupOrderItemsByProduct(order.items);
+
+        for (const [pId, itemsList] of groupedMap.entries()) {
+          const prodRef = doc(db, "products", pId);
+          const pSnap = await getDoc(prodRef);
+          if (!pSnap.exists()) continue;
+
+          const pData = pSnap.data();
+          const totalQty = itemsList.reduce((acc, it) => acc + getItemQty(it), 0);
+
+          if (Array.isArray(pData.variants) && pData.variants.length > 0) {
+            let freshVariants = pData.variants.map(v => ({ ...v }));
+            for (const item of itemsList) {
+              if (item.variant) {
+                const qty = getItemQty(item);
+                const targetLabel = item.variant?.label || item.variant;
+                freshVariants = freshVariants.map(v => {
+                  if (v.id === item.variant?.id || v.label === targetLabel) {
                     return { ...v, stock: Number(v.stock || 0) + qty };
                   }
                   return v;
                 });
-                batch.update(prodRef, { variants: freshVariants });
               }
-            } else {
-              batch.update(prodRef, { totalStock: increment(qty) });
             }
+            const newTotalStock = freshVariants.reduce((acc, v) => acc + Number(v.stock || 0), 0);
+            batch.update(prodRef, {
+              variants: freshVariants,
+              totalStock: newTotalStock,
+              salesCount: Math.max(0, Number(pData.salesCount || 0) - totalQty)
+            });
+          } else {
+            batch.update(prodRef, {
+              totalStock: increment(totalQty),
+              salesCount: Math.max(0, Number(pData.salesCount || 0) - totalQty)
+            });
           }
         }
 
         if (storeData?.id) {
           const storeRef = doc(db, "stores", storeData.id);
-          const commissionRate = storeData.comision_porcentaje || 5;
+          const commissionRate = Number(storeData.comision_porcentaje ?? 5);
           const commissionAmount = order.commissionRecorded 
-            ? Number(((orderTotal * commissionRate) / 100).toFixed(2))
+            ? Number(order.commissionAmount ?? ((orderTotal * commissionRate) / 100).toFixed(2))
             : 0;
 
           batch.update(storeRef, {
@@ -147,6 +200,7 @@ export default function AdminOrders() {
         batch.update(orderRef, { 
           status: "cancelado", 
           stockDeducted: false,
+          commissionAmount: 0,
           commissionRecorded: false
         });
       } else {
@@ -158,7 +212,7 @@ export default function AdminOrders() {
       setOrders(orders.map(o => o.id === orderId ? { 
         ...o, 
         status: newStatus,
-        ...(isFinalized ? { stockDeducted: true } : newStatus === "cancelado" ? { stockDeducted: false } : {})
+        ...(isFinalized ? { stockDeducted: true } : newStatus === "cancelado" ? { stockDeducted: false, commissionRecorded: false, commissionAmount: 0 } : {})
       } : o));
 
       toast.success(`Estado actualizado a: ${newStatus.toUpperCase()}`);
@@ -288,7 +342,6 @@ export default function AdminOrders() {
             const date = order.createdAt?.toDate ? order.createdAt.toDate() : new Date();
             const isExpanded = expandedOrderId === order.id;
 
-            // Leemos con TUS variables exactas
             const orderCustomerName = order.customerName || "Cliente Desconocido";
             const orderCustomerPhone = order.customerPhone || "";
             const orderTotalAmount = Number(order.totalAmount ?? order.total ?? 0);
@@ -366,7 +419,7 @@ export default function AdminOrders() {
                       <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between gap-3">
                         <div>
                           <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">💳 Pago Reportado</h4>
-                          <p className="text-sm font-bold text-gray-900 uppercase">{order.paymentId || "No especificado"}</p>
+                          <p className="text-sm font-bold text-gray-900 uppercase">{order.paymentMethod || order.paymentId || "No especificado"}</p>
                         </div>
                         {currentStatus.id !== "pagado" && currentStatus.id !== "entregado" && (
                           <button 
@@ -401,7 +454,7 @@ export default function AdminOrders() {
                                     </span>
                                     {item.variant && (
                                       <span className="text-[10px] font-bold text-gray-500 bg-white border border-gray-200 px-2 py-0.5 rounded-md">
-                                        Var: {item.variant}
+                                        Var: {typeof item.variant === "object" ? item.variant.label : item.variant}
                                       </span>
                                     )}
                                   </div>

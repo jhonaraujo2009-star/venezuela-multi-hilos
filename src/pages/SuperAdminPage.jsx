@@ -96,16 +96,23 @@ export default function SuperAdminPage() {
         });
 
         const orderSnap = await getDocs(collection(db, "orders"));
+        const storeMap = {};
+        storesList.forEach(s => { storeMap[s.id] = s; });
+
         const orderCounts = {};
-        const orderTotals = {};
+        const orderTotalsAfterReset = {};
         orderSnap.docs.forEach(d => {
           const o = d.data();
           const sId = o?.storeId;
           const isDone = ["pagado", "entregado", "completed", "enviado"].includes((o.status || "").toLowerCase());
           if (sId && isDone) {
             orderCounts[sId] = (orderCounts[sId] || 0) + 1;
-            const amt = Number(o.totalAmount ?? o.total ?? 0);
-            orderTotals[sId] = (orderTotals[sId] || 0) + amt;
+            const resetAt = Number(storeMap[sId]?.lastDebtResetAt || 0);
+            const orderTimeMs = o.createdAt?.toMillis ? o.createdAt.toMillis() : (o.createdAt?.seconds ? o.createdAt.seconds * 1000 : 0);
+            if (!resetAt || orderTimeMs > resetAt) {
+              const amt = Number(o.totalAmount ?? o.total ?? 0);
+              orderTotalsAfterReset[sId] = (orderTotalsAfterReset[sId] || 0) + amt;
+            }
           }
         });
 
@@ -114,11 +121,11 @@ export default function SuperAdminPage() {
           if (orderCounts[s.id] !== undefined) {
             s.ventas_consolidadas = Math.max(Number(s.ventas_consolidadas || 0), orderCounts[s.id]);
           }
-          // Si deuda_comision está en 0 pero tiene ventas confirmadas históricas:
+          // Si deuda_comision está en 0, nunca ha sido saldada manualmente y tiene ventas confirmadas:
           const currentDebt = Number(s.deuda_comision || 0);
-          if (currentDebt === 0 && (orderTotals[s.id] || 0) > 0) {
+          if (currentDebt === 0 && !s.lastDebtResetAt && (orderTotalsAfterReset[s.id] || 0) > 0) {
             const commRate = Number(s.comision_porcentaje ?? 5);
-            s.deuda_comision = Number(((orderTotals[s.id] * commRate) / 100).toFixed(2));
+            s.deuda_comision = Number(((orderTotalsAfterReset[s.id] * commRate) / 100).toFixed(2));
           }
         });
       } catch(e) {}
@@ -139,8 +146,11 @@ export default function SuperAdminPage() {
     const toastId = toast.loading("Sincronizando comisiones con ventas reales...");
     try {
       const orderSnap = await getDocs(collection(db, "orders"));
+      const storeMap = {};
+      stores.forEach(s => { storeMap[s.id] = s; });
+
       const orderCounts = {};
-      const orderTotals = {};
+      const orderTotalsAfterReset = {};
 
       orderSnap.docs.forEach(d => {
         const o = d.data();
@@ -148,17 +158,21 @@ export default function SuperAdminPage() {
         const isDone = ["pagado", "entregado", "completed", "enviado"].includes((o.status || "").toLowerCase());
         if (sId && isDone) {
           orderCounts[sId] = (orderCounts[sId] || 0) + 1;
-          const amt = Number(o.totalAmount ?? o.total ?? 0);
-          orderTotals[sId] = (orderTotals[sId] || 0) + amt;
+          const resetAt = Number(storeMap[sId]?.lastDebtResetAt || 0);
+          const orderTimeMs = o.createdAt?.toMillis ? o.createdAt.toMillis() : (o.createdAt?.seconds ? o.createdAt.seconds * 1000 : 0);
+          if (!resetAt || orderTimeMs > resetAt) {
+            const amt = Number(o.totalAmount ?? o.total ?? 0);
+            orderTotalsAfterReset[sId] = (orderTotalsAfterReset[sId] || 0) + amt;
+          }
         }
       });
 
       const batch = writeBatch(db);
       const updatedStores = stores.map(s => {
-        const totalSales = orderTotals[s.id] || 0;
+        const totalSalesAfterReset = orderTotalsAfterReset[s.id] || 0;
         const totalCount = orderCounts[s.id] || 0;
         const commRate = Number(s.comision_porcentaje ?? 5);
-        const calculatedDebt = Number(((totalSales * commRate) / 100).toFixed(2));
+        const calculatedDebt = Number(((totalSalesAfterReset * commRate) / 100).toFixed(2));
         
         const newCount = Math.max(Number(s.ventas_consolidadas || 0), totalCount);
         const newDebt = (s.deuda_comision && s.deuda_comision > 0) ? s.deuda_comision : calculatedDebt;
@@ -189,10 +203,13 @@ export default function SuperAdminPage() {
   const recalculateStoreCommission = async (storeId) => {
     const toastId = toast.loading("Recalculando deuda de la tienda...");
     try {
+      const targetStore = stores.find(s => s.id === storeId);
+      const resetAt = Number(targetStore?.lastDebtResetAt || 0);
+
       const qOrders = query(collection(db, "orders"), where("storeId", "==", storeId));
       const snap = await getDocs(qOrders);
       
-      let totalAmount = 0;
+      let totalAmountAfterReset = 0;
       let completedCount = 0;
 
       snap.docs.forEach(d => {
@@ -200,13 +217,15 @@ export default function SuperAdminPage() {
         const isDone = ["pagado", "entregado", "completed", "enviado"].includes((o.status || "").toLowerCase());
         if (isDone) {
           completedCount++;
-          totalAmount += Number(o.totalAmount ?? o.total ?? 0);
+          const orderTimeMs = o.createdAt?.toMillis ? o.createdAt.toMillis() : (o.createdAt?.seconds ? o.createdAt.seconds * 1000 : 0);
+          if (!resetAt || orderTimeMs > resetAt) {
+            totalAmountAfterReset += Number(o.totalAmount ?? o.total ?? 0);
+          }
         }
       });
 
-      const targetStore = stores.find(s => s.id === storeId);
       const commRate = Number(targetStore?.comision_porcentaje ?? 5);
-      const calculatedDebt = Number(((totalAmount * commRate) / 100).toFixed(2));
+      const calculatedDebt = Number(((totalAmountAfterReset * commRate) / 100).toFixed(2));
 
       await updateDoc(doc(db, "stores", storeId), {
         ventas_consolidadas: Math.max(Number(targetStore?.ventas_consolidadas || 0), completedCount),
@@ -219,7 +238,7 @@ export default function SuperAdminPage() {
         deuda_comision: calculatedDebt
       } : s));
 
-      toast.success(`Deuda recalculada: $${calculatedDebt.toFixed(2)} (${completedCount} ventas) ✅`, { id: toastId });
+      toast.success(`Deuda recalculada: $${calculatedDebt.toFixed(2)} (${completedCount} ventas totales) ✅`, { id: toastId });
     } catch (e) {
       console.error(e);
       toast.error("Error al recalcular deuda", { id: toastId });
@@ -326,8 +345,9 @@ export default function SuperAdminPage() {
   const resetDebt = async (storeId) => {
     if (!window.confirm("¿Confirmas que esta tienda ya te pagó su deuda? Se reiniciará a 0.")) return;
     try {
-      await updateDoc(doc(db, "stores", storeId), { deuda_comision: 0 });
-      setStores(stores.map(s => s.id === storeId ? { ...s, deuda_comision: 0 } : s));
+      const resetTimestamp = Date.now();
+      await updateDoc(doc(db, "stores", storeId), { deuda_comision: 0, lastDebtResetAt: resetTimestamp });
+      setStores(stores.map(s => s.id === storeId ? { ...s, deuda_comision: 0, lastDebtResetAt: resetTimestamp } : s));
       toast.success("Deuda saldada ✅");
     } catch (e) {
       toast.error("Error al saldar la deuda");
@@ -362,7 +382,7 @@ export default function SuperAdminPage() {
 
   const exportToCSV = () => {
     const headers = ["ID Tienda,Nombre Tienda,Email,Ventas Consolidadas,Comision (%),Deuda Pendiente ($),Estado"];
-    const rows = stores.map(s => `"${s.id}","${s.nombre || 'Sin nombre'}","${s.ownerEmail || ''}",${s.ventas_consolidadas || 0},${s.comision_porcentaje || 5},${s.deuda_comision || 0},${s.isActive !== false ? 'Activa' : 'Inhabilitada'}`);
+    const rows = stores.map(s => `"${s.id}","${s.nombre || 'Sin nombre'}","${s.ownerEmail || ''}",${s.ventas_consolidadas || 0},${s.comision_porcentaje ?? 5},${s.deuda_comision || 0},${s.isActive !== false ? 'Activa' : 'Inhabilitada'}`);
     
     const csvContent = "data:text/csv;charset=utf-8," + headers.concat(rows).join("\n");
     const encodedUri = encodeURI(csvContent);
@@ -978,7 +998,7 @@ export default function SuperAdminPage() {
                                 <div className="flex items-center gap-2">
                                   <input 
                                     type="number" 
-                                    defaultValue={store.comision_porcentaje || 5} 
+                                    defaultValue={store.comision_porcentaje ?? 5} 
                                     onBlur={(e) => updateCommission(store.id, e.target.value)} 
                                     className="w-16 border border-gray-200 bg-gray-50 rounded-lg px-2 py-1 text-center font-bold outline-none focus:border-pink-300" 
                                   /> 

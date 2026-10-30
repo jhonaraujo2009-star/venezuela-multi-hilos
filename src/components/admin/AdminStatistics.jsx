@@ -2,22 +2,39 @@ import { useState, useEffect } from "react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import { useApp } from "../../context/AppContext";
+import { useNavigate } from "react-router-dom";
+import { calculateProductPricing } from "../../utils/pricing";
+import { normalizeImageUrl } from "../../utils/imageNormalizer";
 
 export default function AdminStatistics() {
   const { storeData, bsPrice } = useApp();
+  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 🌟 LÓGICA INTACTA: Escuchamos los productos de la base de datos
+  // 🌟 Escuchamos los productos y las órdenes confirmadas de la base de datos en tiempo real
   useEffect(() => {
     if (!storeData?.id) return;
-    const q = query(collection(db, "products"), where("storeId", "==", storeData.id));
-    const unsub = onSnapshot(q, (snap) => {
+    const qProds = query(collection(db, "products"), where("storeId", "==", storeData.id));
+    const unsubProds = onSnapshot(qProds, (snap) => {
       const prods = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setProducts(prods);
       setLoading(false);
     });
-    return () => unsub();
+
+    const qOrders = query(collection(db, "orders"), where("storeId", "==", storeData.id));
+    const unsubOrders = onSnapshot(qOrders, (snap) => {
+      const confirmedOrders = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(o => ["completed", "pagado", "entregado", "enviado"].includes((o.status || "").toLowerCase()));
+      setOrders(confirmedOrders);
+    });
+
+    return () => {
+      unsubProds();
+      unsubOrders();
+    };
   }, [storeData?.id]);
 
   // Función para calcular stock
@@ -28,13 +45,56 @@ export default function AdminStatistics() {
     return Number(p.totalStock || 0);
   };
 
-  // Función para ingresos de un producto
-  const getProductRevenue = (p) => Number(p.price || 0) * Number(p.salesCount || 0);
+  // Mapear ventas e ingresos reales por producto desde órdenes históricas + salesCount
+  const orderProductStats = {};
+  orders.forEach(o => {
+    (o.items || []).forEach(item => {
+      const pid = item.productId || item.id;
+      if (!pid) return;
+      if (!orderProductStats[pid]) orderProductStats[pid] = { qty: 0, revenue: 0 };
+      const q = Number(item.qty || item.quantity || 1);
+      const price = Number(item.price || 0);
+      orderProductStats[pid].qty += q;
+      orderProductStats[pid].revenue += price * q;
+    });
+  });
+
+  // Función para unidades vendidas de un producto
+  const getProductSoldCount = (p) => {
+    const fromCount = Number(p.salesCount || 0);
+    const fromOrders = orderProductStats[p.id]?.qty || 0;
+    return Math.max(fromCount, fromOrders);
+  };
+
+  // Función para ingresos reales de un producto
+  const getProductRevenue = (p) => {
+    const pricing = calculateProductPricing(p);
+    const effectivePrice = pricing.finalPrice || Number(p.price || 0);
+    const fromOrdersRev = orderProductStats[p.id]?.revenue || 0;
+    const fromOrdersQty = orderProductStats[p.id]?.qty || 0;
+    const totalSold = getProductSoldCount(p);
+    const extraUnits = Math.max(0, totalSold - fromOrdersQty);
+    return Number((fromOrdersRev + extraUnits * effectivePrice).toFixed(2));
+  };
 
   // 💰 CÁLCULOS FINANCIEROS MAESTROS
-  const totalRevenue = products.reduce((acc, p) => acc + getProductRevenue(p), 0);
-  const totalSoldItems = products.reduce((acc, p) => acc + Number(p.salesCount || 0), 0);
-  const totalInventoryValue = products.reduce((acc, p) => acc + (Number(p.price || 0) * getStock(p)), 0);
+  const productsRevenueSum = products.reduce((acc, p) => acc + getProductRevenue(p), 0);
+  const ordersRevenueSum = orders.reduce((acc, o) => acc + Number(o.totalAmount ?? o.total ?? 0), 0);
+  const totalRevenue = Number(Math.max(productsRevenueSum, ordersRevenueSum).toFixed(2));
+
+  const productsSoldSum = products.reduce((acc, p) => acc + getProductSoldCount(p), 0);
+  const ordersSoldSum = orders.reduce(
+    (acc, o) => acc + (o.items || []).reduce((s, i) => s + Number(i.qty || i.quantity || 1), 0),
+    0
+  );
+  const totalSoldItems = Math.max(productsSoldSum, ordersSoldSum);
+
+  const totalInventoryValue = Number(
+    products.reduce((acc, p) => {
+      const pricing = calculateProductPricing(p);
+      return acc + (pricing.finalPrice || Number(p.price || 0)) * getStock(p);
+    }, 0).toFixed(2)
+  );
 
   // 🥇 1. CÁLCULO DEL PODIO (Top 3 Productos Estrella)
   const topProducts = [...products]
@@ -45,8 +105,13 @@ export default function AdminStatistics() {
   const maxRevenue = topProducts[0] ? getProductRevenue(topProducts[0]) : 1;
 
   // 🚨 2. CÁLCULO DE CAPITAL ESTANCADO (Dead Stock)
-  const deadStockProducts = products.filter(p => Number(p.salesCount || 0) === 0 && getStock(p) > 0);
-  const deadStockValue = deadStockProducts.reduce((acc, p) => acc + (Number(p.price || 0) * getStock(p)), 0);
+  const deadStockProducts = products.filter(p => getProductSoldCount(p) === 0 && getStock(p) > 0);
+  const deadStockValue = Number(
+    deadStockProducts.reduce((acc, p) => {
+      const pricing = calculateProductPricing(p);
+      return acc + (pricing.finalPrice || Number(p.price || 0)) * getStock(p);
+    }, 0).toFixed(2)
+  );
 
   if (loading) {
     return (
@@ -105,7 +170,10 @@ export default function AdminStatistics() {
               </p>
             </div>
           </div>
-          <button className="whitespace-nowrap bg-orange-500 hover:bg-orange-600 text-white font-black text-[10px] uppercase tracking-widest px-6 py-3 rounded-full shadow-lg active:scale-95 transition-all">
+          <button
+            onClick={() => navigate(`/${storeData.id}/admin/productos`)}
+            className="whitespace-nowrap bg-orange-500 hover:bg-orange-600 text-white font-black text-[10px] uppercase tracking-widest px-6 py-3 rounded-full shadow-lg active:scale-95 transition-all"
+          >
             Crear Oferta Flash
           </button>
         </div>
@@ -120,13 +188,14 @@ export default function AdminStatistics() {
               const rev = getProductRevenue(p);
               const percent = totalRevenue > 0 ? ((rev / totalRevenue) * 100).toFixed(1) : 0;
               const medals = ["🥇", "🥈", "🥉"];
+              const imgUrl = normalizeImageUrl(p.images?.[0] || p.image);
               
               return (
                 <div key={p.id} className="bg-white rounded-[2rem] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-gray-100 flex items-center gap-4 relative overflow-hidden group">
                   <div className="absolute -right-2 -top-2 text-5xl opacity-10 group-hover:scale-125 transition-transform duration-500">
                     {medals[index]}
                   </div>
-                  <img src={p.images?.[0] || p.image} className="w-16 h-16 rounded-2xl object-cover shadow-sm z-10" alt="" />
+                  <img src={imgUrl || "https://via.placeholder.com/64"} className="w-16 h-16 rounded-2xl object-cover shadow-sm z-10" alt="" />
                   <div className="z-10 flex-1">
                     <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-0.5">Top {index + 1}</p>
                     <p className="text-sm font-black text-gray-900 line-clamp-1 leading-tight mb-1">{p.name}</p>
@@ -163,26 +232,33 @@ export default function AdminStatistics() {
             <tbody className="divide-y divide-gray-50">
               {products.map((p) => {
                 const stock = getStock(p);
-                const sold = Number(p.salesCount || 0);
+                const sold = getProductSoldCount(p);
                 const isLowStock = stock <= 5 && stock > 0;
                 const isOut = stock === 0;
                 const productRevenue = getProductRevenue(p);
+                const pricing = calculateProductPricing(p);
+                const imgUrl = normalizeImageUrl(p.images?.[0] || p.image);
                 
                 // Cálculo para el Mini-Gráfico de barra
-                const barWidth = maxRevenue > 0 ? (productRevenue / maxRevenue) * 100 : 0;
+                const barWidth = maxRevenue > 0 ? Math.min(100, (productRevenue / maxRevenue) * 100) : 0;
 
                 return (
                   <tr key={p.id} className="hover:bg-gray-50/50 transition-colors group">
                     <td className="p-4 pl-7">
                       <div className="flex items-center gap-4">
                         <img 
-                          src={p.images?.[0] || p.image || "https://via.placeholder.com/40"} 
+                          src={imgUrl || "https://via.placeholder.com/40"} 
                           className="w-12 h-12 rounded-xl object-cover border border-gray-100 shadow-sm group-hover:scale-110 transition-transform" 
                           alt="" 
                         />
                         <div>
                           <p className="text-sm font-black text-gray-900 line-clamp-1">{p.name}</p>
-                          <p className="text-[11px] font-bold text-gray-400 mt-0.5">${p.price}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <p className="text-[11px] font-bold text-gray-600">${pricing.finalPrice.toFixed(2)}</p>
+                            {pricing.hasDiscount && pricing.oldPrice > pricing.finalPrice && (
+                              <span className="text-[10px] text-gray-300 line-through">${pricing.oldPrice.toFixed(2)}</span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </td>
