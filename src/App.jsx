@@ -49,6 +49,7 @@ const NotFoundPage = lazyWithRetry(() => import("./pages/NotFoundPage"));
 // Nuevas Páginas Premium
 const SearchPage = lazyWithRetry(() => import("./pages/SearchPage"));
 const FlashOffersPage = lazyWithRetry(() => import("./pages/FlashOffersPage"));
+const StoreOnboardingPage = lazyWithRetry(() => import("./pages/StoreOnboardingPage"));
 
 // Indicador de carga global durante transiciones
 const GlobalLoader = () => (
@@ -102,6 +103,7 @@ export default function App() {
                     <Route path="/api/store-og" element={<ApiStoreOgRedirect />} />
                     
                     <Route path="/:storeId/preguntas" element={<QuestionsPage />} />
+                    <Route path="/:storeId/aprender" element={<StoreOnboardingPage />} />
                     
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/registro-vendedor" element={<RegisterStorePage />} />

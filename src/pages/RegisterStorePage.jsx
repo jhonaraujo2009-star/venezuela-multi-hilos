@@ -7,7 +7,7 @@ import toast from "react-hot-toast";
 import { SUPER_ADMIN_EMAIL } from "../config/constants";
 import { useApp } from "../context/AppContext";
 
-const RESERVED_URLS = ['admin', 'login', 'registro-vendedor', 'super-admin', 'search', 'ofertas', 'preguntas', 'api'];
+const RESERVED_URLS = ['admin', 'login', 'registro-vendedor', 'super-admin', 'search', 'ofertas', 'preguntas', 'aprender', 'api'];
 
 export default function RegisterStorePage() {
   const { globalBranding } = useApp() || {};
@@ -179,14 +179,14 @@ export default function RegisterStorePage() {
       
       // Interceptor para el Super Admin
       if (cleanEmail === SUPER_ADMIN_EMAIL?.toLowerCase()) {
-        const choice = window.confirm("¡Bienvenido, Jefe! 👑\n\n¿Deseas entrar al PANEL DE CONTROL TOTAL (Súper Admin)?\n\n(Aceptar = Súper Admin / Cancelar = Administrar mi Tienda)");
+        const choice = window.confirm("¡Bienvenido, Jefe! 👑\n\n¿Deseas entrar al PANEL DE CONTROL TOTAL (Súper Admin)?\n\n(Aceptar = Súper Admin / Cancelar = Aprender a usar la App)");
         if (choice) {
           navigate("/super-admin");
         } else {
-          navigate(`/${cleanUrl}/admin`);
+          navigate(`/${cleanUrl}/aprender`);
         }
       } else {
-        navigate(`/${cleanUrl}/admin`);
+        navigate(`/${cleanUrl}/aprender`);
       }
 
     } catch (error) {
@@ -282,7 +282,7 @@ export default function RegisterStorePage() {
               </h1>
 
               <p className="text-gray-600 text-sm sm:text-base leading-relaxed font-normal">
-                Tu catálogo interactivo listo en segundos. Automatiza tus ventas por WhatsApp, gestiona tu inventario con Punto de Venta (POS) y acepta pagos en Bolívares y Dólares con tasa actualizada.
+                Tu catálogo interactivo listo en segundos. Automatiza tus ventas por WhatsApp, gestiona tus sesiones y productos con Punto de Venta (POS) y acepta pagos en Bolívares y Dólares con tasa actualizada.
               </p>
             </div>
 
