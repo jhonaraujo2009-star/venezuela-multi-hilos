@@ -57,6 +57,7 @@ export default function AdminPage() {
     { path: `/${storeId}/admin/logistica`, label: "🚚 Logística y Cupones" },
     { path: `/${storeId}/admin/pagos`, label: "🏦 Pagos" },
     { path: `/${storeId}/admin/seguridad`, label: "🛡️ Seguridad" },
+    { path: `/${storeId}/aprender`, label: "🎓 Tutorial: Cómo funciona la web" },
   ];
 
   const handleLogout = async () => {
@@ -116,9 +117,6 @@ export default function AdminPage() {
               👑 Súper Admin Global
             </NavLink>
           )}
-          <NavLink to={`/${storeId}/aprender`} className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold text-pink-600 bg-pink-50/70 hover:bg-pink-100/80 transition-colors">
-            🎓 Aprender a usar la App
-          </NavLink>
           <NavLink to={`/${storeId}`} className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-500 hover:bg-gray-50">
             🏠 Ver tienda
           </NavLink>
