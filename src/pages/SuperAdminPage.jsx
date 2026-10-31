@@ -401,7 +401,7 @@ export default function SuperAdminPage() {
     const toastId = toast.loading(`Iniciando destrucción de la tienda ${storeId}...`);
 
     try {
-      const collectionsToClean = ["products", "orders", "sessions", "payments"];
+      const collectionsToClean = ["products", "orders", "sessions", "payments", "coupons", "logistics", "questions"];
       for(const col of collectionsToClean) {
         const q = query(collection(db, col), where("storeId", "==", storeId));
         const snap = await getDocs(q);

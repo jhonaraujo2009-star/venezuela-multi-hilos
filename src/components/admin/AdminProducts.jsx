@@ -28,7 +28,7 @@ function VariantManager({ variants, onChange }) {
         <button type="button" onClick={addVariant}
           className="text-xs px-3 py-1 rounded-xl font-semibold text-white"
           style={{ background: "var(--primary)" }}>
-          + Agregar_Productos
+          + Agregar variante
         </button>
       </div>
       <div className="space-y-2">
@@ -437,7 +437,7 @@ export default function AdminProducts() {
 
   // 🔍 LÓGICA DE BÚSQUEDA INTELIGENTE
   const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+    (p.name || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const groupedProducts = sessions.map(session => ({
@@ -719,7 +719,7 @@ export default function AdminProducts() {
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-bold text-gray-800 truncate flex items-center gap-2">
                                   {p.name} 
-                                  {pricing.isFlashOfferActive && <span className="px-1.5 py-0.5 bg-red-100 text-red-600 text-[9px] rounded-md font-black animate-pulse">⚡ OFERTA {pricing.discountPerc > 0 ? `-${pricing.discountPerc}%` : ""}</span>}
+                                  {pricing.isFlashOffer && <span className="px-1.5 py-0.5 bg-red-100 text-red-600 text-[9px] rounded-md font-black animate-pulse">⚡ OFERTA {pricing.discountPerc > 0 ? `-${pricing.discountPerc}%` : ""}</span>}
                                 </p>
                                 <div className="flex items-center gap-2 mt-0.5">
                                   <span className={`text-xs font-black ${pricing.hasDiscount ? "text-pink-500" : "text-gray-500"}`}>${pricing.finalPrice.toFixed(2)}</span>

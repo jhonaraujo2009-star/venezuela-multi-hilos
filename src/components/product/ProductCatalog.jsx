@@ -236,16 +236,32 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
     };
   }, [storeData?.id]); 
 
+  // 🌟 INCLUIR PRODUCTOS HUÉRFANOS (sin categoría o con categoría eliminada/oculta)
+  const displaySessions = useMemo(() => {
+    const validIds = new Set(sessions.map(s => s.id));
+    const hasOrphans = products.some(p => !validIds.has(p.sessionId));
+    return hasOrphans
+      ? [...sessions, { id: "orphans", name: "Catálogo General" }]
+      : sessions;
+  }, [sessions, products]);
+
+  const matchesSession = (p, targetSessionId) => {
+    if (targetSessionId === "orphans") {
+      return !sessions.some(s => s.id === p.sessionId);
+    }
+    return p.sessionId === targetSessionId;
+  };
+
   // 🌟 CÓMPUTO DE SUB-CATEGORÍAS para la colección activa
   const isSessionFilter = activeFilter && !SPECIAL_FILTERS.includes(activeFilter);
   const subcategories = useMemo(() => {
     if (!activeFilter || SPECIAL_FILTERS.includes(activeFilter) || activeSubcategory) return [];
-    const sessionProds = products.filter(p => p.sessionId === activeFilter);
+    const sessionProds = products.filter(p => matchesSession(p, activeFilter));
     if (sessionProds.length === 0) return [];
     const subcats = buildSubcategories(sessionProds);
     // Solo mostrar la cuadrícula de sub-categorías si hay 2+ grupos distintos
     return subcats.length > 1 ? subcats : [];
-  }, [activeSubcategory, products, activeFilter]);
+  }, [activeSubcategory, products, activeFilter, sessions]);
   const showSubcategoryGrid = isSessionFilter && !activeSubcategory && subcategories.length > 0;
 
   if (loading) {
@@ -312,11 +328,11 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
     if (activeSubcategory) {
       // 🌟 Filtrar por sub-categoría dentro de la colección
       filtered = products.filter(p => 
-        p.sessionId === activeFilter && 
+        matchesSession(p, activeFilter) && 
         detectSubcategory(p.name || p.nombre || p.title || '').key === activeSubcategory
       );
     } else {
-      filtered = products.filter(p => p.sessionId === activeFilter);
+      filtered = products.filter(p => matchesSession(p, activeFilter));
     }
   }
 
@@ -358,8 +374,8 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
           animate="show"
           className="grid grid-cols-1 gap-8"
         >
-          {sessions.map((session) => {
-            const sessionProducts = products.filter(p => p.sessionId === session.id);
+          {displaySessions.map((session) => {
+            const sessionProducts = products.filter(p => matchesSession(p, session.id));
             if (sessionProducts.length === 0) return null;
             
             const sortedSession = [...sessionProducts].sort((a, b) => calculateProductPricing(b).baseValuation - calculateProductPricing(a).baseValuation);
@@ -407,7 +423,7 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
   // con vista previa antes de mostrar los productos.
   // ═══════════════════════════════════════════════════════════════
   if (showSubcategoryGrid) {
-    const sessionName = sessions.find(s => s.id === activeFilter)?.name || 'Colección';
+    const sessionName = displaySessions.find(s => s.id === activeFilter)?.name || 'Colección';
     
     return (
       <div className="px-4 pb-24">
@@ -546,7 +562,7 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
           }} 
           className="mt-4 text-[9px] font-black text-pink-500 border-b border-pink-200 pb-1 uppercase tracking-widest hover:text-pink-600 transition-colors"
         >
-          ← {activeSubcategory ? `Regresar a ${sessions.find(s => s.id === activeFilter)?.name || 'Categorías'}` : 'Regresar a Tienda'}
+          ← {activeSubcategory ? `Regresar a ${displaySessions.find(s => s.id === activeFilter)?.name || 'Categorías'}` : 'Regresar a Tienda'}
         </button>
       </div>
 

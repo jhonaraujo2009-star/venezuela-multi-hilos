@@ -41,7 +41,7 @@ export default function QuestionsPage() {
       }
     };
     fetchQ();
-  }, [storeData?.id]);
+  }, [effectiveStoreId]);
 
   const handleSubmit = async () => {
     if (!phone.trim() || !text.trim()) {

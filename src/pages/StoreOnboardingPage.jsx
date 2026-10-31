@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { collection, addDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, doc, updateDoc, serverTimestamp, getDocs, query, where } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useApp } from "../context/AppContext";
 import toast from "react-hot-toast";
@@ -8,78 +8,48 @@ import toast from "react-hot-toast";
 const STEPS = [
   {
     id: 1,
-    badge: "Paso 1 de 5",
-    shortLabel: "Sesiones",
-    icon: "📂",
-    title: "Crea tus Sesiones (Categorías)",
-    subtitle: "Organiza tu tienda antes de subir tus productos",
+    shortLabel: "Productos",
+    icon: "📦",
+    title: "Sube tus Productos (las categorías se crean solas)",
+    subtitle: "Fotos, precio en dólares, stock, variantes y ofertas relámpago, todo en un solo formulario",
     color: "from-pink-500 to-rose-600",
     lightBg: "bg-pink-50",
     borderColor: "border-pink-200",
     description:
-      "En la aplicación, las «Sesiones» son las categorías o departamentos de tu tienda (por ejemplo: Ropa de Dama, Maquillaje, Collares, Calzado). Crear tus sesiones primero te permitirá clasificar cada producto ordenadamente.",
+      "Ya no necesitas crear categorías antes. Entra a «📦 Productos», pulsa «+ Agregar_Productos» y elige o crea la categoría ahí mismo. El sistema convierte automáticamente tus precios en dólares ($) a Bolívares (Bs.) con la tasa que configures.",
     bullets: [
       {
         step: "1",
-        title: "Entra a «📂 Sesiones» en tu Panel Admin",
-        detail: "En el menú lateral izquierdo de tu panel de administración, selecciona la opción 📂 Sesiones."
+        title: "Elige la categoría con un toque (o crea una nueva)",
+        detail: "Arriba del formulario verás tus categorías como botones. Toca una para elegirla, o pulsa «+ Nueva categoría», escribe el nombre (ej. «Labiales») y presiona Enter. Si no eliges ninguna, el producto se guarda en «General» automáticamente."
       },
       {
         step: "2",
-        title: "Presiona el botón «+ Nueva»",
-        detail: "Se abrirá una ventana donde podrás escribir el nombre de tu categoría (ej. «Nuevos Ingresos» o «Perfumería») y pulsar «Crear Sesión»."
+        title: "Nombre, descripción y precio",
+        detail: "Escribe el nombre y el precio actual en USD ($). Si quieres mostrar una rebaja, coloca el «Precio Anterior» y saldrá tachado."
       },
       {
         step: "3",
-        title: "Controla qué categorías son visibles",
-        detail: "Cada sesión tiene un botón «Visible / Oculta», un lápiz (✏️) para cambiarle el nombre y una papelera (🗑️) para eliminarla cuando quieras."
-      }
-    ],
-    tip: "💡 Consejo Pro: Crea entre 3 y 6 sesiones claras para que tus clientes encuentren todo rápido desde su celular.",
-    actionLabel: "Ir a 📂 Sesiones en mi Panel",
-    actionSubpath: "admin/sesiones"
-  },
-  {
-    id: 2,
-    badge: "Paso 2 de 5",
-    shortLabel: "Productos",
-    icon: "📦",
-    title: "Agrega tus Productos y Variantes",
-    subtitle: "Sube fotos, precios en dólares, stock y ofertas relámpago",
-    color: "from-purple-600 to-indigo-600",
-    lightBg: "bg-purple-50",
-    borderColor: "border-purple-200",
-    description:
-      "Una vez creadas tus sesiones, entra a «📦 Productos» para cargar tu mercancía. El sistema convierte automáticamente tus precios en dólares ($) a Bolívares (Bs.) usando la tasa que configures.",
-    bullets: [
-      {
-        step: "1",
-        title: "Datos básicos y Sesión",
-        detail: "Escribe el nombre del producto, su descripción, el precio en USD ($) y selecciona en qué Sesión (categoría) quieres que aparezca."
-      },
-      {
-        step: "2",
-        title: "Sube hasta 3 Fotos y Nombra tus Modelos",
-        detail: "Puedes subir hasta 3 imágenes por producto. Debajo de cada foto puedes escribir el nombre del modelo o color (ej. «Rojo Carmesí») para que el cliente elija exactamente la foto que desea comprar."
-      },
-      {
-        step: "3",
-        title: "Stock Total o Variantes (Tallas / Colores)",
-        detail: "Si el producto es único, pon la cantidad en «Stock Total». Si tiene tallas o presentaciones (ej. Talla S, M, L), usa «+ Agregar Variantes» y asigna el stock de cada una."
+        title: "Stock total o Variantes (Tallas / Colores)",
+        detail: "Si el producto es único, pon la cantidad en «Stock total». Si tiene tallas o colores, pulsa «+ Agregar variante» y asigna el stock de cada una; el total se calcula solo."
       },
       {
         step: "4",
-        title: "⚡ Ofertas Relámpago con Contador",
-        detail: "Marca la casilla «Activar Oferta Relámpago», indica el % de descuento y la fecha/hora límite. ¡Tu producto saldrá destacado con cuenta regresiva en vivo!"
+        title: "Fotos y ⚡ Oferta Relámpago",
+        detail: "Toca el recuadro «+» para subir una o varias fotos. Para una oferta relámpago escribe el % de descuento y la duración en horas: tu producto saldrá con cuenta regresiva en vivo."
+      },
+      {
+        step: "5",
+        title: "Atajo: agregar varios productos a la misma categoría",
+        detail: "En la lista de Productos, abre una categoría y pulsa «+ Agregar producto en …»: el formulario se abre con esa categoría ya seleccionada. Para renombrar, ocultar o borrar categorías usa «📂 Sesiones» (opcional)."
       }
     ],
-    tip: "💡 Consejo Pro: Tus productos con oferta activa también aparecen en la sección de Ofertas de la página principal.",
+    tip: "💡 Consejo Pro: Usa entre 3 y 6 categorías claras para que tus clientes encuentren todo rápido desde su celular. Los productos con oferta activa también aparecen en la sección de Ofertas de la página principal.",
     actionLabel: "Ir a 📦 Productos para subir mercancía",
     actionSubpath: "admin/productos"
   },
   {
-    id: 3,
-    badge: "Paso 3 de 5",
+    id: 2,
     shortLabel: "Ajustes",
     icon: "⚙️",
     title: "Configura Tasa, WhatsApp e Interfaz",
@@ -111,8 +81,7 @@ const STEPS = [
     actionSubpath: "admin"
   },
   {
-    id: 4,
-    badge: "Paso 4 de 5",
+    id: 3,
     shortLabel: "Pagos y Envíos",
     icon: "🏦",
     title: "Métodos de Pago, Envíos y Cupones",
@@ -139,8 +108,7 @@ const STEPS = [
     actionSubpath: "admin/pagos"
   },
   {
-    id: 5,
-    badge: "Paso 5 de 5",
+    id: 4,
     shortLabel: "Ventas y POS",
     icon: "🛒",
     title: "Recibe Pedidos y Usa el Punto de Venta (POS)",
@@ -202,25 +170,34 @@ export default function StoreOnboardingPage() {
     navigate(destinationPath, { replace: true });
   };
 
-  const handleQuickCreateSession = async (e) => {
-    e.preventDefault();
-    if (!quickSessionName.trim() || !storeId) return;
+  const handleQuickCreateSession = async (e, presetName) => {
+    e?.preventDefault?.();
+    const cleanName = (presetName ?? quickSessionName).trim();
+    if (!cleanName || !storeId) return;
     setCreatingSession(true);
     try {
-      const cleanName = quickSessionName.trim();
+      // Evitar duplicados: revisamos las categorías que ya tiene la tienda
+      const snap = await getDocs(query(collection(db, "sessions"), where("storeId", "==", storeId)));
+      const exists = snap.docs.some((d) => (d.data().name || "").trim().toLowerCase() === cleanName.toLowerCase());
+      if (exists) {
+        toast.success(`La categoría "${cleanName}" ya está lista en tu tienda 👍`);
+        setCreatedSessions((prev) => (prev.includes(cleanName) ? prev : [...prev, cleanName]));
+        setQuickSessionName("");
+        return;
+      }
       await addDoc(collection(db, "sessions"), {
         name: cleanName,
         slug: cleanName.toLowerCase().replace(/\s+/g, "-"),
         hidden: false,
-        order: createdSessions.length,
+        order: snap.docs.length,
         createdAt: serverTimestamp(),
         storeId: storeId
       });
       setCreatedSessions((prev) => [...prev, cleanName]);
       setQuickSessionName("");
-      toast.success(`¡Sesión "${cleanName}" creada en tu tienda! ✅`);
+      toast.success(`¡Categoría "${cleanName}" creada en tu tienda! ✅`);
     } catch (error) {
-      toast.error("No se pudo crear la sesión. Verifica que hayas iniciado sesión.");
+      toast.error("No se pudo crear la categoría. Verifica que hayas iniciado sesión.");
     } finally {
       setCreatingSession(false);
     }
@@ -281,7 +258,7 @@ export default function StoreOnboardingPage() {
                 Guía Rápida: Cómo usar <span className="text-pink-600">{storeTitle}</span> paso a paso
               </h1>
               <p className="text-xs sm:text-sm text-gray-600">
-                Sigue estos <strong>5 pasos</strong> para crear sesiones, subir productos y empezar a vender, o presiona <strong>Saltar</strong> si ya sabes usar la aplicación.
+                Sigue estos <strong>{STEPS.length} pasos</strong> para subir tus productos, configurar tu tienda y empezar a vender, o presiona <strong>Saltar</strong> si ya sabes usar la aplicación.
               </p>
             </div>
 
@@ -307,7 +284,7 @@ export default function StoreOnboardingPage() {
           {/* Botones claros de acción rápida */}
           <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs font-bold text-gray-500">
-              👇 Explora los 5 pasos aquí abajo o salta directo:
+              👇 Explora los {STEPS.length} pasos aquí abajo o salta directo:
             </span>
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -337,7 +314,7 @@ export default function StoreOnboardingPage() {
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {STEPS.map((s, idx) => {
               const isCurrent = idx === currentStep;
               const isDone = idx < currentStep;
@@ -379,7 +356,7 @@ export default function StoreOnboardingPage() {
               </div>
               <div>
                 <span className="inline-block text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 mb-1.5">
-                  {activeStepData.badge}
+                  Paso {currentStep + 1} de {STEPS.length}
                 </span>
                 <h2 className="text-xl sm:text-2xl font-black text-gray-900 leading-tight">
                   {activeStepData.title}
@@ -426,24 +403,37 @@ export default function StoreOnboardingPage() {
             ))}
           </div>
 
-          {/* 🌟 PRÁCTICA EN VIVO EN EL PASO 1: CREAR SESIÓN DESDE AQUÍ MISMO */}
+          {/* 🌟 PRÁCTICA EN VIVO EN EL PASO 1: CREAR CATEGORÍAS DESDE AQUÍ MISMO */}
           {activeStepData.id === 1 && (
             <div className="mt-6 p-5 rounded-3xl bg-pink-50/70 border border-pink-200">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-lg">⚡</span>
                 <h4 className="text-xs sm:text-sm font-black uppercase tracking-wider text-pink-800">
-                  ¡Pruébalo ahora mismo! Crea tu primera Sesión aquí:
+                  Opcional: adelanta tus categorías aquí con un toque
                 </h4>
               </div>
               <p className="text-xs text-pink-700 mb-3">
-                Escribe el nombre de una categoría de tu negocio (ej. «Collares», «Maquillaje», «Ofertas») y la crearemos directamente en tu tienda:
+                También puedes crearlas directo al subir cada producto. Si quieres dejarlas listas desde ya, toca una sugerencia o escribe la tuya:
               </p>
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {["Maquillaje", "Ropa", "Accesorios", "Calzado", "Ofertas"].map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    disabled={creatingSession}
+                    onClick={() => handleQuickCreateSession(null, c)}
+                    className="px-3 py-1.5 rounded-full text-xs font-bold bg-white border border-pink-200 text-pink-600 hover:bg-pink-100 disabled:opacity-50 cursor-pointer"
+                  >
+                    + {c}
+                  </button>
+                ))}
+              </div>
               <form onSubmit={handleQuickCreateSession} className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   value={quickSessionName}
                   onChange={(e) => setQuickSessionName(e.target.value)}
-                  placeholder="Ej: Nueva Colección, Calzado, Accesorios..."
+                  placeholder="Ej: Nueva Colección, Perfumería..."
                   className="flex-1 bg-white border border-pink-200 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-900 outline-none focus:border-pink-500"
                 />
                 <button
@@ -451,14 +441,14 @@ export default function StoreOnboardingPage() {
                   disabled={creatingSession || !quickSessionName.trim()}
                   className="bg-pink-600 hover:bg-pink-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider px-5 py-2.5 rounded-xl transition-all cursor-pointer"
                 >
-                  {creatingSession ? "Creando..." : "+ Crear Sesión en mi Tienda"}
+                  {creatingSession ? "Creando..." : "+ Crear Categoría"}
                 </button>
               </form>
 
               {createdSessions.length > 0 && (
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <span className="text-[11px] font-bold text-emerald-700">
-                    Sesiones creadas:
+                    Categorías listas:
                   </span>
                   {createdSessions.map((name, i) => (
                     <span

@@ -75,13 +75,20 @@ export function CartProvider({ children }) {
     try {
       localStorage.setItem("marketplace_cart", JSON.stringify(items));
 
-      // Guardar también por tienda para compatibilidad retroactiva
+      // Guardar también por tienda para compatibilidad retroactiva y limpiar carritos vacíos
       const grouped = {};
       items.forEach((item) => {
         const sId = item.storeId || item.product?.storeId || "default";
         if (!grouped[sId]) grouped[sId] = [];
         grouped[sId].push(item);
       });
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("cart_")) {
+          const sId = k.replace("cart_", "");
+          if (!grouped[sId]) localStorage.removeItem(k);
+        }
+      }
       Object.keys(grouped).forEach((sId) => {
         localStorage.setItem(`cart_${sId}`, JSON.stringify(grouped[sId]));
       });
