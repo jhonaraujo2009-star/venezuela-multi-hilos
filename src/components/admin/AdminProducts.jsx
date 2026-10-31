@@ -60,13 +60,13 @@ function VariantManager({ variants, onChange }) {
 // 2. PRODUCT FORM
 // ==========================================
 // 🌟 RECIBIMOS storeData para saber de quién es el producto
-function ProductForm({ sessions, product, onClose, storeData }) {
+function ProductForm({ sessions, product, onClose, storeData, defaultSessionId }) {
   const [form, setForm] = useState({
     name: product?.name || "",
     description: product?.description || "",
     price: product?.price || "",
     oldPrice: product?.oldPrice || "", 
-    sessionId: product?.sessionId || "",
+    sessionId: product?.sessionId || defaultSessionId || "",
     totalStock: product?.totalStock || 0,
     images: product?.images || [],
     variants: product?.variants || [],
@@ -76,6 +76,47 @@ function ProductForm({ sessions, product, onClose, storeData }) {
   });
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // 🌟 CREACIÓN RÁPIDA DE CATEGORÍA (sin salir del formulario)
+  const [newCatName, setNewCatName] = useState("");
+  const [showNewCat, setShowNewCat] = useState(sessions.length === 0);
+  const [creatingCat, setCreatingCat] = useState(false);
+  const SUGGESTED_CATEGORIES = ["Maquillaje", "Ropa", "Accesorios", "Calzado", "Ofertas"];
+
+  // Crea la categoría (o reutiliza una existente con el mismo nombre) y devuelve su id
+  const ensureCategory = async (rawName) => {
+    const name = rawName.trim();
+    if (!name || !storeData?.id) return null;
+    const existing = sessions.find((s) => s.name.trim().toLowerCase() === name.toLowerCase());
+    if (existing) return existing.id;
+    const ref = await addDoc(collection(db, "sessions"), {
+      name,
+      slug: name.toLowerCase().replace(/\s+/g, "-"),
+      hidden: false,
+      order: sessions.length,
+      createdAt: serverTimestamp(),
+      storeId: storeData.id,
+    });
+    return ref.id;
+  };
+
+  const createCategory = async (name = newCatName) => {
+    if (!name.trim()) return;
+    setCreatingCat(true);
+    try {
+      const id = await ensureCategory(name);
+      if (id) {
+        setForm((prev) => ({ ...prev, sessionId: id }));
+        setNewCatName("");
+        setShowNewCat(false);
+        toast.success(`Categoría "${name.trim()}" lista ✅`);
+      }
+    } catch {
+      toast.error("Error al crear la categoría");
+    } finally {
+      setCreatingCat(false);
+    }
+  };
 
   const handleImages = async (e) => {
     const files = Array.from(e.target.files);
@@ -110,8 +151,8 @@ function ProductForm({ sessions, product, onClose, storeData }) {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim() || !form.price || !form.sessionId) {
-      toast.error("Completa nombre, precio y sesión");
+    if (!form.name.trim() || !form.price) {
+      toast.error("Completa nombre y precio");
       return;
     }
     
@@ -122,6 +163,12 @@ function ProductForm({ sessions, product, onClose, storeData }) {
 
     setSaving(true);
     try {
+      // 🌟 Si no eligió categoría: usamos la que escribió, o "General" automáticamente
+      let sessionId = form.sessionId;
+      if (!sessionId) {
+        sessionId = await ensureCategory(newCatName.trim() || "General");
+      }
+
       let finalOfferEndsAt = form.offerEndsAt;
       if (form.offerHours && form.offerDiscount) {
         finalOfferEndsAt = Date.now() + (parseFloat(form.offerHours) * 60 * 60 * 1000);
@@ -129,6 +176,7 @@ function ProductForm({ sessions, product, onClose, storeData }) {
 
       const data = {
         ...form,
+        sessionId,
         price: parseFloat(form.price),
         oldPrice: form.oldPrice ? parseFloat(form.oldPrice) : null,
         totalStock: form.variants.length
@@ -168,15 +216,76 @@ function ProductForm({ sessions, product, onClose, storeData }) {
 
         <div className="p-5 space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-gray-600 mb-1">Sesión</label>
-            <select
-              value={form.sessionId}
-              onChange={(e) => setForm({ ...form, sessionId: e.target.value })}
-              className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 text-sm outline-none"
-            >
-              <option value="">Seleccionar sesión...</option>
-              {sessions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            <label className="block text-sm font-semibold text-gray-600 mb-2">Categoría</label>
+            <div className="flex flex-wrap gap-2">
+              {sessions.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setForm({ ...form, sessionId: s.id })}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                    form.sessionId === s.id
+                      ? "text-white border-transparent shadow-md"
+                      : "bg-gray-50 text-gray-600 border-gray-200 hover:border-pink-300"
+                  }`}
+                  style={form.sessionId === s.id ? { background: "var(--primary)" } : undefined}
+                >
+                  {s.name}
+                </button>
+              ))}
+              {!showNewCat && (
+                <button
+                  type="button"
+                  onClick={() => setShowNewCat(true)}
+                  className="px-3 py-1.5 rounded-full text-xs font-bold border border-dashed border-pink-300 text-pink-500 hover:bg-pink-50"
+                >
+                  + Nueva categoría
+                </button>
+              )}
+            </div>
+
+            {showNewCat && (
+              <div className="mt-3 space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    value={newCatName}
+                    onChange={(e) => setNewCatName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createCategory(); } }}
+                    placeholder="Escribe una categoría (ej. Labiales)"
+                    autoFocus={sessions.length > 0}
+                    className="flex-1 bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2 text-sm outline-none focus:border-pink-300"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => createCategory()}
+                    disabled={creatingCat || !newCatName.trim()}
+                    className="px-4 rounded-2xl text-white text-xs font-black disabled:opacity-50"
+                    style={{ background: "var(--primary)" }}
+                  >
+                    {creatingCat ? "..." : "Crear"}
+                  </button>
+                  {sessions.length > 0 && (
+                    <button type="button" onClick={() => { setShowNewCat(false); setNewCatName(""); }}
+                      className="px-3 rounded-2xl bg-gray-100 text-gray-500 text-xs font-bold">✕</button>
+                  )}
+                </div>
+                {sessions.length === 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {SUGGESTED_CATEGORIES.map((c) => (
+                      <button key={c} type="button" onClick={() => createCategory(c)} disabled={creatingCat}
+                        className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-pink-50 text-pink-500 hover:bg-pink-100">
+                        + {c}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {!form.sessionId && (
+              <p className="text-[10px] text-gray-400 mt-2">
+                Si no eliges ninguna, se guardará en "{newCatName.trim() || "General"}" automáticamente.
+              </p>
+            )}
           </div>
 
           <div>
@@ -272,6 +381,7 @@ export default function AdminProducts() {
   const [loading, setLoading] = useState(true);
   const [formProduct, setFormProduct] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [defaultSessionId, setDefaultSessionId] = useState("");
   
   // 🌟 EXTRAEMOS LOS DATOS DE LA TIENDA ACTUAL
   const { storeData } = useApp();
@@ -580,6 +690,14 @@ export default function AdminProducts() {
                 >
                   <div className="overflow-hidden">
                     <div className="border-t border-gray-50 divide-y divide-gray-50/50">
+                      {group.id !== 'orphans' && (
+                        <button
+                          onClick={() => { setFormProduct(null); setDefaultSessionId(group.id); setShowForm(true); }}
+                          className="w-full px-6 py-3 text-left text-xs font-black text-pink-500 hover:bg-pink-50/50 transition-colors"
+                        >
+                          + Agregar producto en "{group.name}"
+                        </button>
+                      )}
                       {group.items.length === 0 ? (
                         <div className="p-5 text-center text-xs text-gray-400 italic">No hay productos en esta categoría.</div>
                       ) : (
@@ -656,7 +774,8 @@ export default function AdminProducts() {
           sessions={sessions}
           product={formProduct}
           storeData={storeData} // 🌟 PASAMOS LA TIENDA AL FORMULARIO
-          onClose={() => { setShowForm(false); setFormProduct(null); }}
+          defaultSessionId={defaultSessionId}
+          onClose={() => { setShowForm(false); setFormProduct(null); setDefaultSessionId(""); }}
         />
       )}
     </div>
