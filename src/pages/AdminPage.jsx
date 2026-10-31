@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Routes, Route, NavLink, useNavigate, useParams } from "react-router-dom"; 
 import { useAuth } from "../context/AuthContext";
 import { SUPER_ADMIN_EMAIL } from "../config/constants";
@@ -31,6 +31,16 @@ export default function AdminPage() {
   
   // 🌟 EXTRAEMOS LOS DATOS DE LA TIENDA PARA LEER EL MENSAJE DEL SÚPER ADMIN
   const { storeData } = useApp(); 
+
+  // 🌟 SI LA TIENDA ES RECIÉN REGISTRADA Y NO HA VISTO/SALTADO EL TUTORIAL, REDIRIGIR A /aprender
+  useEffect(() => {
+    if (!storeId) return;
+    const isPendingLocal = localStorage.getItem(`onboarding_pending_${storeId}`) === "true";
+    const isPendingRemote = storeData && storeData.id === storeId && storeData.onboardingCompleted === false;
+    if (isPendingLocal || isPendingRemote) {
+      navigate(`/${storeId}/aprender`, { replace: true });
+    }
+  }, [storeId, storeData, navigate]); 
 
   // 🌟 NOTIFICACIONES PUSH EN EL TELÉFONO PARA PEDIDOS ENTRANTES
   const { permission, requestPermission, pendingCount } = useOrderNotifications(storeId);

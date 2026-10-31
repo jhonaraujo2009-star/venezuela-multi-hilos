@@ -20,8 +20,13 @@ if (import.meta.env.DEV && typeof navigator !== 'undefined' && 'serviceWorker' i
     });
   }
 } else {
-  // Registro del Service Worker para que sea instalable en producción
-  registerSW({ immediate: true });
+  // Registro del Service Worker con actualización inmediata para que nunca sirva versiones viejas en caché
+  const updateSW = registerSW({
+    immediate: true,
+    onNeedRefresh() {
+      updateSW(true);
+    },
+  });
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(

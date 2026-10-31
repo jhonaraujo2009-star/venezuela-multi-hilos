@@ -172,8 +172,13 @@ export default function RegisterStorePage() {
         comision_porcentaje: 5,
         deuda_comision: 0,
         total_productos: 0,
-        ventas_consolidadas: 0
+        ventas_consolidadas: 0,
+        onboardingCompleted: false
       });
+
+      try {
+        localStorage.setItem(`onboarding_pending_${cleanUrl}`, "true");
+      } catch (e) {}
 
       toast.success("¡Tu tienda ha sido creada con éxito! 🚀");
       
@@ -181,12 +186,12 @@ export default function RegisterStorePage() {
       if (cleanEmail === SUPER_ADMIN_EMAIL?.toLowerCase()) {
         const choice = window.confirm("¡Bienvenido, Jefe! 👑\n\n¿Deseas entrar al PANEL DE CONTROL TOTAL (Súper Admin)?\n\n(Aceptar = Súper Admin / Cancelar = Aprender a usar la App)");
         if (choice) {
-          navigate("/super-admin");
+          navigate("/super-admin", { replace: true });
         } else {
-          navigate(`/${cleanUrl}/aprender`);
+          navigate(`/${cleanUrl}/aprender`, { replace: true });
         }
       } else {
-        navigate(`/${cleanUrl}/aprender`);
+        navigate(`/${cleanUrl}/aprender`, { replace: true });
       }
 
     } catch (error) {
