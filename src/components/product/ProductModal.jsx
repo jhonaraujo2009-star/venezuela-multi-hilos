@@ -194,17 +194,30 @@ export default function ProductModal({ product, onClose }) {
     setIsLiking(false);
   };
 
-  const getImagesArray = () => {
+  const getRawImagesList = () => {
     let raw = currentProduct;
     let list = [];
     if (Array.isArray(raw.images) && raw.images.length > 0 && raw.images[0]) list = raw.images.filter(Boolean);
     else if (raw.image) list = [raw.image];
     else if (raw.imageUrl) list = [raw.imageUrl];
-    return list.map(img => normalizeImageUrl(img)).filter(Boolean);
+    return list;
   };
 
-  const images = getImagesArray();
+  const rawImages = getRawImagesList();
+  const images = rawImages.map(img => normalizeImageUrl(img, 1080)).filter(Boolean);
+  const thumbImages = rawImages.map(img => normalizeImageUrl(img, 200)).filter(Boolean);
   const hasMultipleImages = images.length > 1;
+
+  // Precargar imágenes vecinas en segundo plano para que el paso sea instantáneo
+  useEffect(() => {
+    if (!hasMultipleImages) return;
+    images.forEach((src) => {
+      const preImg = new Image();
+      preImg.src = src;
+    });
+  }, [currentProduct?.id, hasMultipleImages]);
+
+  const touchStartRef = useRef({ x: 0, y: 0 });
 
   const handleAddToCart = () => {
     if (hasVariants && !selectedVariant) return toast.error("Selecciona una talla primero");
@@ -256,22 +269,24 @@ export default function ProductModal({ product, onClose }) {
     setActiveImage(nextImage);
   };
 
-  const swipeConfidenceThreshold = 10000;
-  const swipePower = (offset, velocity) => Math.abs(offset) * velocity;
+  const handleTouchStart = (e) => {
+    if (!hasMultipleImages || !e.touches?.[0]) return;
+    touchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY
+    };
+  };
 
-  const slideVariants = {
-    enter: (dir) => ({
-      x: dir === 0 ? 0 : dir > 0 ? "100%" : "-100%",
-      opacity: dir === 0 ? 1 : 0
-    }),
-    center: {
-      x: 0,
-      opacity: 1
-    },
-    exit: (dir) => ({
-      x: dir === 0 ? 0 : dir < 0 ? "100%" : "-100%",
-      opacity: 0
-    })
+  const handleTouchEnd = (e) => {
+    if (!hasMultipleImages || !e.changedTouches?.[0]) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartRef.current.x;
+    const deltaY = e.changedTouches[0].clientY - touchStartRef.current.y;
+
+    // Si el deslizamiento horizontal supera los 40px y es mayor que el vertical
+    if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      if (deltaX < 0) paginate(1);
+      else paginate(-1);
+    }
   };
 
   return (
@@ -303,7 +318,11 @@ export default function ProductModal({ product, onClose }) {
             
             {/* 🌟 GALERÍA CON ESTILO INSTAGRAM DE ALTO CONTRASTE 🌟 */}
             <div className="w-full md:w-1/2 md:sticky md:top-0 md:h-fit flex flex-col bg-slate-50 border-b border-gray-100 md:border-b-0 md:border-r">
-              <div className="relative w-full aspect-[4/5] bg-gradient-to-b from-gray-100 via-gray-50 to-gray-100 overflow-hidden group select-none">
+              <div
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+                className="relative w-full aspect-[4/5] bg-gradient-to-b from-gray-100 via-gray-50 to-gray-100 overflow-hidden group select-none touch-pan-y"
+              >
                 
                 {hasDiscount && discountPercentage > 0 && (
                   <div className="absolute top-4 left-4 z-30 bg-red-600 text-white px-3.5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl border border-white/20">
@@ -313,41 +332,35 @@ export default function ProductModal({ product, onClose }) {
 
                 {/* 🌟 CONTADOR ESTILO INSTAGRAM (Ej: 📷 1/4) */}
                 {hasMultipleImages && (
-                  <div className="absolute top-4 right-4 z-30 bg-black/65 backdrop-blur-md text-white text-[11px] font-black px-3 py-1 rounded-full shadow-xl border border-white/20 flex items-center gap-1.5 pointer-events-none">
+                  <div className="absolute top-4 right-4 z-30 bg-black/75 text-white text-[11px] font-black px-3 py-1 rounded-full shadow-xl border border-white/20 flex items-center gap-1.5 pointer-events-none">
                     <span>📷</span>
                     <span>{activeImage + 1}/{images.length}</span>
                   </div>
                 )}
 
                 {hasMultipleImages ? (
-                  <AnimatePresence initial={false} custom={direction}>
-                    {images.length > 0 && (
-                      <motion.img
-                        key={activeImage}
-                        src={images[activeImage]}
-                        custom={direction}
-                        variants={slideVariants}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
-                        transition={{ x: { type: "spring", stiffness: 300, damping: 30 }, opacity: { duration: 0.2 } }}
-                        drag="x"
-                        dragConstraints={{ left: 0, right: 0 }}
-                        dragElastic={0.2}
-                        onDragEnd={(e, { offset, velocity }) => {
-                          const swipe = swipePower(offset.x, velocity.x);
-                          if (swipe < -swipeConfidenceThreshold) paginate(1);
-                          else if (swipe > swipeConfidenceThreshold) paginate(-1);
-                        }}
-                        className="absolute inset-0 w-full h-full object-cover cursor-grab active:cursor-grabbing"
-                        alt={`${currentProduct.name} - Modelo ${activeImage + 1}`}
-                      />
-                    )}
-                  </AnimatePresence>
+                  <div
+                    className="flex w-full h-full transition-transform duration-300 ease-out will-change-transform"
+                    style={{ transform: `translate3d(-${activeImage * 100}%, 0, 0)` }}
+                  >
+                    {images.map((imgSrc, idx) => (
+                      <div key={idx} className="w-full h-full flex-shrink-0 relative">
+                        <img
+                          src={imgSrc}
+                          decoding="async"
+                          draggable={false}
+                          className="w-full h-full object-cover select-none pointer-events-none"
+                          alt={`${currentProduct.name} - Modelo ${idx + 1}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 ) : (
                   images.length > 0 && (
                     <img
                       src={images[0]}
+                      decoding="async"
+                      draggable={false}
                       className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
                       alt={currentProduct.name}
                     />
@@ -360,7 +373,7 @@ export default function ProductModal({ product, onClose }) {
                     <button 
                       type="button"
                       onClick={(e) => { e.stopPropagation(); paginate(-1); }}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-black/55 hover:bg-black/80 backdrop-blur-md text-white flex items-center justify-center shadow-2xl active:scale-90 transition-all border border-white/20 cursor-pointer"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-black/65 hover:bg-black/85 text-white flex items-center justify-center shadow-2xl active:scale-90 transition-transform border border-white/20 cursor-pointer"
                       title="Modelo anterior"
                     >
                       <svg className="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7"/></svg>
@@ -368,7 +381,7 @@ export default function ProductModal({ product, onClose }) {
                     <button 
                       type="button"
                       onClick={(e) => { e.stopPropagation(); paginate(1); }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-black/55 hover:bg-black/80 backdrop-blur-md text-white flex items-center justify-center shadow-2xl active:scale-90 transition-all border border-white/20 cursor-pointer"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-black/65 hover:bg-black/85 text-white flex items-center justify-center shadow-2xl active:scale-90 transition-transform border border-white/20 cursor-pointer"
                       title="Siguiente modelo"
                     >
                       <svg className="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
@@ -379,7 +392,7 @@ export default function ProductModal({ product, onClose }) {
                 {/* 🌟 PUNTOS INDICADORES ESTILO INSTAGRAM EN CÁPSULA OSCURA (Inmunes a fotos de fondo blanco) */}
                 {hasMultipleImages && (
                   <div className="absolute bottom-4 left-0 right-0 flex justify-center z-30 pointer-events-auto">
-                    <div className="bg-black/65 backdrop-blur-md px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shadow-2xl border border-white/20">
+                    <div className="bg-black/75 px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shadow-2xl border border-white/20">
                       {images.map((_, i) => (
                         <button
                           key={i}
@@ -422,7 +435,7 @@ export default function ProductModal({ product, onClose }) {
                       }`}
                       title={`Elegir Modelo #${idx + 1}`}
                     >
-                      <img src={img} alt={`Modelo #${idx + 1}`} className="w-full h-full object-cover" />
+                      <img src={thumbImages[idx] || img} decoding="async" loading="lazy" alt={`Modelo #${idx + 1}`} className="w-full h-full object-cover" />
                       <span className="absolute bottom-0 inset-x-0 bg-black/70 text-[9px] font-black text-white text-center py-0.5">
                         #{idx + 1}
                       </span>
@@ -518,7 +531,7 @@ export default function ProductModal({ product, onClose }) {
                   <div className="mb-6 p-3.5 bg-gradient-to-r from-pink-50/90 via-pink-50/50 to-purple-50/80 border border-pink-200/90 rounded-2xl flex items-center justify-between gap-3 shadow-xs">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-12 h-14 rounded-xl overflow-hidden bg-white border border-pink-300 shadow-sm shrink-0">
-                        <img src={images[activeImage]} alt={`Modelo #${activeImage + 1}`} className="w-full h-full object-cover" />
+                        <img src={thumbImages[activeImage] || images[activeImage]} decoding="async" alt={`Modelo #${activeImage + 1}`} className="w-full h-full object-cover" />
                       </div>
                       <div className="min-w-0">
                         <span className="text-[10px] font-black text-pink-600 uppercase tracking-widest block leading-tight">Modelo Seleccionado</span>
@@ -703,7 +716,7 @@ export default function ProductModal({ product, onClose }) {
                             className="w-[calc(33.333%-11px)] flex-shrink-0 text-left group active:scale-95 transition-transform snap-start"
                           >
                             <div className="w-full aspect-[4/5] bg-white rounded-2xl mb-2.5 overflow-hidden border border-gray-100 shadow-sm">
-                              <img src={rp.images?.[0] || rp.image || rp.imageUrl} alt={rp.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                              <img src={normalizeImageUrl(rp.images?.[0] || rp.image || rp.imageUrl, 400)} decoding="async" loading="lazy" alt={rp.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                             </div>
                             <p className="text-[11px] font-bold text-gray-950 truncate leading-tight group-hover:text-pink-600 transition-colors">{rp.name}</p>
                             <div className="flex items-baseline gap-1.5 mt-1">

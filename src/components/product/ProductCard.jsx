@@ -54,7 +54,7 @@ export default function ProductCard({ product, onClick, rank }) {
     if (Array.isArray(product.images) && product.images.length > 0 && product.images[0]) raw = product.images[0];
     else if (product.image) raw = product.image;
     else if (product.imageUrl) raw = product.imageUrl;
-    return normalizeImageUrl(raw);
+    return normalizeImageUrl(raw, 600);
   };
   const productThumbnail = getThumbnail();
   const imageCount = (Array.isArray(product.images) ? product.images.filter(Boolean).length : 0) || (product.image || product.imageUrl ? 1 : 0);
@@ -179,7 +179,7 @@ export default function ProductCard({ product, onClick, rank }) {
 
       <div className="relative aspect-[4/5] overflow-hidden bg-gray-50/50">
         {productThumbnail && (
-          <img src={productThumbnail} alt={product.name} className="w-full h-full object-cover transition-transform duration-[2s] group-hover:scale-110" />
+          <img src={productThumbnail} decoding="async" loading="lazy" alt={product.name} className="w-full h-full object-cover transition-transform duration-[2s] group-hover:scale-110" />
         )}
 
         {/* 🌟 BOTÓN DE ME GUSTA DIRECTO EN TARJETA 🌟 */}
