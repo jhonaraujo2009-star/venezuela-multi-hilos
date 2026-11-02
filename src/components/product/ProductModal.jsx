@@ -204,18 +204,9 @@ export default function ProductModal({ product, onClose }) {
   };
 
   const rawImages = getRawImagesList();
-  const images = rawImages.map(img => normalizeImageUrl(img, 1080)).filter(Boolean);
+  const images = rawImages.map(img => normalizeImageUrl(img)).filter(Boolean);
   const thumbImages = rawImages.map(img => normalizeImageUrl(img, 200)).filter(Boolean);
   const hasMultipleImages = images.length > 1;
-
-  // Precargar imágenes vecinas en segundo plano para que el paso sea instantáneo
-  useEffect(() => {
-    if (!hasMultipleImages) return;
-    images.forEach((src) => {
-      const preImg = new Image();
-      preImg.src = src;
-    });
-  }, [currentProduct?.id, hasMultipleImages]);
 
   const touchStartRef = useRef({ x: 0, y: 0 });
 
@@ -282,7 +273,26 @@ export default function ProductModal({ product, onClose }) {
     const deltaX = e.changedTouches[0].clientX - touchStartRef.current.x;
     const deltaY = e.changedTouches[0].clientY - touchStartRef.current.y;
 
-    // Si el deslizamiento horizontal supera los 40px y es mayor que el vertical
+    // Si el deslizamiento horizontal supera los 35px y es mayor que el vertical
+    if (Math.abs(deltaX) > 35 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      if (deltaX < 0) paginate(1);
+      else paginate(-1);
+    }
+  };
+
+  const handleMouseDown = (e) => {
+    if (!hasMultipleImages) return;
+    touchStartRef.current = {
+      x: e.clientX,
+      y: e.clientY
+    };
+  };
+
+  const handleMouseUp = (e) => {
+    if (!hasMultipleImages) return;
+    const deltaX = e.clientX - touchStartRef.current.x;
+    const deltaY = e.clientY - touchStartRef.current.y;
+
     if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
       if (deltaX < 0) paginate(1);
       else paginate(-1);
@@ -321,6 +331,8 @@ export default function ProductModal({ product, onClose }) {
               <div
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
+                onMouseDown={handleMouseDown}
+                onMouseUp={handleMouseUp}
                 className="relative w-full aspect-[4/5] bg-gradient-to-b from-gray-100 via-gray-50 to-gray-100 overflow-hidden group select-none touch-pan-y"
               >
                 
@@ -338,34 +350,24 @@ export default function ProductModal({ product, onClose }) {
                   </div>
                 )}
 
-                {hasMultipleImages ? (
-                  <div
-                    className="flex w-full h-full transition-transform duration-300 ease-out will-change-transform"
-                    style={{ transform: `translate3d(-${activeImage * 100}%, 0, 0)` }}
-                  >
-                    {images.map((imgSrc, idx) => (
-                      <div key={idx} className="w-full h-full flex-shrink-0 relative">
-                        <img
-                          src={imgSrc}
-                          decoding="async"
-                          draggable={false}
-                          className="w-full h-full object-cover select-none pointer-events-none"
-                          alt={`${currentProduct.name} - Modelo ${idx + 1}`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  images.length > 0 && (
+                {images.map((imgSrc, idx) => {
+                  const isCurrent = idx === activeImage;
+                  const isPrev = hasMultipleImages && idx === (activeImage - 1 + images.length) % images.length;
+                  const isNext = hasMultipleImages && idx === (activeImage + 1) % images.length;
+                  if (!isCurrent && !isPrev && !isNext) return null;
+
+                  return (
                     <img
-                      src={images[0]}
-                      decoding="async"
+                      key={idx}
+                      src={imgSrc}
                       draggable={false}
-                      className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
-                      alt={currentProduct.name}
+                      className={`absolute inset-0 w-full h-full object-cover select-none pointer-events-none transition-opacity duration-150 ${
+                        isCurrent ? "opacity-100 z-10" : "opacity-0 z-0"
+                      }`}
+                      alt={`${currentProduct.name} - Modelo ${idx + 1}`}
                     />
-                  )
-                )}
+                  );
+                })}
 
                 {/* 🌟 FLECHAS DE NAVEGACIÓN ESTILO INSTAGRAM (Visibles en móvil y desktop con alto contraste) */}
                 {hasMultipleImages && (
@@ -435,7 +437,7 @@ export default function ProductModal({ product, onClose }) {
                       }`}
                       title={`Elegir Modelo #${idx + 1}`}
                     >
-                      <img src={thumbImages[idx] || img} decoding="async" loading="lazy" alt={`Modelo #${idx + 1}`} className="w-full h-full object-cover" />
+                      <img src={thumbImages[idx] || img} alt={`Modelo #${idx + 1}`} className="w-full h-full object-cover" />
                       <span className="absolute bottom-0 inset-x-0 bg-black/70 text-[9px] font-black text-white text-center py-0.5">
                         #{idx + 1}
                       </span>
