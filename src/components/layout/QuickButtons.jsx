@@ -1,6 +1,6 @@
 import { useApp } from "../../context/AppContext";
 
-export default function QuickButtons({ onFilter }) {
+export default function QuickButtons({ onFilter, activeFilter = "all", compact = false }) {
   const { settings, storeData } = useApp();
   
   const defaultButtons = [
@@ -15,31 +15,56 @@ export default function QuickButtons({ onFilter }) {
   
   const isValid = savedButtons.some(b => b?.filter === 'top') && savedButtons.some(b => b?.filter === 'new');
   const buttons = isValid ? savedButtons : defaultButtons;
+  const primaryColor = storeData?.primaryColor || settings?.primaryColor || "#ec4899";
 
   return (
-    // 🌟 DISEÑO ELEVADO: Margen negativo top (-mt-4) para que "suba" y se pegue al Hero
-    <div className="relative z-20 max-w-[800px] mx-auto grid grid-cols-4 gap-2 sm:gap-4 px-4 sm:px-6 -mt-2 sm:-mt-4 pb-10">
-      {buttons.map((btn) => (
-        <button
-          key={btn.id}
-          onClick={() => onFilter(btn.filter)}
-          // 🌟 MAGIA VISUAL: Sombras dinámicas, bordes rosas al hacer hover y efecto de hundimiento al hacer click
-          className="group relative flex flex-col items-center justify-center gap-3 bg-white border border-gray-100 rounded-[1.5rem] sm:rounded-[2rem] py-5 sm:py-6 px-2 shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_10px_30px_rgba(236,72,153,0.15)] hover:border-pink-200 hover:-translate-y-1.5 active:scale-90 active:bg-pink-50 transition-all duration-300 overflow-hidden"
-        >
-          {/* 🌟 Efecto Hover Premium (Brillo interno) */}
-          <div className="absolute inset-0 bg-pink-50/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          
-          {/* Icono a todo color con animación de salto */}
-          <span className="text-2xl sm:text-3xl relative z-10 transform group-hover:scale-110 group-hover:-translate-y-1 transition-all duration-300 drop-shadow-sm">
-            {btn.icon}
-          </span>
-          
-          {/* Texto Minimalista */}
-          <span className="text-[8px] sm:text-[10px] font-black text-gray-500 group-hover:text-pink-600 tracking-[0.15em] sm:tracking-[0.2em] text-center uppercase relative z-10 transition-colors duration-300">
-            {btn.label}
-          </span>
-        </button>
-      ))}
+    <div className={`flex flex-col gap-1.5 w-full ${compact ? "" : "max-w-md mx-auto px-4 pb-3"}`}>
+      {buttons.map((btn) => {
+        const isActive = activeFilter === btn.filter;
+        return (
+          <button
+            key={btn.id}
+            type="button"
+            onClick={() => onFilter && onFilter(btn.filter)}
+            className={`group relative w-full flex items-center justify-between px-3.5 py-2 rounded-xl border transition-all duration-200 active:scale-[0.98] overflow-hidden ${
+              isActive
+                ? "bg-gray-950 text-white border-gray-950 shadow-[0_6px_16px_rgba(0,0,0,0.12)]"
+                : "bg-white/95 hover:bg-pink-50/50 text-gray-700 hover:text-gray-950 border-gray-100 hover:border-pink-200 shadow-[0_2px_8px_rgba(0,0,0,0.025)]"
+            }`}
+          >
+            {/* Acento lateral elegante */}
+            <span
+              className={`absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full transition-opacity duration-200 ${
+                isActive ? "opacity-100" : "opacity-0 group-hover:opacity-60"
+              }`}
+              style={{ backgroundColor: primaryColor }}
+            />
+
+            <div className="flex items-center gap-2.5 min-w-0 pl-0.5">
+              <span className="text-sm sm:text-base leading-none shrink-0 transform group-hover:scale-110 transition-transform duration-200">
+                {btn.icon}
+              </span>
+              <span
+                className={`text-[10px] sm:text-[11px] font-black uppercase tracking-[0.16em] truncate transition-colors ${
+                  isActive ? "text-white" : "text-gray-700 group-hover:text-pink-600"
+                }`}
+              >
+                {btn.label}
+              </span>
+            </div>
+
+            <span
+              className={`text-xs font-black transition-all duration-200 shrink-0 ${
+                isActive
+                  ? "text-pink-400 translate-x-0"
+                  : "text-gray-300 group-hover:text-pink-500 group-hover:translate-x-0.5"
+              }`}
+            >
+              ›
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

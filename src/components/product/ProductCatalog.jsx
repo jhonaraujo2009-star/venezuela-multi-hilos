@@ -266,9 +266,9 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
 
   if (loading) {
     return (
-      <div className="px-4 pb-24 pt-12 animate-in fade-in duration-500">
-        <div className="flex flex-col items-center mb-12 opacity-60">
-          <div className="h-6 w-48 bg-pink-100/50 rounded-full animate-pulse mb-4"></div>
+      <div className="px-4 pb-24 pt-4 animate-in fade-in duration-500">
+        <div className="flex flex-col items-center mb-6 opacity-60">
+          <div className="h-6 w-48 bg-pink-100/50 rounded-full animate-pulse mb-3"></div>
           <div className="h-3 w-24 bg-gray-100 rounded-full animate-pulse"></div>
         </div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-12">
@@ -357,12 +357,16 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
 
   if (!activeFilter || activeFilter === "all") {
     return (
-      <div className="px-4 pb-24 space-y-10">
-        <div className="py-8 text-center">
-          <h2 className="text-[10px] font-black tracking-[0.5em] text-gray-400 uppercase mb-2 text-center">
-            Exclusividad
-          </h2>
-          <h1 className="text-3xl font-serif italic text-gray-900 text-center">
+      <div className="px-4 pb-24 space-y-4">
+        <div className="pt-2 pb-1 text-center">
+          <div className="inline-flex items-center justify-center gap-2.5 mb-1">
+            <span className="w-6 h-[1px] bg-gradient-to-r from-transparent to-gray-300" />
+            <h2 className="text-[9px] font-black tracking-[0.45em] text-gray-400 uppercase text-center">
+              Exclusividad
+            </h2>
+            <span className="w-6 h-[1px] bg-gradient-to-l from-transparent to-gray-300" />
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-serif italic text-gray-900 text-center leading-tight">
             Nuestras Colecciones
           </h1>
         </div>
@@ -372,7 +376,7 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
           variants={containerVariants}
           initial="hidden"
           animate="show"
-          className="grid grid-cols-1 gap-8"
+          className="grid grid-cols-1 gap-6"
         >
           {displaySessions.map((session) => {
             const sessionProducts = products.filter(p => matchesSession(p, session.id));
@@ -432,7 +436,7 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="flex flex-col items-center py-10"
+          className="flex flex-col items-center py-4"
         >
           <h2 className="text-[10px] font-black tracking-[0.5em] text-gray-400 uppercase mb-2 text-center">
             {sessionName}
@@ -543,8 +547,8 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
 
   return (
     <div className="px-4 pb-24">
-      <div className="flex flex-col items-center py-12">
-        <h2 className="text-2xl font-light tracking-[0.2em] text-gray-900 uppercase text-center flex items-center gap-2">
+      <div className="flex flex-col items-center py-5">
+        <h2 className="text-xl sm:text-2xl font-light tracking-[0.2em] text-gray-900 uppercase text-center flex items-center gap-2">
           {isTopTen ? "🏆 Ranking Top 10" : 
            isNewArrivals ? "✨ Lo Nuevo" : 
            isOfertas ? "🔥 Ofertas Hot" : 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, runTransaction } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import { useApp } from "../../context/AppContext";
 import toast from "react-hot-toast";
@@ -8,10 +8,19 @@ export default function AdminSalesHistory() {
   const { storeData, bsPrice, settings } = useApp();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [revertingId, setRevertingId] = useState(null);
 
   // States for filtering
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedOrderId, setExpandedOrderId] = useState(null);
+
+  const toMillisSafe = (ts) => {
+    if (!ts) return 0;
+    if (typeof ts.toMillis === "function") return ts.toMillis();
+    if (typeof ts.seconds === "number") return ts.seconds * 1000;
+    const parsed = new Date(ts).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
 
   /* 
    * Firebase Listener
@@ -34,8 +43,8 @@ export default function AdminSalesHistory() {
 
       // Ordenar por las más recientes primero
       ordersList.sort((a, b) => {
-        const dateA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-        const dateB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+        const dateA = toMillisSafe(a.createdAt);
+        const dateB = toMillisSafe(b.createdAt);
         return dateB - dateA;
       });
 
@@ -65,7 +74,7 @@ export default function AdminSalesHistory() {
     let salesYear = 0;
 
     orders.forEach(order => {
-      const orderDateUnix = order.createdAt?.toMillis ? order.createdAt.toMillis() : 0;
+      const orderDateUnix = toMillisSafe(order.createdAt);
       const amount = Number(order.total || order.totalAmount || 0);
 
       if (orderDateUnix >= today.getTime()) {
@@ -86,6 +95,117 @@ export default function AdminSalesHistory() {
 
   const toggleDetails = (orderId) => {
     setExpandedOrderId(prev => prev === orderId ? null : orderId);
+  };
+
+  /*
+   * Revertir / Anular Venta Confirmada (Restaura Stock y Comisión)
+   */
+  const revertSale = async (order) => {
+    if (revertingId === order.id) return;
+    if (!window.confirm(`¿Anular el ticket #${order.id.slice(-6).toUpperCase()} de ${order.customerName || 'Cliente'} y devolver los productos al inventario?`)) return;
+
+    setRevertingId(order.id);
+    const toastId = toast.loading("Anulando venta y restaurando inventario...");
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        const orderRef = doc(db, "orders", order.id);
+        const orderSnap = await transaction.get(orderRef);
+        if (!orderSnap.exists()) throw new Error("El ticket ya no existe");
+
+        const currentOrder = orderSnap.data();
+        const st = (currentOrder.status || "").toLowerCase();
+        if (st === "cancelado" || st === "pending") {
+          throw new Error("Esta venta ya fue anulada anteriormente");
+        }
+
+        const rawItems = currentOrder.items || currentOrder.cart || [];
+        const productItemsMap = new Map();
+        for (const item of rawItems) {
+          const pId = item.productId || item.id;
+          if (!pId) continue;
+          if (!productItemsMap.has(pId)) productItemsMap.set(pId, []);
+          productItemsMap.get(pId).push(item);
+        }
+
+        const productsToRestore = [];
+        for (const [pId, itemsList] of productItemsMap.entries()) {
+          const pRef = doc(db, "products", pId);
+          const pDoc = await transaction.get(pRef);
+          if (pDoc.exists()) {
+            productsToRestore.push({ ref: pRef, doc: pDoc, items: itemsList });
+          }
+        }
+
+        const storeRef = doc(db, "stores", storeData.id);
+        const storeSnap = await transaction.get(storeRef);
+
+        // Restaurar stock de cada producto
+        for (const { ref, doc: pDoc, items: itemsList } of productsToRestore) {
+          const currentData = pDoc.data();
+          let variants = currentData.variants && currentData.variants.length > 0
+            ? currentData.variants.map(v => ({ ...v }))
+            : null;
+          let totalStock = Number(currentData.totalStock || 0);
+          let salesCount = Number(currentData.salesCount || 0);
+
+          for (const item of itemsList) {
+            const pQty = Number(item.quantity || item.qty || 1);
+            salesCount = Math.max(0, salesCount - pQty);
+
+            if (variants && item.variant) {
+              const labelABuscar = typeof item.variant === "object" ? item.variant.label : item.variant;
+              variants = variants.map(v => {
+                if (v.label === labelABuscar || v.id === item.variant?.id) {
+                  return { ...v, stock: (Number(v.stock) || 0) + pQty };
+                }
+                return v;
+              });
+            } else {
+              totalStock += pQty;
+            }
+          }
+
+          const updateData = { salesCount };
+          if (variants) {
+            updateData.variants = variants;
+            updateData.totalStock = variants.reduce((acc, v) => acc + (Number(v.stock) || 0), 0);
+          } else {
+            updateData.totalStock = totalStock;
+          }
+
+          transaction.update(ref, updateData);
+        }
+
+        // Revertir contador de ventas y comisión de la tienda sin bajar de 0
+        if (storeSnap.exists()) {
+          const sData = storeSnap.data();
+          const currentSales = Number(sData.ventas_consolidadas || 0);
+          const currentDebt = Number(sData.deuda_comision || 0);
+          const commToRevert = currentOrder.commissionRecorded !== false
+            ? Number(currentOrder.commissionAmount || 0)
+            : 0;
+
+          transaction.update(storeRef, {
+            ventas_consolidadas: Math.max(0, currentSales - 1),
+            deuda_comision: Number(Math.max(0, currentDebt - commToRevert).toFixed(2))
+          });
+        }
+
+        transaction.update(orderRef, {
+          status: "cancelado",
+          stockDeducted: false,
+          commissionRecorded: false
+        });
+      });
+
+      toast.success("Venta anulada e inventario restaurado 🔄", { id: toastId });
+    } catch (err) {
+      console.error(err);
+      toast.error(err?.message || "Error al anular la venta", { id: toastId });
+    } finally {
+      setRevertingId(null);
+    }
   };
 
   /* 
@@ -255,9 +375,17 @@ export default function AdminSalesHistory() {
                 {isExpanded && (
                   <div className="border-t border-dashed border-gray-200 bg-gray-50/50 p-5 sm:p-8 space-y-6 rounded-b-[1.5rem]">
                     
-                    {/* Botón Whatsapp (Si hay teléfono) */}
-                    {customerPhone && (
-                      <div className="flex justify-end">
+                    {/* Acciones del Ticket (WhatsApp + Anular Venta) */}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <button
+                        onClick={() => revertSale(order)}
+                        disabled={revertingId === order.id}
+                        className="bg-red-50 hover:bg-red-500 text-red-600 hover:text-white border border-red-200 disabled:opacity-50 text-xs font-black uppercase tracking-wider px-4 py-2.5 rounded-xl flex items-center gap-2 transition-colors shadow-sm"
+                      >
+                        {revertingId === order.id ? "Anulando..." : "↩️ Anular Venta y Restaurar Stock"}
+                      </button>
+
+                      {customerPhone && (
                         <a 
                           href={`https://wa.me/${waLink}`}
                           target="_blank" rel="noreferrer"
@@ -265,8 +393,8 @@ export default function AdminSalesHistory() {
                         >
                           💬 WhatsApp Directo al Cliente
                         </a>
-                      </div>
-                    )}
+                      )}
+                    </div>
 
                     {/* Fila: Desglose */}
                     <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">

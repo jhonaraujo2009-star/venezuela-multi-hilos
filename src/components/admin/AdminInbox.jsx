@@ -15,6 +15,7 @@ export default function AdminInbox() {
 
   const [replyTextMap, setReplyTextMap] = useState({});
   const [savingReplyId, setSavingReplyId] = useState(null);
+  const [confirmingId, setConfirmingId] = useState(null);
 
   /* 
    * Firebase Listeners
@@ -62,16 +63,26 @@ export default function AdminInbox() {
    * Confirmar (Pago Verificado) - TRANSACCIONAL FIREBASE
    */
   const confirmOrder = async (order) => {
-    if (order.items && order.items.length === 0) return toast.error("El pedido está vacío");
+    if (confirmingId === order.id) return;
+    const rawItems = order.items || order.cart || [];
+    if (rawItems.length === 0) return toast.error("El pedido está vacío");
     if (!confirm(`¿Confirmar que ${order.customerName || 'el cliente'} ha pagado el pedido y restarlo del inventario?`)) return;
 
+    setConfirmingId(order.id);
     const toastId = toast.loading("Procesando pago en el banco del sistema...");
 
     try {
       await runTransaction(db, async (transaction) => {
+        const orderRef = doc(db, "orders", order.id);
+        const orderSnap = await transaction.get(orderRef);
+        if (!orderSnap.exists()) throw new Error("El pedido ya no existe");
+        if (orderSnap.data()?.status !== "pending") {
+          throw new Error("Este pedido ya fue procesado anteriormente");
+        }
+
         // 1. Agrupar items por productId para no sobreescribir variantes ni repetir llamadas
         const productItemsMap = new Map();
-        for (const item of (order.items || order.cart || [])) {
+        for (const item of rawItems) {
           const pId = item.productId || item.id; 
           if (!pId) continue;
           if (!productItemsMap.has(pId)) productItemsMap.set(pId, []);
@@ -139,7 +150,7 @@ export default function AdminInbox() {
           if (orderTotal > 0) {
             comisionASumar = Number(((orderTotal * commissionRate) / 100).toFixed(2));
           } else {
-            const itemsSum = (order.items || order.cart || []).reduce((acc, item) => {
+            const itemsSum = rawItems.reduce((acc, item) => {
               const pQty = Number(item.quantity ?? item.qty ?? 1);
               const pPrice = Number(item.price ?? 0);
               return acc + (pPrice * pQty);
@@ -151,22 +162,24 @@ export default function AdminInbox() {
         const storeRef = doc(db, "stores", storeData.id);
         transaction.update(storeRef, {
           ventas_consolidadas: increment(1),
-          deuda_comision: increment(comisionASumar)
+          ...(comisionASumar > 0 ? { deuda_comision: increment(comisionASumar) } : {})
         });
         
-        // Actualizamos orden a completed y registramos la comisión
-        const orderRef = doc(db, "orders", order.id);
+        // Actualizamos orden a completed y registramos la comisión e inventario
         transaction.update(orderRef, { 
           status: "completed",
+          stockDeducted: true,
           commissionAmount: comisionASumar,
-          commissionRecorded: true
+          commissionRecorded: comisionASumar > 0
         });
       });
 
       toast.success(`¡Pedido Confirmado! Ahora está en tu Historial de Ventas. ✅`, { id: toastId });
     } catch (e) {
       console.error(e);
-      toast.error("Error al confirmar el pedido", { id: toastId });
+      toast.error(e?.message || "Error al confirmar el pedido", { id: toastId });
+    } finally {
+      setConfirmingId(null);
     }
   };
 
@@ -395,9 +408,10 @@ export default function AdminInbox() {
                     <div className="flex gap-3">
                       <button 
                         onClick={() => confirmOrder(order)} 
-                        className="flex-1 bg-black hover:bg-gray-800 text-white py-3.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all text-center"
+                        disabled={confirmingId === order.id}
+                        className="flex-1 bg-black hover:bg-gray-800 disabled:opacity-50 text-white py-3.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all text-center"
                       >
-                        PAGO RECIBIDO ✅
+                        {confirmingId === order.id ? "PROCESANDO..." : "PAGO RECIBIDO ✅"}
                       </button>
                       <button 
                         onClick={() => rejectOrder(order.id)} 

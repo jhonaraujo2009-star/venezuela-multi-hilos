@@ -61,6 +61,12 @@ function VariantManager({ variants, onChange }) {
 // ==========================================
 // 🌟 RECIBIMOS storeData para saber de quién es el producto
 function ProductForm({ sessions, product, onClose, storeData, defaultSessionId }) {
+  const initialImages = product?.images?.length
+    ? product.images
+    : product?.image
+    ? [product.image]
+    : [];
+
   const [form, setForm] = useState({
     name: product?.name || "",
     description: product?.description || "",
@@ -68,7 +74,7 @@ function ProductForm({ sessions, product, onClose, storeData, defaultSessionId }
     oldPrice: product?.oldPrice || "", 
     sessionId: product?.sessionId || defaultSessionId || "",
     totalStock: product?.totalStock || 0,
-    images: product?.images || [],
+    images: initialImages,
     variants: product?.variants || [],
     offerDiscount: product?.offerDiscount || "",
     offerHours: "", 
@@ -169,13 +175,14 @@ function ProductForm({ sessions, product, onClose, storeData, defaultSessionId }
         sessionId = await ensureCategory(newCatName.trim() || "General");
       }
 
-      let finalOfferEndsAt = form.offerEndsAt;
+      let finalOfferEndsAt = form.offerDiscount ? form.offerEndsAt : null;
       if (form.offerHours && form.offerDiscount) {
         finalOfferEndsAt = Date.now() + (parseFloat(form.offerHours) * 60 * 60 * 1000);
       }
 
       const data = {
         ...form,
+        image: form.images?.[0] || null,
         sessionId,
         price: parseFloat(form.price),
         oldPrice: form.oldPrice ? parseFloat(form.oldPrice) : null,
@@ -729,10 +736,10 @@ export default function AdminProducts() {
                                 </div>
                               </div>
 
-                              <div className="flex gap-2 opacity-0 group-hover/item:opacity-100 transition-opacity">
-                                {downloadMode && p.images?.length > 0 && (
+                              <div className={`flex gap-2 transition-opacity ${downloadMode ? "opacity-100" : "opacity-100 sm:opacity-0 sm:group-hover/item:opacity-100"}`}>
+                                {downloadMode && (p.images?.length > 0 || p.image) && (
                                   <div className="flex items-center gap-1">
-                                    {p.images.map((imgUrl, imgIdx) => (
+                                    {(p.images?.length ? p.images : [p.image]).map((imgUrl, imgIdx) => (
                                       <button 
                                         key={imgIdx}
                                         onClick={(e) => { e.stopPropagation(); toggleImageSelection(imgUrl); }}

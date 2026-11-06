@@ -81,6 +81,24 @@ export default function SuperAdminPage() {
     if (isAuthorized) fetchGlobalSettings();
   }, [isAuthorized]);
 
+  const toMillisSafe = (ts) => {
+    if (!ts) return 0;
+    if (typeof ts.toMillis === "function") return ts.toMillis();
+    if (typeof ts.seconds === "number") return ts.seconds * 1000;
+    const parsed = new Date(ts).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+
+  const computeOrderCommission = (order, store) => {
+    if (order?.commissionRecorded === false) return 0;
+    if (typeof order?.commissionAmount === "number" && !Number.isNaN(order.commissionAmount)) {
+      return Number(order.commissionAmount);
+    }
+    const amt = Number(order?.totalAmount ?? order?.total ?? 0);
+    const commRate = Number(store?.comision_porcentaje ?? 5);
+    return Number(((amt * commRate) / 100).toFixed(2));
+  };
+
   const fetchAllStores = async () => {
     try {
       const querySnapshot = await getDocs(collection(db, "stores"));
@@ -100,7 +118,7 @@ export default function SuperAdminPage() {
         storesList.forEach(s => { storeMap[s.id] = s; });
 
         const orderCounts = {};
-        const orderTotalsAfterReset = {};
+        const commissionTotalsAfterReset = {};
         orderSnap.docs.forEach(d => {
           const o = d.data();
           const sId = o?.storeId;
@@ -108,10 +126,10 @@ export default function SuperAdminPage() {
           if (sId && isDone) {
             orderCounts[sId] = (orderCounts[sId] || 0) + 1;
             const resetAt = Number(storeMap[sId]?.lastDebtResetAt || 0);
-            const orderTimeMs = o.createdAt?.toMillis ? o.createdAt.toMillis() : (o.createdAt?.seconds ? o.createdAt.seconds * 1000 : 0);
+            const orderTimeMs = toMillisSafe(o.createdAt);
             if (!resetAt || orderTimeMs > resetAt) {
-              const amt = Number(o.totalAmount ?? o.total ?? 0);
-              orderTotalsAfterReset[sId] = (orderTotalsAfterReset[sId] || 0) + amt;
+              const comm = computeOrderCommission(o, storeMap[sId]);
+              commissionTotalsAfterReset[sId] = (commissionTotalsAfterReset[sId] || 0) + comm;
             }
           }
         });
@@ -123,9 +141,8 @@ export default function SuperAdminPage() {
           }
           // Si deuda_comision está en 0, nunca ha sido saldada manualmente y tiene ventas confirmadas:
           const currentDebt = Number(s.deuda_comision || 0);
-          if (currentDebt === 0 && !s.lastDebtResetAt && (orderTotalsAfterReset[s.id] || 0) > 0) {
-            const commRate = Number(s.comision_porcentaje ?? 5);
-            s.deuda_comision = Number(((orderTotalsAfterReset[s.id] * commRate) / 100).toFixed(2));
+          if (currentDebt === 0 && !s.lastDebtResetAt && (commissionTotalsAfterReset[s.id] || 0) > 0) {
+            s.deuda_comision = Number((commissionTotalsAfterReset[s.id] || 0).toFixed(2));
           }
         });
       } catch(e) {}
@@ -150,7 +167,7 @@ export default function SuperAdminPage() {
       stores.forEach(s => { storeMap[s.id] = s; });
 
       const orderCounts = {};
-      const orderTotalsAfterReset = {};
+      const commissionTotalsAfterReset = {};
 
       orderSnap.docs.forEach(d => {
         const o = d.data();
@@ -159,23 +176,21 @@ export default function SuperAdminPage() {
         if (sId && isDone) {
           orderCounts[sId] = (orderCounts[sId] || 0) + 1;
           const resetAt = Number(storeMap[sId]?.lastDebtResetAt || 0);
-          const orderTimeMs = o.createdAt?.toMillis ? o.createdAt.toMillis() : (o.createdAt?.seconds ? o.createdAt.seconds * 1000 : 0);
+          const orderTimeMs = toMillisSafe(o.createdAt);
           if (!resetAt || orderTimeMs > resetAt) {
-            const amt = Number(o.totalAmount ?? o.total ?? 0);
-            orderTotalsAfterReset[sId] = (orderTotalsAfterReset[sId] || 0) + amt;
+            const comm = computeOrderCommission(o, storeMap[sId]);
+            commissionTotalsAfterReset[sId] = (commissionTotalsAfterReset[sId] || 0) + comm;
           }
         }
       });
 
       const batch = writeBatch(db);
       const updatedStores = stores.map(s => {
-        const totalSalesAfterReset = orderTotalsAfterReset[s.id] || 0;
         const totalCount = orderCounts[s.id] || 0;
-        const commRate = Number(s.comision_porcentaje ?? 5);
-        const calculatedDebt = Number(((totalSalesAfterReset * commRate) / 100).toFixed(2));
+        const calculatedDebt = Number((commissionTotalsAfterReset[s.id] || 0).toFixed(2));
         
         const newCount = Math.max(Number(s.ventas_consolidadas || 0), totalCount);
-        const newDebt = (s.deuda_comision && s.deuda_comision > 0) ? s.deuda_comision : calculatedDebt;
+        const newDebt = calculatedDebt > 0 ? calculatedDebt : Number(s.deuda_comision || 0);
 
         const sRef = doc(db, "stores", s.id);
         batch.update(sRef, {
@@ -209,7 +224,7 @@ export default function SuperAdminPage() {
       const qOrders = query(collection(db, "orders"), where("storeId", "==", storeId));
       const snap = await getDocs(qOrders);
       
-      let totalAmountAfterReset = 0;
+      let totalCommissionAfterReset = 0;
       let completedCount = 0;
 
       snap.docs.forEach(d => {
@@ -217,15 +232,14 @@ export default function SuperAdminPage() {
         const isDone = ["pagado", "entregado", "completed", "enviado"].includes((o.status || "").toLowerCase());
         if (isDone) {
           completedCount++;
-          const orderTimeMs = o.createdAt?.toMillis ? o.createdAt.toMillis() : (o.createdAt?.seconds ? o.createdAt.seconds * 1000 : 0);
+          const orderTimeMs = toMillisSafe(o.createdAt);
           if (!resetAt || orderTimeMs > resetAt) {
-            totalAmountAfterReset += Number(o.totalAmount ?? o.total ?? 0);
+            totalCommissionAfterReset += computeOrderCommission(o, targetStore);
           }
         }
       });
 
-      const commRate = Number(targetStore?.comision_porcentaje ?? 5);
-      const calculatedDebt = Number(((totalAmountAfterReset * commRate) / 100).toFixed(2));
+      const calculatedDebt = Number(totalCommissionAfterReset.toFixed(2));
 
       await updateDoc(doc(db, "stores", storeId), {
         ventas_consolidadas: Math.max(Number(targetStore?.ventas_consolidadas || 0), completedCount),
@@ -381,17 +395,30 @@ export default function SuperAdminPage() {
   };
 
   const exportToCSV = () => {
+    const escapeCsv = (val) => `"${String(val ?? "").replace(/"/g, '""')}"`;
     const headers = ["ID Tienda,Nombre Tienda,Email,Ventas Consolidadas,Comision (%),Deuda Pendiente ($),Estado"];
-    const rows = stores.map(s => `"${s.id}","${s.nombre || 'Sin nombre'}","${s.ownerEmail || ''}",${s.ventas_consolidadas || 0},${s.comision_porcentaje ?? 5},${s.deuda_comision || 0},${s.isActive !== false ? 'Activa' : 'Inhabilitada'}`);
-    
-    const csvContent = "data:text/csv;charset=utf-8," + headers.concat(rows).join("\n");
-    const encodedUri = encodeURI(csvContent);
+    const rows = stores.map(s =>
+      [
+        escapeCsv(s.id),
+        escapeCsv(s.nombre || "Sin nombre"),
+        escapeCsv(s.ownerEmail || ""),
+        Number(s.ventas_consolidadas || 0),
+        Number(s.comision_porcentaje ?? 5),
+        Number(s.deuda_comision || 0),
+        escapeCsv(s.isActive !== false ? "Activa" : "Inhabilitada"),
+      ].join(",")
+    );
+
+    const csvString = "\uFEFF" + headers.concat(rows).join("\n");
+    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", url);
     link.setAttribute("download", `Reporte_Finanzas_SúperAdmin_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
     toast.success("Reporte descargado 📊");
   };
 
@@ -419,9 +446,9 @@ export default function SuperAdminPage() {
   };
 
   const getDaysInactive = (timestamp) => {
-    if (!timestamp) return "N/A";
-    const date = timestamp.toMillis ? timestamp.toMillis() : new Date(timestamp).getTime();
-    return Math.floor((Date.now() - date) / (1000 * 60 * 60 * 24));
+    const dateMs = toMillisSafe(timestamp);
+    if (!dateMs) return "N/A";
+    return Math.max(0, Math.floor((Date.now() - dateMs) / (1000 * 60 * 60 * 24)));
   };
 
   const handleSort = (key) => {
@@ -444,12 +471,17 @@ export default function SuperAdminPage() {
   let processedStores = [...filteredStores];
   if (sortConfig.key) {
     processedStores.sort((a, b) => {
-      let valA = sortConfig.key === 'inactiveDays' ? getDaysInactive(a.last_login) : (a[sortConfig.key] || 0);
-      let valB = sortConfig.key === 'inactiveDays' ? getDaysInactive(b.last_login) : (b[sortConfig.key] || 0);
-      if (valA === "N/A") valA = -1;
-      if (valB === "N/A") valB = -1;
-      if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+      let valA = sortConfig.key === 'inactiveDays' ? getDaysInactive(a.last_login) : a[sortConfig.key];
+      let valB = sortConfig.key === 'inactiveDays' ? getDaysInactive(b.last_login) : b[sortConfig.key];
+      if (valA === "N/A" || valA === undefined || valA === null) valA = -1;
+      if (valB === "N/A" || valB === undefined || valB === null) valB = -1;
+      if (typeof valA === "string" && typeof valB === "string") {
+        return sortConfig.direction === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      }
+      const numA = Number(valA) || 0;
+      const numB = Number(valB) || 0;
+      if (numA < numB) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (numA > numB) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
   }
@@ -1032,7 +1064,7 @@ export default function SuperAdminPage() {
                           {activeTab === "mantenimiento" && (
                             <>
                               <td className="p-4 text-xs text-gray-500 font-medium">
-                                {store.last_login?.toDate ? store.last_login.toDate().toLocaleDateString() : "Sin registro"}
+                                {toMillisSafe(store.last_login) ? new Date(toMillisSafe(store.last_login)).toLocaleDateString() : "Sin registro"}
                               </td>
                               <td className="p-4">
                                 <span className={`px-2 py-1 rounded-lg text-xs font-bold ${inactiveDays > 30 ? "bg-red-100 text-red-600" : "bg-green-100 text-green-600"}`}>

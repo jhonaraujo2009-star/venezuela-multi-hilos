@@ -6,14 +6,12 @@ import { db } from "../config/firebase";
 import AnnouncementBar from "../components/layout/AnnouncementBar";
 import Header from "../components/layout/Header";
 import HeroBanner from "../components/layout/HeroBanner";
-import QuickButtons from "../components/layout/QuickButtons";
 import ProductCatalog from "../components/product/ProductCatalog";
 import ProductModal from "../components/product/ProductModal";
 import CartDrawer from "../components/cart/CartDrawer";
 import Footer from "../components/layout/Footer";
 import InstallButton from "../InstallButton";
 import WhatsAppVIP from "../components/layout/WhatsAppVIP";
-import VerifiedBadge from "../components/shared/VerifiedBadge";
 
 import { useCart } from "../context/CartContext";
 import { useApp } from "../context/AppContext";
@@ -135,40 +133,16 @@ export default function StorePage() {
 
   return (
     <div className="min-h-screen bg-white pb-32">
-      <div className="fixed top-0 left-0 right-0 z-40">
+      <div className="sticky top-0 left-0 right-0 z-40">
         <AnnouncementBar />
         <Header onProductClick={setSelectedProduct} onFilter={setActiveFilter} />
       </div>
 
-      {/* 🌟 Ajuste de altura para que el header y announcement bar no tapen el contenido */}
-      <div className="pt-28 sm:pt-[116px]">
-        
-        {/* NOMBRE DE LA TIENDA CON VERIFICACIÓN */}
-        <div className="max-w-md mx-auto px-4 pt-2 pb-2 flex items-center justify-center animate-in fade-in duration-700">
-          <span className="text-xl font-black tracking-tighter uppercase flex items-center gap-1.5 text-center" style={{ color: "var(--primary)" }}>
-            ✨ {displayStoreName}
-            
-            {storeData?.verification?.status === "verified" ? (
-              <VerifiedBadge variant="shield" size="md" className="ml-1" />
-            ) : (
-              <div className="ml-1.5 px-2.5 py-1 text-[8px] font-black bg-gradient-to-r from-gray-50 to-gray-100 text-gray-500 rounded-full border border-gray-200/60 flex items-center gap-1.5 tracking-widest uppercase shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-gray-400"></span>
-                </span>
-                No Verificado
-              </div>
-            )}
-          </span>
-        </div>
-
-        {/* 🌟 Separación mt-8 para los botones (Mantenido intacto) */}
-        <div className="max-w-md mx-auto mt-8">
-          <HeroBanner activeFilter={activeFilter} />
-          <QuickButtons onFilter={setActiveFilter} />
-          <ProductCatalog activeFilter={activeFilter} onProductClick={setSelectedProduct} onFilter={setActiveFilter} />
-          <Footer />
-        </div>
+      {/* 🌟 Contenido principal compacto y elegante sin espacios muertos */}
+      <div className="max-w-md mx-auto">
+        <HeroBanner activeFilter={activeFilter} onFilter={setActiveFilter} />
+        <ProductCatalog activeFilter={activeFilter} onProductClick={setSelectedProduct} onFilter={setActiveFilter} />
+        <Footer />
       </div>
 
       <AnimatePresence>

@@ -114,18 +114,20 @@ export default function AdminPOS() {
 
   const updateQuantity = (key, delta) => {
     setCart((prev) =>
-      prev.map((item) => {
-        if (item.key === key) {
-          const newQ = item.quantity + delta;
-          if (newQ > item.maxStock) {
-            toast.error("Stock máximo superado");
-            return item;
+      prev
+        .map((item) => {
+          if (item.key === key) {
+            const newQ = item.quantity + delta;
+            if (newQ > item.maxStock) {
+              toast.error("Stock máximo superado");
+              return item;
+            }
+            if (newQ < 1) return null;
+            return { ...item, quantity: newQ };
           }
-          if (newQ < 1) return item;
-          return { ...item, quantity: newQ };
-        }
-        return item;
-      })
+          return item;
+        })
+        .filter(Boolean)
     );
   };
 
@@ -223,8 +225,9 @@ export default function AdminPOS() {
             salesCount: increment(totalQty),
           });
         } else {
+          const safeNewTotal = Math.max(0, (Number(productInState?.totalStock) || 0) - totalQty);
           batch.update(prodRef, {
-            totalStock: increment(-totalQty),
+            totalStock: safeNewTotal,
             salesCount: increment(totalQty),
           });
         }
@@ -448,7 +451,7 @@ export default function AdminPOS() {
                 </div>
                 <button
                   onClick={() => removeFromCart(item.key)}
-                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-50 text-red-500 rounded-full text-[10px] font-bold shadow-sm opacity-0 group-hover:opacity-100 transition-opacity border border-red-100 flex items-center justify-center"
+                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-50 text-red-500 rounded-full text-[10px] font-bold shadow-sm opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity border border-red-100 flex items-center justify-center"
                 >
                   ✕
                 </button>

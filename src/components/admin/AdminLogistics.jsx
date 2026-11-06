@@ -124,6 +124,7 @@ export default function AdminLogistics() {
               <div className="flex-1 space-y-1">
                 <label className="text-xs font-semibold text-gray-500 uppercase">{id}</label>
                 <input
+                  key={`${id}-${logistics[id]?.url || ""}`}
                   defaultValue={logistics[id]?.url || ""}
                   onBlur={(e) => updateLogisticsUrl(id, e.target.value)}
                   placeholder="URL del sitio"
