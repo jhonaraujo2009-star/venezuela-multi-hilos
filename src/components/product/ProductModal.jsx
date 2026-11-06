@@ -17,6 +17,8 @@ export default function ProductModal({ product, onClose }) {
   
   const [currentProduct, setCurrentProduct] = useState(product);
   const [relatedProducts, setRelatedProducts] = useState([]);
+  const [visibleRelatedCount, setVisibleRelatedCount] = useState(3);
+  const [neighborsReady, setNeighborsReady] = useState(false);
   const [timeLeft, setTimeLeft] = useState("");
 
   const [activeImage, setActiveImage] = useState(() => {
@@ -134,27 +136,68 @@ export default function ProductModal({ product, onClose }) {
   }, [isFlashOffer, pricing.endTime]);
 
   useEffect(() => {
-    const fetchRelated = async () => {
+    let isCancelled = false;
+    let stageTimer = null;
+
+    setVisibleRelatedCount(3);
+    setNeighborsReady(false);
+
+    const neighborsTimer = setTimeout(() => {
+      if (!isCancelled) setNeighborsReady(true);
+    }, 180);
+
+    // Esperar a que termine la animación de apertura del modal para no saturar el teléfono
+    const fetchTimer = setTimeout(async () => {
       const targetStoreId = storeData?.id || currentProduct?.storeId;
-      if (!currentProduct?.sessionId || !targetStoreId) return; 
+      if (!targetStoreId || !currentProduct?.id) return;
+
       try {
-        const q = query(
-          collection(db, "products"),
-          where("storeId", "==", targetStoreId),
-          where("sessionId", "==", currentProduct.sessionId),
-          limit(10)
-        );
-        const snap = await getDocs(q);
-        const related = [];
-        snap.docs.forEach(d => {
-          if (d.id !== currentProduct.id) related.push({ id: d.id, ...d.data() });
-        });
-        setRelatedProducts(related); 
-      } catch(e) { 
-        console.warn("No se pudieron cargar recomendados:", e); 
+        let related = [];
+        if (currentProduct?.sessionId) {
+          const q = query(
+            collection(db, "products"),
+            where("storeId", "==", targetStoreId),
+            where("sessionId", "==", currentProduct.sessionId),
+            limit(7)
+          );
+          const snap = await getDocs(q);
+          snap.docs.forEach((d) => {
+            if (d.id !== currentProduct.id) related.push({ id: d.id, ...d.data() });
+          });
+        }
+
+        // Si la categoría tiene pocos productos, completar suavemente con otros de la misma tienda
+        if (related.length === 0) {
+          const fallbackQ = query(
+            collection(db, "products"),
+            where("storeId", "==", targetStoreId),
+            limit(7)
+          );
+          const fallbackSnap = await getDocs(fallbackQ);
+          fallbackSnap.docs.forEach((d) => {
+            if (d.id !== currentProduct.id) related.push({ id: d.id, ...d.data() });
+          });
+        }
+
+        if (!isCancelled) {
+          setRelatedProducts(related.slice(0, 6));
+          if (related.length > 3) {
+            stageTimer = setTimeout(() => {
+              if (!isCancelled) setVisibleRelatedCount(6);
+            }, 280);
+          }
+        }
+      } catch (e) {
+        console.warn("No se pudieron cargar recomendados:", e);
       }
+    }, 160);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(neighborsTimer);
+      clearTimeout(fetchTimer);
+      if (stageTimer) clearTimeout(stageTimer);
     };
-    fetchRelated();
   }, [currentProduct?.id, currentProduct?.sessionId, currentProduct?.storeId, storeData?.id]);
 
   const scrollRelated = (scrollOffset) => {
@@ -194,18 +237,41 @@ export default function ProductModal({ product, onClose }) {
     setIsLiking(false);
   };
 
+  const extractProductImage = (item) => {
+    if (!item) return null;
+    const arrayCandidates = [item.images, item.imagenes, item.fotos, item.photos];
+    for (const arr of arrayCandidates) {
+      if (Array.isArray(arr) && arr.length > 0) {
+        const validStr = arr.find((img) => typeof img === "string" && img.trim().length > 0);
+        if (validStr) return normalizeImageUrl(validStr.trim());
+        const validObj = arr.find((img) => img && typeof img.url === "string" && img.url.trim().length > 0);
+        if (validObj) return normalizeImageUrl(validObj.url.trim());
+      }
+    }
+    const raw = item.image || item.imageUrl || item.imagen || item.img || item.thumbnail || item.photo || item.foto;
+    if (typeof raw === "string" && raw.trim()) return normalizeImageUrl(raw.trim());
+    return null;
+  };
+
   const getRawImagesList = () => {
     let raw = currentProduct;
+    if (!raw) return [];
     let list = [];
-    if (Array.isArray(raw.images) && raw.images.length > 0 && raw.images[0]) list = raw.images.filter(Boolean);
-    else if (raw.image) list = [raw.image];
-    else if (raw.imageUrl) list = [raw.imageUrl];
+    if (Array.isArray(raw.images) && raw.images.length > 0) {
+      list = raw.images
+        .map((img) => (typeof img === "string" ? img.trim() : img?.url?.trim()))
+        .filter(Boolean);
+    }
+    if (list.length === 0) {
+      const single = raw.image || raw.imageUrl || raw.imagen || raw.img || raw.thumbnail || raw.photo || raw.foto;
+      if (typeof single === "string" && single.trim()) list = [single.trim()];
+    }
     return list;
   };
 
   const rawImages = getRawImagesList();
-  const images = rawImages.map(img => normalizeImageUrl(img)).filter(Boolean);
-  const thumbImages = rawImages.map(img => normalizeImageUrl(img, 200)).filter(Boolean);
+  const images = rawImages.map((img) => normalizeImageUrl(img)).filter(Boolean);
+  const thumbImages = images;
   const hasMultipleImages = images.length > 1;
 
   const touchStartRef = useRef({ x: 0, y: 0 });
@@ -352,14 +418,15 @@ export default function ProductModal({ product, onClose }) {
 
                 {images.map((imgSrc, idx) => {
                   const isCurrent = idx === activeImage;
-                  const isPrev = hasMultipleImages && idx === (activeImage - 1 + images.length) % images.length;
-                  const isNext = hasMultipleImages && idx === (activeImage + 1) % images.length;
+                  const isPrev = neighborsReady && hasMultipleImages && idx === (activeImage - 1 + images.length) % images.length;
+                  const isNext = neighborsReady && hasMultipleImages && idx === (activeImage + 1) % images.length;
                   if (!isCurrent && !isPrev && !isNext) return null;
 
                   return (
                     <img
                       key={idx}
                       src={imgSrc}
+                      decoding="async"
                       draggable={false}
                       className={`absolute inset-0 w-full h-full object-cover select-none pointer-events-none transition-opacity duration-150 ${
                         isCurrent ? "opacity-100 z-10" : "opacity-0 z-0"
@@ -437,8 +504,8 @@ export default function ProductModal({ product, onClose }) {
                       }`}
                       title={`Elegir Modelo #${idx + 1}`}
                     >
-                      <img src={thumbImages[idx] || img} alt={`Modelo #${idx + 1}`} className="w-full h-full object-cover" />
-                      <span className="absolute bottom-0 inset-x-0 bg-black/70 text-[9px] font-black text-white text-center py-0.5">
+                      <img src={thumbImages[idx] || img} decoding="async" alt={`Modelo #${idx + 1}`} className="absolute inset-0 w-full h-full object-cover" />
+                      <span className="absolute bottom-0 inset-x-0 bg-black/70 text-[9px] font-black text-white text-center py-0.5 z-10">
                         #{idx + 1}
                       </span>
                     </button>
@@ -532,8 +599,8 @@ export default function ProductModal({ product, onClose }) {
                 {hasMultipleImages && (
                   <div className="mb-6 p-3.5 bg-gradient-to-r from-pink-50/90 via-pink-50/50 to-purple-50/80 border border-pink-200/90 rounded-2xl flex items-center justify-between gap-3 shadow-xs">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-12 h-14 rounded-xl overflow-hidden bg-white border border-pink-300 shadow-sm shrink-0">
-                        <img src={thumbImages[activeImage] || images[activeImage]} decoding="async" alt={`Modelo #${activeImage + 1}`} className="w-full h-full object-cover" />
+                      <div className="relative w-12 h-14 rounded-xl overflow-hidden bg-white border border-pink-300 shadow-sm shrink-0">
+                        <img src={thumbImages[activeImage] || images[activeImage]} decoding="async" alt={`Modelo #${activeImage + 1}`} className="absolute inset-0 w-full h-full object-cover" />
                       </div>
                       <div className="min-w-0">
                         <span className="text-[10px] font-black text-pink-600 uppercase tracking-widest block leading-tight">Modelo Seleccionado</span>
@@ -680,8 +747,8 @@ export default function ProductModal({ product, onClose }) {
                 {/* 5. PRODUCTOS RECOMENDADOS (UBICADOS AL FINAL PARA NO DISTRAER) */}
                 {relatedProducts.length > 0 && (
                   <div className="pt-8 border-t border-gray-100 relative group/related">
-                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-950 mb-5 flex items-center justify-between gap-2">
-                      <span className="flex items-center gap-2"><span>🔥</span> También te podría gustar</span>
+                    <h3 className="text-[11px] font-black uppercase tracking-[0.18em] text-gray-950 mb-5 flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-2"><span>🔥</span> También te podría interesar</span>
                       
                       {relatedProducts.length > 3 && (
                         <div className="flex gap-1.5 opacity-0 group-hover/related:opacity-100 transition-opacity hidden md:flex">
@@ -693,13 +760,20 @@ export default function ProductModal({ product, onClose }) {
                     
                     <div 
                       ref={relatedScrollRef}
-                      className="flex gap-4 overflow-x-auto hide-scrollbar pb-2 scroll-smooth snap-x snap-mandatory"
+                      onScroll={() => {
+                        if (visibleRelatedCount < relatedProducts.length) {
+                          setVisibleRelatedCount(relatedProducts.length);
+                        }
+                      }}
+                      className="flex gap-3.5 overflow-x-auto hide-scrollbar pb-2 scroll-smooth snap-x snap-mandatory"
                     >
-                      {relatedProducts.map(rp => {
+                      {relatedProducts.slice(0, visibleRelatedCount).map((rp) => {
                         const rpPricing = calculateProductPricing(rp);
+                        const rpImg = extractProductImage(rp);
                         return (
                           <button 
                             key={rp.id} 
+                            type="button"
                             onClick={() => {
                               setCurrentProduct(rp);
                               setActiveImage(0);
@@ -715,10 +789,21 @@ export default function ProductModal({ product, onClose }) {
                               }
                               document.getElementById('modalScrollArea')?.scrollTo(0, 0);
                             }} 
-                            className="w-[calc(33.333%-11px)] flex-shrink-0 text-left group active:scale-95 transition-transform snap-start"
+                            className="w-[calc(33.333%-10px)] min-w-[96px] flex-shrink-0 text-left group active:scale-95 transition-transform snap-start block"
                           >
-                            <div className="w-full aspect-[4/5] bg-white rounded-2xl mb-2.5 overflow-hidden border border-gray-100 shadow-sm">
-                              <img src={normalizeImageUrl(rp.images?.[0] || rp.image || rp.imageUrl, 400)} decoding="async" loading="lazy" alt={rp.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                            <div className="relative w-full aspect-[4/5] bg-gray-100 rounded-2xl mb-2 overflow-hidden border border-gray-100 shadow-sm">
+                              {rpImg ? (
+                                <img
+                                  src={rpImg}
+                                  decoding="async"
+                                  alt={rp.name || "Producto"}
+                                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                />
+                              ) : (
+                                <div className="absolute inset-0 flex items-center justify-center text-2xl text-gray-300">
+                                  💎
+                                </div>
+                              )}
                             </div>
                             <p className="text-[11px] font-bold text-gray-950 truncate leading-tight group-hover:text-pink-600 transition-colors">{rp.name}</p>
                             <div className="flex items-baseline gap-1.5 mt-1">

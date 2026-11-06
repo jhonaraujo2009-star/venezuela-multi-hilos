@@ -8,7 +8,7 @@ import { CLOUDINARY_CLOUD_NAME } from "../config/constants";
  * @param {string} url URL de la imagen
  * @param {number} [maxWidth=800] Ancho máximo opcional para optimizar decodificación en GPU
  */
-export function normalizeImageUrl(url, maxWidth = 800) {
+export function normalizeImageUrl(url) {
   if (!url || typeof url !== "string") return url;
 
   // Si es una URL del Cloudinary anterior, la redirigimos a la nueva cuenta activa
@@ -16,16 +16,17 @@ export function normalizeImageUrl(url, maxWidth = 800) {
     url = url.replace("res.cloudinary.com/dp3abweme/", `res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/`);
   }
 
-  // Asegurar optimización automática de calidad, formato (WebP/AVIF) y límite de ancho
+  // Asegurar optimización automática unificada (WebP/AVIF, calidad inteligente y ancho óptimo 800px)
+  // Usar una única firma de URL permite reutilizar al 100% la caché del navegador entre catálogo, modal y recomendados
   if (url.includes("res.cloudinary.com") && url.includes("/image/upload/")) {
-    const transformParams = maxWidth ? `f_auto,q_auto,c_limit,w_${maxWidth}` : "f_auto,q_auto";
+    const transformParams = "f_auto,q_auto,c_limit,w_800";
     url = url.replace(/\/image\/upload\/(?:f_auto[^/]*\/)?/, `/image/upload/${transformParams}/`);
   }
 
   return url;
 }
 
-export function normalizeImagesArray(images, maxWidth = 800) {
+export function normalizeImagesArray(images) {
   if (!Array.isArray(images)) return [];
-  return images.map(img => normalizeImageUrl(img, maxWidth)).filter(Boolean);
+  return images.map(img => normalizeImageUrl(img)).filter(Boolean);
 }

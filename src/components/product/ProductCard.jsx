@@ -50,11 +50,18 @@ export default function ProductCard({ product, onClick, rank }) {
   };
 
   const getThumbnail = () => {
-    let raw = null;
-    if (Array.isArray(product.images) && product.images.length > 0 && product.images[0]) raw = product.images[0];
-    else if (product.image) raw = product.image;
-    else if (product.imageUrl) raw = product.imageUrl;
-    return normalizeImageUrl(raw);
+    const arrayCandidates = [product.images, product.imagenes, product.fotos, product.photos];
+    for (const arr of arrayCandidates) {
+      if (Array.isArray(arr) && arr.length > 0) {
+        const validStr = arr.find((img) => typeof img === "string" && img.trim().length > 0);
+        if (validStr) return normalizeImageUrl(validStr.trim());
+        const validObj = arr.find((img) => img && typeof img.url === "string" && img.url.trim().length > 0);
+        if (validObj) return normalizeImageUrl(validObj.url.trim());
+      }
+    }
+    const raw = product.image || product.imageUrl || product.imagen || product.img || product.thumbnail || product.photo || product.foto;
+    if (typeof raw === "string" && raw.trim()) return normalizeImageUrl(raw.trim());
+    return null;
   };
   const productThumbnail = getThumbnail();
   const imageCount = (Array.isArray(product.images) ? product.images.filter(Boolean).length : 0) || (product.image || product.imageUrl ? 1 : 0);
@@ -179,7 +186,7 @@ export default function ProductCard({ product, onClick, rank }) {
 
       <div className="relative aspect-[4/5] overflow-hidden bg-gray-50/50">
         {productThumbnail && (
-          <img src={productThumbnail} alt={product.name} className="w-full h-full object-cover transition-transform duration-[2s] group-hover:scale-110" />
+          <img src={productThumbnail} decoding="async" alt={product.name} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
         )}
 
         {/* 🌟 BOTÓN DE ME GUSTA DIRECTO EN TARJETA 🌟 */}

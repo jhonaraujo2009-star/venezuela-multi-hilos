@@ -140,8 +140,6 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
   
   const { storeData } = useApp();
 
-  const [liveTime, setLiveTime] = useState(Date.now());
-
   // 🌟 HISTORIAL DEL BOTÓN ATRÁS DEL TELÉFONO POR NIVELES:
   // Nivel 1: Si está en una Colección o Filtro -> vuelve a la vista principal de Colecciones ("all")
   useBackButton(Boolean(activeFilter && activeFilter !== "all"), () => {
@@ -162,13 +160,6 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
   // 🌟 RESETEAR SUB-CATEGORÍA AL CAMBIAR DE COLECCIÓN O FILTRO
   useEffect(() => {
     setActiveSubcategory(null);
-  }, [activeFilter]);
-
-  useEffect(() => {
-    if (activeFilter === "ofertas") {
-      const interval = setInterval(() => setLiveTime(Date.now()), 1000);
-      return () => clearInterval(interval);
-    }
   }, [activeFilter]);
 
   useEffect(() => {
@@ -396,7 +387,8 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
                 {img && (
                   <img 
                     src={img} 
-                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-[3s] group-hover:scale-110" 
+                    decoding="async"
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
                     alt={session.name} 
                   />
                 )}
@@ -473,7 +465,8 @@ export default function ProductCatalog({ activeFilter, onProductClick, onFilter 
               {subcat.preview ? (
                 <img 
                   src={subcat.preview} 
-                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+                  decoding="async"
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
                   alt={subcat.label} 
                 />
               ) : (
