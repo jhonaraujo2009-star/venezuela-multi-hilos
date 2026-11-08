@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, limit } from "firebase/firestore";
+import { collection, getDocs, query, limit, doc, getDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
 import { calculateProductPricing } from "../utils/pricing";
@@ -10,12 +10,37 @@ export default function FlashOffersPage() {
   const [storesMap, setStoresMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [countdown, setCountdown] = useState({ h: "00", m: "00", s: "00" });
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const updateTimer = () => {
+      const now = new Date();
+      const endOfDay = new Date(now);
+      endOfDay.setHours(23, 59, 59, 999);
+      const diff = Math.max(0, Math.floor((endOfDay.getTime() - now.getTime()) / 1000));
+      const h = String(Math.floor(diff / 3600)).padStart(2, "0");
+      const m = String(Math.floor((diff % 3600) / 60)).padStart(2, "0");
+      const s = String(diff % 60).padStart(2, "0");
+      setCountdown({ h, m, s });
+    };
+    updateTimer();
+    const timer = setInterval(updateTimer, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const fetchPromotionalProducts = async () => {
       setLoading(true);
       try {
+        let commissionActive = false;
+        try {
+          const globalSnap = await getDoc(doc(db, "settings", "global"));
+          if (globalSnap.exists()) {
+            commissionActive = Boolean(globalSnap.data().isCommissionActive);
+          }
+        } catch {}
+
         const storesSnap = await getDocs(collection(db, "stores"));
         const sMap = {};
         const activeStoreIds = new Set(
@@ -23,7 +48,7 @@ export default function FlashOffersPage() {
             .filter(d => {
               const data = d.data();
               sMap[d.id] = data.nombre || d.id;
-              return data.isActive !== false && !(Number(data.deuda_comision || 0) > 20);
+              return data.isActive !== false && !(commissionActive && Number(data.deuda_comision || 0) > 20);
             })
             .map(d => d.id)
         );
@@ -90,7 +115,7 @@ export default function FlashOffersPage() {
 
       {/* Título y Banner Contador Visual */}
       <div className="bg-red-600 text-white py-2 text-center text-xs font-bold tracking-widest uppercase">
-        Termina en: <span className="bg-white text-red-600 px-2 py-0.5 rounded ml-2">12</span> : <span className="bg-white text-red-600 px-2 py-0.5 rounded">45</span> : <span className="bg-white text-red-600 px-2 py-0.5 rounded">30</span>
+        Termina en: <span className="bg-white text-red-600 px-2 py-0.5 rounded ml-2">{countdown.h}</span> : <span className="bg-white text-red-600 px-2 py-0.5 rounded">{countdown.m}</span> : <span className="bg-white text-red-600 px-2 py-0.5 rounded">{countdown.s}</span>
       </div>
 
       {/* 🌟 CONTENIDO DE OFERTAS */}
@@ -125,7 +150,7 @@ export default function FlashOffersPage() {
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
             {filteredOffers.map((p) => {
-              const pImg = normalizeImageUrl(p.image || p.images?.[0] || null);
+              const pImg = normalizeImageUrl(p.image || p.imageUrl || p.images?.[0] || null);
               const pricing = calculateProductPricing(p);
               
               return (

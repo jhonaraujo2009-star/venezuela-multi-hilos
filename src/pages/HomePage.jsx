@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import VerifiedBadge from "../components/shared/VerifiedBadge";
 import { calculateProductPricing, prepareProductForCart } from "../utils/pricing";
 import { normalizeImageUrl } from "../utils/imageNormalizer";
+import { isSuperAdmin } from "../config/constants";
 
 // ============================================================================
 // 🌟 TARJETA DE PRODUCTO MARKETPLACE (DISEÑO MODERNO Y LIMPIO)
@@ -566,8 +567,11 @@ export default function HomePage() {
           dailyTop: true,
         };
 
+        let commissionActive = false;
+
         if (settingsSnap.exists()) {
           const data = settingsSnap.data();
+          commissionActive = Boolean(data.isCommissionActive);
           if (data.homepageSections) {
             currentSections = data.homepageSections;
           }
@@ -584,6 +588,7 @@ export default function HomePage() {
                 companyName: updatedSettings.companyName,
                 companyLogo: updatedSettings.companyLogo,
                 homepageSections: currentSections,
+                isCommissionActive: commissionActive,
               })
             );
           } catch (e) {}
@@ -601,7 +606,9 @@ export default function HomePage() {
         setStoresMap(sMap);
         setVerifiedStoresMap(vMap);
 
-        const activeStoresList = allStores.filter((s) => s.isActive !== false && !(s.deuda_comision > 20));
+        const activeStoresList = allStores.filter(
+          (s) => s.isActive !== false && !(commissionActive && Number(s.deuda_comision || 0) > 20)
+        );
         setAllActiveStores(activeStoresList);
 
         // Priorizamos tiendas verificadas para la sección destacada
@@ -916,11 +923,11 @@ export default function HomePage() {
                   <button
                     onClick={() => {
                       setIsMobileMenuOpen(false);
-                      navigate("/login");
+                      navigate(isSuperAdmin(activeUser) ? "/super-admin" : "/login");
                     }}
                     className="flex-1 bg-slate-900 text-white font-bold py-2.5 rounded-xl transition-colors text-xs active:scale-95 shadow-xs hover:bg-pink-600"
                   >
-                    Ir a mi Panel
+                    {isSuperAdmin(activeUser) ? "👑 Súper Admin" : "Ir a mi Panel"}
                   </button>
                   <button
                     onClick={handleLogout}
@@ -1224,11 +1231,11 @@ export default function HomePage() {
               {activeUser ? (
                 <div className="hidden md:flex items-center gap-2">
                   <button
-                    onClick={() => navigate("/login")}
+                    onClick={() => navigate(isSuperAdmin(activeUser) ? "/super-admin" : "/login")}
                     className="flex items-center gap-2 bg-slate-900 hover:bg-pink-600 text-white px-4 py-2.5 rounded-2xl text-xs font-bold transition-colors shadow-xs"
                   >
-                    <span>⚡</span>
-                    <span>Mi Panel</span>
+                    <span>{isSuperAdmin(activeUser) ? "👑" : "⚡"}</span>
+                    <span>{isSuperAdmin(activeUser) ? "Súper Admin" : "Mi Panel"}</span>
                   </button>
                   <button
                     onClick={handleLogout}
@@ -1995,10 +2002,10 @@ export default function HomePage() {
                 </div>
               </div>
               <button
-                onClick={() => navigate("/login")}
+                onClick={() => navigate(isSuperAdmin(activeUser) ? "/super-admin" : "/login")}
                 className="bg-white text-slate-950 hover:bg-pink-500 hover:text-white px-6 py-3 rounded-2xl font-black text-xs sm:text-sm transition-colors shrink-0"
               >
-                Ir a mi Panel →
+                {isSuperAdmin(activeUser) ? "👑 Ir a Súper Admin →" : "Ir a mi Panel →"}
               </button>
             </div>
           )}

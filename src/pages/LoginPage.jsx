@@ -18,7 +18,7 @@ import {
   verifyPasswordResetCode,
 } from "firebase/auth";
 import { db, auth } from "../config/firebase";
-import { SUPER_ADMIN_EMAIL } from "../config/constants";
+import { isSuperAdmin as checkIsSuperAdmin } from "../config/constants";
 
 export default function LoginPage() {
   const { globalBranding } = useApp() || {};
@@ -67,7 +67,7 @@ export default function LoginPage() {
   useEffect(() => {
     const activeUser = currentUser || user;
     if (activeUser && viewMode === "login") {
-      if (activeUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL?.toLowerCase()) {
+      if (checkIsSuperAdmin(activeUser)) {
         navigate("/super-admin");
       } else {
         const fetchMyStore = async () => {
@@ -119,8 +119,7 @@ export default function LoginPage() {
       const userCred = await login(email.trim().toLowerCase(), password);
       const userUid = userCred.user.uid;
 
-      const isSuperAdmin =
-        email.trim().toLowerCase() === SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+      const isSuperAdmin = checkIsSuperAdmin(email);
 
       const cleanEmail = email.trim().toLowerCase();
 
@@ -278,8 +277,7 @@ export default function LoginPage() {
         try {
           const userCred = await login(targetEmail, newPassword);
           const userUid = userCred.user.uid;
-          const isSuperAdmin =
-            targetEmail === SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+          const isSuperAdmin = checkIsSuperAdmin(targetEmail);
 
           // 🔒 Regla Estricta: 1 Correo = 1 Tienda Única (búsqueda exclusiva por ownerEmail)
           const qEmail = query(

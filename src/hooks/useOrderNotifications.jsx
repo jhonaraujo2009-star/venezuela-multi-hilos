@@ -37,6 +37,10 @@ export const playOrderChime = () => {
     gain2.connect(ctx.destination);
     osc2.start(now + 0.12);
     osc2.stop(now + 0.65);
+
+    setTimeout(() => {
+      ctx.close().catch(() => {});
+    }, 800);
   } catch (e) {
     console.warn("No se pudo reproducir el sonido del pedido:", e);
   }
@@ -46,7 +50,7 @@ export const playOrderChime = () => {
  * Hook para escuchar pedidos entrantes en tiempo real y disparar notificaciones Push,
  * vibración y sonido en el teléfono del administrador.
  */
-export function useOrderNotifications(storeId) {
+export function useOrderNotifications(storeId, onNavigate) {
   const [permission, setPermission] = useState(
     typeof window !== "undefined" && "Notification" in window
       ? Notification.permission
@@ -55,6 +59,8 @@ export function useOrderNotifications(storeId) {
   const [pendingCount, setPendingCount] = useState(0);
   const knownOrdersRef = useRef(new Set());
   const isInitialLoadRef = useRef(true);
+  const onNavigateRef = useRef(onNavigate);
+  onNavigateRef.current = onNavigate;
 
   // Solicitar permiso oficial del sistema
   const requestPermission = useCallback(async () => {
@@ -82,7 +88,13 @@ export function useOrderNotifications(storeId) {
   }, []);
 
   useEffect(() => {
-    if (!storeId) return;
+    if (!storeId) {
+      setPendingCount(0);
+      return;
+    }
+
+    knownOrdersRef.current = new Set();
+    isInitialLoadRef.current = true;
 
     // Escuchar únicamente pedidos pendientes de esta tienda
     const q = query(
@@ -146,7 +158,9 @@ export function useOrderNotifications(storeId) {
                   });
                   notif.onclick = () => {
                     window.focus();
-                    window.location.href = `/${storeId}/admin/inbox`;
+                    const targetUrl = `/${storeId}/admin/inbox`;
+                    if (onNavigateRef.current) onNavigateRef.current(targetUrl);
+                    else window.location.href = targetUrl;
                   };
                 } catch (e) {}
               }
@@ -158,7 +172,9 @@ export function useOrderNotifications(storeId) {
                 <div 
                   onClick={() => {
                     toast.dismiss(t.id);
-                    window.location.href = `/${storeId}/admin/inbox`;
+                    const targetUrl = `/${storeId}/admin/inbox`;
+                    if (onNavigateRef.current) onNavigateRef.current(targetUrl);
+                    else window.location.href = targetUrl;
                   }}
                   className="cursor-pointer"
                 >

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"; 
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useParams, useNavigate } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 
@@ -15,21 +15,34 @@ import WhatsAppVIP from "../components/layout/WhatsAppVIP";
 
 import { useCart } from "../context/CartContext";
 import { useApp } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext";
+import { isSuperAdmin } from "../config/constants";
 import { AnimatePresence } from "framer-motion";
 
 export default function StorePage() {
+  const { storeId } = useParams();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [activeFilter, setActiveFilter] = useState("all");
 
   const { itemCount, total, setIsOpen, isOpen } = useCart();
-  const { bsPrice, storeData } = useApp(); 
+  const { bsPrice, storeData, loading, globalBranding } = useApp();
+  const { user } = useAuth();
 
+  const normalizedStoreId = storeId ? decodeURIComponent(storeId).trim().toLowerCase() : "";
   const showFloatingElements = !isOpen && !selectedProduct;
 
-  // 🌟 BLOQUEO DOBLE: Por deuda o porque el Súper Admin la apagó
-  const isBlockedByDebt = storeData?.deuda_comision > 20;
+  // 🌟 BLOQUEO DOBLE: Por deuda (solo si el cobro global de comisiones está activo) o porque el Súper Admin la apagó
+  const isBlockedByDebt = Boolean(globalBranding?.isCommissionActive) && Number(storeData?.deuda_comision || 0) > 20;
   const isStoreDisabled = storeData?.isActive === false;
+  const isUserSuperAdmin = isSuperAdmin(user);
+  const isStoreOwner = Boolean(
+    user?.email &&
+      storeData?.ownerEmail &&
+      user.email.trim().toLowerCase() === storeData.ownerEmail.trim().toLowerCase()
+  );
+  const canBypassLock = isUserSuperAdmin || isStoreOwner;
 
   // 🌟 MAGIA: DETECTAR Y MARCAR ORIGEN DEL TRÁFICO + ESCUCHAR EVENTO DE REAPERTURA DE PRODUCTO DESDE LA BOLSA
   useEffect(() => {
@@ -115,8 +128,18 @@ export default function StorePage() {
   const rawStoreName = String(storeData?.nombre || storeData?.id || "Mi Tienda");
   const displayStoreName = rawStoreName.length > 30 ? rawStoreName.substring(0, 30) + "..." : rawStoreName;
 
-  // 🌟 PANTALLA DE BLOQUEO (Si debe dinero o fue apagada)
-  if (isBlockedByDebt || isStoreDisabled) {
+  // 🌟 ESTADO DE CARGA LIMPIO MIENTRAS SINCRONIZA LA TIENDA
+  if (loading || (normalizedStoreId && storeData?.id !== normalizedStoreId)) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6">
+        <div className="w-10 h-10 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Cargando tienda...</p>
+      </div>
+    );
+  }
+
+  // 🌟 PANTALLA DE BLOQUEO (Si debe dinero o fue apagada — Súper Admin y dueño pueden previsualizar)
+  if ((isBlockedByDebt || isStoreDisabled) && !canBypassLock) {
     return (
       <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-6">
         <div className="bg-white max-w-md w-full rounded-[2.5rem] shadow-[0_20px_40px_rgba(0,0,0,0.04)] p-10 text-center border border-gray-100 relative overflow-hidden">
@@ -126,6 +149,12 @@ export default function StorePage() {
           <p className="text-gray-500 text-sm leading-relaxed mb-6 font-medium">
             Lo sentimos, esta tienda se encuentra temporalmente inactiva o suspendida. Por favor, comunícate con el administrador.
           </p>
+          <button
+            onClick={() => navigate("/")}
+            className="px-6 py-3 rounded-2xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-pink-600 transition-colors"
+          >
+            Ir al Marketplace
+          </button>
         </div>
       </div>
     );
@@ -133,6 +162,29 @@ export default function StorePage() {
 
   return (
     <div className="min-h-screen bg-white pb-32">
+      {(isBlockedByDebt || isStoreDisabled) && canBypassLock && (
+        <div className="bg-amber-500 text-white px-4 py-2.5 text-xs font-bold flex flex-wrap items-center justify-between gap-2 z-50 relative">
+          <span>
+            ⚠️ Vista previa privada ({isStoreDisabled ? "Tienda desactivada" : "Suspendida por comisión pendiente"}) — Oculta al público.
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate(`/${storeData?.id}/admin`)}
+              className="bg-white text-amber-900 px-3 py-1 rounded-lg font-black text-[11px] hover:bg-amber-50 transition-colors"
+            >
+              ⚙️ Panel Admin
+            </button>
+            {isUserSuperAdmin && (
+              <button
+                onClick={() => navigate("/super-admin")}
+                className="bg-gray-900 text-white px-3 py-1 rounded-lg font-black text-[11px] hover:bg-gray-800 transition-colors"
+              >
+                👑 Súper Admin
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       <div className="sticky top-0 left-0 right-0 z-40">
         <AnnouncementBar />
         <Header onProductClick={setSelectedProduct} onFilter={setActiveFilter} />

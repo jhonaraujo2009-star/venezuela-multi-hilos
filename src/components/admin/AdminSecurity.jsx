@@ -9,6 +9,7 @@ import {
 } from "firebase/auth";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import toast from "react-hot-toast";
+import { isSuperAdmin } from "../../config/constants";
 
 export default function AdminSecurity() {
   const { user, logout } = useAuth();
@@ -27,6 +28,12 @@ export default function AdminSecurity() {
   // Email registrado de la cuenta
   const userEmail = user?.email || storeData?.ownerEmail || "";
   const primaryColor = storeData?.primaryColor || "#ec4899";
+  const isInspectingOtherStore = Boolean(
+    isSuperAdmin(user) &&
+      storeData?.ownerEmail &&
+      user?.email &&
+      user.email.trim().toLowerCase() !== storeData.ownerEmail.trim().toLowerCase()
+  );
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -66,8 +73,8 @@ export default function AdminSecurity() {
       // 2. Actualizar la contraseña en Firebase Auth
       await updatePassword(auth.currentUser, newPassword);
 
-      // 3. Registrar fecha de actualización en Firestore si existe la tienda
-      if (storeData?.id) {
+      // 3. Registrar fecha de actualización en Firestore si existe la tienda y es el dueño directo
+      if (storeData?.id && !isInspectingOtherStore) {
         try {
           await updateDoc(doc(db, "stores", storeData.id), {
             last_password_change: serverTimestamp(),
@@ -150,6 +157,15 @@ export default function AdminSecurity() {
             </div>
           </div>
         </div>
+
+        {isInspectingOtherStore && storeData?.ownerEmail && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 text-xs text-amber-900">
+            <span className="font-black uppercase text-[10px] block text-amber-700 mb-0.5">
+              👑 Vista Súper Admin — Correo del dueño de esta tienda:
+            </span>
+            <span className="font-mono font-bold select-all">{storeData.ownerEmail}</span>
+          </div>
+        )}
 
         {/* ALERTA DE SEGURIDAD EXPLICATIVA */}
         <div className="bg-blue-50/70 border border-blue-100 rounded-2xl p-4 flex items-start gap-3 text-xs leading-relaxed text-blue-900">

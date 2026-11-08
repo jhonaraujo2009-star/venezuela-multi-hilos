@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, NavLink, useNavigate, useParams } from "react-router-dom"; 
 import { useAuth } from "../context/AuthContext";
-import { SUPER_ADMIN_EMAIL } from "../config/constants";
+import { isSuperAdmin } from "../config/constants";
 import toast from "react-hot-toast";
 
 // 🌟 NUEVAS IMPORTACIONES PARA EL MEGÁFONO
@@ -26,24 +26,36 @@ import { useOrderNotifications } from "../hooks/useOrderNotifications"; // 🌟 
 export default function AdminPage() {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
-  const { storeId } = useParams(); 
+  const { storeId: rawStoreId } = useParams();
+  const storeId = rawStoreId ? decodeURIComponent(rawStoreId).trim().toLowerCase() : "";
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
   // 🌟 EXTRAEMOS LOS DATOS DE LA TIENDA PARA LEER EL MENSAJE DEL SÚPER ADMIN
   const { storeData } = useApp(); 
+  const isMasterAdmin = isSuperAdmin(user);
+  const isActualStoreOwner = Boolean(
+    user?.email &&
+    storeData?.ownerEmail &&
+    user.email.trim().toLowerCase() === storeData.ownerEmail.trim().toLowerCase()
+  );
 
   // 🌟 SI LA TIENDA ES RECIÉN REGISTRADA Y NO HA VISTO/SALTADO EL TUTORIAL, REDIRIGIR A /aprender
+  // (No forzamos el tutorial si el Súper Admin está inspeccionando la tienda de otro vendedor)
   useEffect(() => {
     if (!storeId) return;
+    if (isMasterAdmin && !isActualStoreOwner) return;
     const isPendingLocal = localStorage.getItem(`onboarding_pending_${storeId}`) === "true";
     const isPendingRemote = storeData && storeData.id === storeId && storeData.onboardingCompleted === false;
     if (isPendingLocal || isPendingRemote) {
       navigate(`/${storeId}/aprender`, { replace: true });
     }
-  }, [storeId, storeData, navigate]); 
+  }, [storeId, storeData, navigate, isMasterAdmin, isActualStoreOwner]); 
 
   // 🌟 NOTIFICACIONES PUSH EN EL TELÉFONO PARA PEDIDOS ENTRANTES
-  const { permission, requestPermission, pendingCount } = useOrderNotifications(storeId);
+  const { permission, requestPermission, pendingCount } = useOrderNotifications(
+    storeId,
+    (targetPath) => navigate(targetPath)
+  );
 
   const NAV_ITEMS = [
     { path: `/${storeId}/admin`, label: "⚙️ Ajustes", end: true },
@@ -81,8 +93,15 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gray-50 flex">
       <aside className={`fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-100 flex flex-col z-40 transition-transform ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:static`}>
         <div className="p-5 border-b border-gray-100">
-          <h1 className="font-bold text-lg" style={{ color: "var(--primary)" }}>✨ Admin Panel</h1>
-          <p className="text-xs text-gray-400 mt-0.5">CMS No-Code</p>
+          <h1 className="font-bold text-lg truncate" style={{ color: "var(--primary)" }}>
+            ✨ {storeData?.nombre || "Admin Panel"}
+          </h1>
+          <p className="text-xs text-gray-400 mt-0.5 truncate">/{storeId}</p>
+          {isMasterAdmin && !isActualStoreOwner && (
+            <span className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-pink-50 text-pink-600 border border-pink-200 text-[10px] font-black uppercase tracking-wider">
+              👑 Modo Súper Admin
+            </span>
+          )}
         </div>
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
@@ -112,7 +131,7 @@ export default function AdminPage() {
         </nav>
 
         <div className="p-4 border-t border-gray-100 space-y-2">
-          {user && SUPER_ADMIN_EMAIL && user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() && (
+          {isMasterAdmin && (
             <NavLink to="/super-admin" className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-black text-pink-600 hover:bg-pink-50 transition-colors">
               👑 Súper Admin Global
             </NavLink>
@@ -131,9 +150,20 @@ export default function AdminPage() {
       )}
 
       <main className="flex-1 min-w-0">
-        <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-100">
-          <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-xl hover:bg-gray-50">☰</button>
-          <span className="font-bold text-gray-900">Admin Panel</span>
+        <div className="lg:hidden flex items-center justify-between gap-3 px-4 py-3 bg-white border-b border-gray-100">
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-xl hover:bg-gray-50">☰</button>
+            <span className="font-bold text-gray-900 truncate">{storeData?.nombre || "Admin Panel"}</span>
+          </div>
+          {isMasterAdmin && (
+            <button
+              type="button"
+              onClick={() => navigate("/super-admin")}
+              className="text-[11px] font-black text-pink-600 bg-pink-50 border border-pink-200 px-2.5 py-1.5 rounded-xl shrink-0"
+            >
+              👑 Súper Admin
+            </button>
+          )}
         </div>
 
         {/* ==========================================

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   collection, doc, setDoc, onSnapshot, addDoc, updateDoc, deleteDoc, serverTimestamp, query, where
 } from "firebase/firestore";
@@ -15,27 +15,57 @@ export default function AdminLogistics() {
   const [newCoupon, setNewCoupon] = useState({ code: "", type: "percent", value: "" });
   const [uploading, setUploading] = useState({});
   const [savingCoupon, setSavingCoupon] = useState(false);
+  const lastSyncedCouponsRef = useRef("");
   
   const { storeData } = useApp(); // 🌟 SABER DE QUIÉN ES LA TIENDA
 
   useEffect(() => {
     if (!storeData?.id) return;
+    lastSyncedCouponsRef.current = JSON.stringify(storeData.publicCoupons || []);
 
     // 🌟 FILTRAMOS LA LOGÍSTICA POR TIENDA
-    const unsub = onSnapshot(query(collection(db, "logistics"), where("storeId", "==", storeData.id)), (snap) => {
-      const data = {};
-      snap.docs.forEach((d) => { 
-        // Recuperamos el nombre original quitándole el storeId ("oscar_mrw" -> "mrw")
-        const originalId = d.id.replace(`${storeData.id}_`, "");
-        data[originalId] = d.data(); 
-      });
-      setLogistics(data);
-    });
+    const unsub = onSnapshot(
+      query(collection(db, "logistics"), where("storeId", "==", storeData.id)),
+      (snap) => {
+        const data = {};
+        snap.docs.forEach((d) => { 
+          // Recuperamos el nombre original quitándole el storeId ("oscar_mrw" -> "mrw")
+          const originalId = d.id.replace(`${storeData.id}_`, "");
+          data[originalId] = d.data(); 
+        });
+        setLogistics(data);
+      },
+      (err) => console.warn("Error leyendo logística:", err)
+    );
 
-    // 🌟 FILTRAMOS LOS CUPONES POR TIENDA
-    const unsubCoupons = onSnapshot(query(collection(db, "coupons"), where("storeId", "==", storeData.id)), (snap) => {
-      setCoupons(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
+    // 🌟 FILTRAMOS LOS CUPONES POR TIENDA Y SINCRONIZAMOS ESPEJO PÚBLICO PARA CLIENTES
+    const unsubCoupons = onSnapshot(
+      query(collection(db, "coupons"), where("storeId", "==", storeData.id)),
+      (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setCoupons(list);
+
+        const publicCoupons = list
+          .filter((c) => c.active !== false)
+          .map((c) => ({
+            id: c.id,
+            code: String(c.code || "").toUpperCase().trim(),
+            type: c.type || "percent",
+            value: Number(c.value) || 0,
+            active: true,
+            storeId: storeData.id,
+          }));
+
+        const serialized = JSON.stringify(publicCoupons);
+        if (serialized !== lastSyncedCouponsRef.current) {
+          lastSyncedCouponsRef.current = serialized;
+          updateDoc(doc(db, "stores", storeData.id), { publicCoupons }).catch((e) =>
+            console.warn("No se pudo sincronizar espejo público de cupones:", e)
+          );
+        }
+      },
+      (err) => console.warn("Error leyendo cupones:", err)
+    );
 
     return () => { unsub(); unsubCoupons(); };
   }, [storeData?.id]);
@@ -62,11 +92,16 @@ export default function AdminLogistics() {
   };
 
   const updateLogisticsUrl = async (id, url) => {
-    const realDocId = `${storeData.id}_${id}`;
-    await setDoc(doc(db, "logistics", realDocId), { 
-      url, 
-      storeId: storeData.id 
-    }, { merge: true });
+    if (!storeData?.id) return;
+    try {
+      const realDocId = `${storeData.id}_${id}`;
+      await setDoc(doc(db, "logistics", realDocId), { 
+        url, 
+        storeId: storeData.id 
+      }, { merge: true });
+    } catch {
+      toast.error("Error al actualizar URL de envío");
+    }
   };
 
   const addCoupon = async () => {
@@ -95,13 +130,21 @@ export default function AdminLogistics() {
   };
 
   const toggleCoupon = async (id, active) => {
-    await updateDoc(doc(db, "coupons", id), { active: !active });
+    try {
+      await updateDoc(doc(db, "coupons", id), { active: !active });
+    } catch {
+      toast.error("Error al actualizar estado del cupón");
+    }
   };
 
   const deleteCoupon = async (id) => {
     if (!confirm("¿Eliminar cupón?")) return;
-    await deleteDoc(doc(db, "coupons", id));
-    toast.success("Cupón eliminado");
+    try {
+      await deleteDoc(doc(db, "coupons", id));
+      toast.success("Cupón eliminado");
+    } catch {
+      toast.error("Error al eliminar cupón");
+    }
   };
 
   return (

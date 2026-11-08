@@ -25,9 +25,10 @@ export default function AdminSessions() {
       (snap) => {
         const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         // Las ordenamos manualmente para no pedir índices extra a Firebase
-        data.sort((a, b) => a.order - b.order); 
+        data.sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0)); 
         setSessions(data);
-      }
+      },
+      (err) => console.warn("Error leyendo sesiones:", err)
     );
     return unsub;
   }, [storeData?.id]);

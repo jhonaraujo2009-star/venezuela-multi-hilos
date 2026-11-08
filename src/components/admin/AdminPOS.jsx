@@ -28,10 +28,17 @@ export default function AdminPOS() {
   useEffect(() => {
     if (!storeData?.id) return;
     const q = query(collection(db, "products"), where("storeId", "==", storeData.id));
-    const unsub = onSnapshot(q, (snap) => {
-      setProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setLoading(false);
+      },
+      (err) => {
+        console.warn("Error leyendo productos en POS:", err);
+        setLoading(false);
+      }
+    );
     return unsub;
   }, [storeData?.id]);
 
@@ -70,7 +77,7 @@ export default function AdminPOS() {
     // 🌟 Usamos el precio real con descuento/oferta activa si existe
     const pricing = calculateProductPricing(product);
     const effectivePrice = pricing.finalPrice;
-    const thumb = normalizeImageUrl(product.image || product.images?.[0] || null);
+    const thumb = normalizeImageUrl(product.image || product.imageUrl || product.images?.[0] || null);
 
     setCart((prev) => {
       const existingKey = variant ? `${product.id}-${variant.id}` : product.id;
@@ -424,7 +431,7 @@ export default function AdminPOS() {
                     <h4 className="text-xs font-bold text-gray-800 line-clamp-1">{item.name}</h4>
                     {item.variant && (
                       <span className="text-[9px] font-black text-gray-400 bg-gray-100 px-1.5 rounded uppercase">
-                        {item.variant.label}
+                        {typeof item.variant === "object" ? item.variant.label : item.variant}
                       </span>
                     )}
                   </div>
@@ -562,9 +569,9 @@ export default function AdminPOS() {
 
             <div className="flex gap-4 items-center mb-6">
               <div className="w-16 h-16 bg-gray-50 rounded-2xl overflow-hidden border border-gray-100">
-                {selectedProduct.images?.[0] ? (
+                {(selectedProduct.images?.[0] || selectedProduct.image || selectedProduct.imageUrl) ? (
                   <img
-                    src={normalizeImageUrl(selectedProduct.images[0])}
+                    src={normalizeImageUrl(selectedProduct.images?.[0] || selectedProduct.image || selectedProduct.imageUrl)}
                     className="w-full h-full object-cover"
                     alt=""
                   />

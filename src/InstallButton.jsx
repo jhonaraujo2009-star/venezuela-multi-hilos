@@ -8,6 +8,8 @@ export default function InstallButton() {
   const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
+    let manifestURL = null;
+
     // 🌟 1. MAGIA AVANZADA: GENERAMOS EL INSTALADOR DINÁMICO 🌟
     if (storeData?.id) {
       const manifest = {
@@ -35,7 +37,7 @@ export default function InstallButton() {
       // Convertimos el JSON en un archivo virtual
       const stringManifest = JSON.stringify(manifest);
       const blob = new Blob([stringManifest], { type: 'application/json' });
-      const manifestURL = URL.createObjectURL(blob);
+      manifestURL = URL.createObjectURL(blob);
 
       // Le inyectamos el archivo virtual a la página para que el celular lo lea
       let linkTag = document.querySelector('link[rel="manifest"]');
@@ -69,6 +71,7 @@ export default function InstallButton() {
     }
 
     return () => {
+      if (manifestURL) URL.revokeObjectURL(manifestURL);
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
     };

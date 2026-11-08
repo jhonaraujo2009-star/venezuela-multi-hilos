@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, query } from "firebase/firestore";
+import { collection, getDocs, query, doc, getDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { calculateProductPricing } from "../utils/pricing";
@@ -19,6 +19,14 @@ export default function SearchPage() {
     const fetchAndFilterProducts = async () => {
       setLoading(true);
       try {
+        let commissionActive = false;
+        try {
+          const globalSnap = await getDoc(doc(db, "settings", "global"));
+          if (globalSnap.exists()) {
+            commissionActive = Boolean(globalSnap.data().isCommissionActive);
+          }
+        } catch {}
+
         const storesSnap = await getDocs(collection(db, "stores"));
         const sMap = {};
         const activeStoreIds = new Set(
@@ -26,7 +34,7 @@ export default function SearchPage() {
             .filter(d => {
               const data = d.data();
               sMap[d.id] = data.nombre || d.id;
-              return data.isActive !== false && !(Number(data.deuda_comision || 0) > 20);
+              return data.isActive !== false && !(commissionActive && Number(data.deuda_comision || 0) > 20);
             })
             .map(d => d.id)
         );
@@ -147,7 +155,7 @@ export default function SearchPage() {
               ) : (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden divide-y divide-gray-100">
                   {products.map(p => {
-                    const pImg = normalizeImageUrl(p.image || p.images?.[0] || null);
+                    const pImg = normalizeImageUrl(p.image || p.imageUrl || p.images?.[0] || null);
                     const pricing = calculateProductPricing(p);
                     const stock = p.variants?.length
                       ? p.variants.reduce((acc, v) => acc + Number(v.stock || 0), 0)

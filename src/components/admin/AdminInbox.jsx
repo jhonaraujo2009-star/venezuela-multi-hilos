@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   collection, onSnapshot, query, where, updateDoc, doc, runTransaction, increment, deleteDoc
 } from "firebase/firestore"; 
@@ -12,6 +12,7 @@ export default function AdminInbox() {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const { storeData, bsPrice } = useApp();
+  const lastSyncedQuestionsRef = useRef("");
 
   const [replyTextMap, setReplyTextMap] = useState({});
   const [savingReplyId, setSavingReplyId] = useState(null);
@@ -24,6 +25,7 @@ export default function AdminInbox() {
    */
   useEffect(() => {
     if (!storeData?.id) return;
+    lastSyncedQuestionsRef.current = JSON.stringify(storeData.publicQuestions || []);
 
     const qOrders = query(
       collection(db, "orders"), 
@@ -31,27 +33,55 @@ export default function AdminInbox() {
       where("status", "==", "pending") // Solo pendientes
     );
     
-    const unsubOrders = onSnapshot(qOrders, (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      data.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-      setOrders(data);
-      setLoading(false);
-    });
+    const unsubOrders = onSnapshot(
+      qOrders,
+      (snap) => {
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        data.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+        setOrders(data);
+        setLoading(false);
+      },
+      (err) => {
+        console.warn("Error leyendo pedidos en bandeja:", err);
+        setLoading(false);
+      }
+    );
 
     const qQuestions = query(
       collection(db, "questions"),
       where("storeId", "==", storeData.id)
     );
 
-    const unsubQuestions = onSnapshot(qQuestions, (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      data.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
-        return timeB - timeA;
-      });
-      setQuestions(data);
-    });
+    const unsubQuestions = onSnapshot(
+      qQuestions,
+      (snap) => {
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        data.sort((a, b) => {
+          const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
+          const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
+          return timeB - timeA;
+        });
+        setQuestions(data);
+
+        const publicQuestions = data
+          .filter((q) => q.isPublic)
+          .map((q) => ({
+            id: q.id,
+            text: q.text || "",
+            adminReply: q.adminReply || "",
+            createdAt: q.createdAt?.toMillis ? q.createdAt.toMillis() : new Date(q.createdAt || 0).getTime(),
+          }));
+
+        const serialized = JSON.stringify(publicQuestions);
+        if (serialized !== lastSyncedQuestionsRef.current) {
+          lastSyncedQuestionsRef.current = serialized;
+          updateDoc(doc(db, "stores", storeData.id), { publicQuestions }).catch((e) =>
+            console.warn("No se pudo sincronizar espejo público de FAQ:", e)
+          );
+        }
+      },
+      (err) => console.warn("Error leyendo preguntas:", err)
+    );
 
     return () => {
       unsubOrders();
@@ -518,6 +548,13 @@ export default function AdminInbox() {
                         className="px-4 py-2 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 transition-colors"
                       >
                         {q.isPublic ? "👁️ Ocultar del FAQ" : "🌐 Mostrar en FAQ Público"}
+                      </button>
+                      <button
+                        onClick={() => handleSaveQuestionReply(q.id, false)}
+                        disabled={savingReplyId === q.id}
+                        className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
+                      >
+                        Guardar Privado
                       </button>
                       <button
                         onClick={() => handleSaveQuestionReply(q.id, true)}

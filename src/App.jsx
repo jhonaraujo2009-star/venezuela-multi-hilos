@@ -103,8 +103,16 @@ export default function App() {
                     <Route path="/api/store-og" element={<ApiStoreOgRedirect />} />
                     
                     <Route path="/:storeId/preguntas" element={<QuestionsPage />} />
-                    <Route path="/:storeId/aprender" element={<StoreOnboardingPage />} />
+                    <Route
+                      path="/:storeId/aprender"
+                      element={
+                        <ProtectedRoute>
+                          <StoreOnboardingPage />
+                        </ProtectedRoute>
+                      }
+                    />
                     
+                    <Route path="/admin" element={<Navigate to="/login" replace />} />
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/registro-vendedor" element={<RegisterStorePage />} />
                     <Route path="/super-admin" element={<SuperAdminPage />} />

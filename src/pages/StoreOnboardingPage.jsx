@@ -16,7 +16,7 @@ const STEPS = [
     lightBg: "bg-pink-50",
     borderColor: "border-pink-200",
     description:
-      "Ya no necesitas crear categorías antes. Entra a «📦 Productos», pulsa «+ Agregar_Productos» y elige o crea la categoría ahí mismo. El sistema convierte automáticamente tus precios en dólares ($) a Bolívares (Bs.) con la tasa que configures.",
+      "Ya no necesitas crear categorías antes. Entra a «📦 Productos», pulsa «+ Agregar Producto» y elige o crea la categoría ahí mismo. El sistema convierte automáticamente tus precios en dólares ($) a Bolívares (Bs.) con la tasa que configures.",
     bullets: [
       {
         step: "1",
@@ -142,7 +142,8 @@ const STEPS = [
 ];
 
 export default function StoreOnboardingPage() {
-  const { storeId } = useParams();
+  const { storeId: rawStoreId } = useParams();
+  const storeId = rawStoreId ? decodeURIComponent(rawStoreId).trim().toLowerCase() : "";
   const navigate = useNavigate();
   const { storeData } = useApp() || {};
 

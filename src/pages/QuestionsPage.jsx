@@ -14,7 +14,13 @@ export default function QuestionsPage() {
   const navigate = useNavigate();
   const { storeId: routeStoreId } = useParams();
   const { storeData } = useApp(); // 🌟 SABER DE QUÉ TIENDA ES LA PREGUNTA
-  const effectiveStoreId = storeData?.id || routeStoreId;
+  const effectiveStoreId = (storeData?.id || (routeStoreId ? decodeURIComponent(routeStoreId).trim().toLowerCase() : "")) || "";
+
+  useEffect(() => {
+    if (Array.isArray(storeData?.publicQuestions) && storeData.publicQuestions.length > 0) {
+      setQuestions(storeData.publicQuestions);
+    }
+  }, [storeData?.publicQuestions]);
 
   useEffect(() => {
     if (!effectiveStoreId) return;
@@ -36,12 +42,15 @@ export default function QuestionsPage() {
           return timeB - timeA;
         });
         setQuestions(list);
-      } catch (err) {
-        console.error("Error al cargar preguntas:", err);
+      } catch {
+        // Para visitantes sin sesión, usamos el espejo público sincronizado en stores/{storeId}
+        if (Array.isArray(storeData?.publicQuestions)) {
+          setQuestions(storeData.publicQuestions);
+        }
       }
     };
     fetchQ();
-  }, [effectiveStoreId]);
+  }, [effectiveStoreId, storeData?.publicQuestions]);
 
   const handleSubmit = async () => {
     if (!phone.trim() || !text.trim()) {

@@ -6,8 +6,9 @@ import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../context/AuthContext";
 import { useApp } from "../../context/AppContext";
 import { useBackButton } from "../../hooks/useBackButton";
-import { SUPER_ADMIN_EMAIL } from "../../config/constants"; 
+import { isSuperAdmin } from "../../config/constants"; 
 import { calculateProductPricing } from "../../utils/pricing";
+import toast from "react-hot-toast";
 
 export default function Header({ onProductClick, onFilter }) {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -308,7 +309,7 @@ export default function Header({ onProductClick, onFilter }) {
                       await navigator.share(shareData);
                     } else {
                       await navigator.clipboard.writeText(shareData.url);
-                      alert("¡Enlace copiado al portapapeles!");
+                      toast.success("¡Enlace copiado al portapapeles! 🔗");
                     }
                   } catch (err) {
                     console.log("Compartir cancelado o error:", err);
@@ -355,13 +356,22 @@ export default function Header({ onProductClick, onFilter }) {
               {menuOpen && (
                 <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50 p-2">
                   <button
-                    onClick={() => { navigate(user && storeData?.id ? `/${storeData.id}/admin` : "/login"); setMenuOpen(false); }}
+                    onClick={() => {
+                      const canManageThisStore =
+                        storeData?.id &&
+                        (isSuperAdmin(user) ||
+                          (user?.email &&
+                            storeData?.ownerEmail &&
+                            user.email.trim().toLowerCase() === storeData.ownerEmail.trim().toLowerCase()));
+                      navigate(canManageThisStore ? `/${storeData.id}/admin` : "/login");
+                      setMenuOpen(false);
+                    }}
                     className="w-full text-left px-4 py-3 text-xs font-black uppercase tracking-widest hover:bg-gray-50 text-gray-800 flex items-center gap-3 rounded-xl transition-colors"
                   >
                     <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
                     Panel Admin Tienda
                   </button>
-                  {user && SUPER_ADMIN_EMAIL && user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() && (
+                  {isSuperAdmin(user) && (
                     <button
                       onClick={() => { navigate("/super-admin"); setMenuOpen(false); }}
                       className="w-full text-left px-4 py-3 text-xs font-black uppercase tracking-widest hover:bg-pink-50 text-pink-600 flex items-center gap-3 rounded-xl transition-colors"

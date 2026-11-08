@@ -237,29 +237,68 @@ export default function CartDrawer({ onSelectProduct }) {
     }
   }, [isOpen, activeCheckoutStoreId]);
 
+  // Limpiar cupón automáticamente si el cliente cambia de tienda activa en la bolsa
+  useEffect(() => {
+    if (coupon?.storeId && activeCheckoutStoreId && coupon.storeId !== activeCheckoutStoreId) {
+      setCoupon(null);
+      setCouponCode("");
+    }
+  }, [activeCheckoutStoreId, coupon?.storeId, setCoupon]);
+
   const freeShippingGoal = activeStoreData?.freeShippingGoal || settings?.freeShippingGoal || 50;
   const freeShippingProgress = Math.min(100, (total / freeShippingGoal) * 100);
   const remaining = Math.max(0, freeShippingGoal - total);
 
   const applyCoupon = async () => {
-    if (!couponCode.trim() || !activeCheckoutStoreId) return;
+    const normalizedCode = couponCode.trim().toUpperCase();
+    if (!normalizedCode || !activeCheckoutStoreId) return;
     setCheckingCoupon(true);
     try {
-      const q = query(
-        collection(db, "coupons"), 
-        where("code", "==", couponCode.toUpperCase()), 
-        where("active", "==", true),
-        where("storeId", "==", activeCheckoutStoreId)
-      );
-      const snap = await getDocs(q);
-      
-      if (snap.empty) {
+      let matchedCoupon = null;
+
+      try {
+        const q = query(
+          collection(db, "coupons"),
+          where("code", "==", normalizedCode),
+          where("active", "==", true),
+          where("storeId", "==", activeCheckoutStoreId)
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          matchedCoupon = { id: snap.docs[0].id, ...snap.docs[0].data() };
+        }
+      } catch {
+        // Clientes públicos sin sesión usan el espejo público en el documento de la tienda
+      }
+
+      if (!matchedCoupon) {
+        let publicList = activeStoreData?.publicCoupons;
+        if (!Array.isArray(publicList)) {
+          try {
+            const storeSnap = await getDoc(doc(db, "stores", activeCheckoutStoreId));
+            if (storeSnap.exists()) {
+              publicList = storeSnap.data()?.publicCoupons || [];
+            }
+          } catch {}
+        }
+        if (Array.isArray(publicList)) {
+          matchedCoupon =
+            publicList.find(
+              (c) =>
+                String(c.code || "").toUpperCase().trim() === normalizedCode &&
+                c.active !== false
+            ) || null;
+        }
+      }
+
+      if (!matchedCoupon) {
         toast.error("Cupón inválido o expirado para esta tienda");
       } else {
-        const c = { id: snap.docs[0].id, ...snap.docs[0].data() };
-        setCoupon(c);
-        toast.success(`¡Cupón ${c.code} aplicado! ✨`);
+        setCoupon({ ...matchedCoupon, storeId: activeCheckoutStoreId });
+        toast.success(`¡Cupón ${matchedCoupon.code} aplicado! ✨`);
       }
+    } catch {
+      toast.error("No se pudo verificar el cupón. Intenta de nuevo.");
     } finally {
       setCheckingCoupon(false);
     }
@@ -384,6 +423,8 @@ _Por favor, adjunte el capture o comprobante de su transferencia/pago móvil por
 
       window.open(whatsappUrl, "_blank");
       
+      setCoupon(null);
+      setCouponCode("");
       setIsOpen(false);
       setStep(1);
       toast.success(`¡Orden para ${storeDisplayName} procesada! Envía el mensaje de WhatsApp.`);
@@ -853,7 +894,7 @@ _Por favor, adjunte el capture o comprobante de su transferencia/pago móvil por
                   value={couponCode} 
                   onChange={(e) => setCouponCode(e.target.value)} 
                   placeholder="CÓDIGO DE CUPÓN" 
-                  className="flex-1 bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black outline-none focus:border-pink-200"
+                  className="flex-1 bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black outline-none focus:border-pink-200 uppercase"
                 />
                 <button 
                   type="button"
@@ -862,6 +903,24 @@ _Por favor, adjunte el capture o comprobante de su transferencia/pago móvil por
                   className="px-5 py-2 bg-black text-white rounded-xl text-[10px] font-black uppercase tracking-widest disabled:opacity-50 active:scale-95 transition-transform"
                 >
                   {checkingCoupon ? "..." : "Aplicar"}
+                </button>
+              </div>
+            )}
+
+            {step === 1 && coupon && (
+              <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2">
+                <span className="text-[10px] font-black text-emerald-700 uppercase tracking-wider">
+                  🎟️ Cupón activo: {coupon.code}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCoupon(null);
+                    setCouponCode("");
+                  }}
+                  className="text-[10px] font-black text-emerald-700 hover:text-red-500 uppercase tracking-wider transition-colors"
+                >
+                  ✕ Quitar
                 </button>
               </div>
             )}

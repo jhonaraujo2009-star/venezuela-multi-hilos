@@ -62,9 +62,18 @@ export function useBackButton(isOpen, onClose) {
       // limpiamos la entrada ficticia del historial.
       if (!entry.closedByPopState && window.history.state?._backGuard) {
         ignorePopStateCount++;
+        let handled = false;
+        const onPop = () => {
+          handled = true;
+          window.removeEventListener("popstate", onPop);
+        };
+        window.addEventListener("popstate", onPop);
         window.history.back();
         setTimeout(() => {
-          ignorePopStateCount = 0;
+          window.removeEventListener("popstate", onPop);
+          if (!handled && ignorePopStateCount > 0) {
+            ignorePopStateCount--;
+          }
         }, 300);
       }
     };

@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
 import { collection, getDocs, doc, updateDoc, deleteDoc, query, where, getDoc, setDoc, writeBatch } from "firebase/firestore";
-import { db, auth } from "../config/firebase"; 
-import { onAuthStateChanged } from "firebase/auth"; 
+import { db } from "../config/firebase"; 
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
-import { SUPER_ADMIN_EMAIL } from "../config/constants";
+import { isSuperAdmin } from "../config/constants";
 import { uploadImage } from "../utils/imageUploader";
 import VerifiedBadge from "../components/shared/VerifiedBadge";
 
@@ -40,27 +39,25 @@ export default function SuperAdminPage() {
   });
   
   const navigate = useNavigate();
-
-  const MASTER_EMAIL = SUPER_ADMIN_EMAIL; 
+  const { user, authLoading } = useAuth();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        if (user.email?.toLowerCase() === MASTER_EMAIL?.toLowerCase()) {
-          setIsAuthorized(true);
-          fetchAllStores();
-        } else {
-          toast.error("Acceso denegado. Nivel de seguridad insuficiente. 🛑");
-          navigate("/");
-        }
+    if (authLoading) return;
+
+    if (user) {
+      if (isSuperAdmin(user)) {
+        setIsAuthorized(true);
+        fetchAllStores(user);
       } else {
-        // Si no hay usuario autenticado
-        toast.error("Debes iniciar sesión primero. 🛑");
-        navigate("/login");
+        toast.error("Acceso denegado. Nivel de seguridad insuficiente. 🛑");
+        navigate("/");
       }
-    });
-    return () => unsubscribe();
-  }, [navigate, MASTER_EMAIL]);
+    } else {
+      // Si no hay usuario autenticado
+      toast.error("Debes iniciar sesión primero. 🛑");
+      navigate("/login");
+    }
+  }, [user, authLoading, navigate]);
 
   useEffect(() => {
     const fetchGlobalSettings = async () => {
@@ -99,10 +96,71 @@ export default function SuperAdminPage() {
     return Number(((amt * commRate) / 100).toFixed(2));
   };
 
-  const fetchAllStores = async () => {
+  const resolveTargetStoreId = (storesList, activeUser) => {
+    if (!Array.isArray(storesList) || storesList.length === 0) return "";
+    const cleanEmail = activeUser?.email ? activeUser.email.trim().toLowerCase() : "";
+    const ownStore = storesList.find(
+      (s) =>
+        (cleanEmail && s.ownerEmail?.trim().toLowerCase() === cleanEmail) ||
+        (activeUser?.uid && s.ownerId === activeUser.uid)
+    );
+    if (ownStore) return ownStore.id;
+
+    try {
+      const saved = localStorage.getItem("superadmin_selected_store");
+      if (saved && storesList.some((s) => s.id === saved)) return saved;
+    } catch (e) {}
+
+    const firstActive = storesList.find((s) => s.isActive !== false);
+    return firstActive ? firstActive.id : storesList[0].id;
+  };
+
+  const handleSelectTargetStore = (storeId) => {
+    setAdminStoreId(storeId);
+    try {
+      if (storeId) localStorage.setItem("superadmin_selected_store", storeId);
+    } catch (e) {}
+  };
+
+  const goToStorePublic = (targetId) => {
+    const id = targetId || adminStoreId || stores[0]?.id;
+    if (!id) {
+      if (loading) {
+        toast("Cargando tiendas, intenta en un segundo...");
+      } else {
+        toast("Aún no hay tiendas registradas. Puedes crear una aquí.");
+        navigate("/registro-vendedor");
+      }
+      return;
+    }
+    handleSelectTargetStore(id);
+    navigate(`/${id}`);
+  };
+
+  const goToStoreAdmin = (targetId) => {
+    const id = targetId || adminStoreId || stores[0]?.id;
+    if (!id) {
+      if (loading) {
+        toast("Cargando tiendas, intenta en un segundo...");
+      } else {
+        toast("Aún no hay tiendas registradas. Puedes crear una aquí.");
+        navigate("/registro-vendedor");
+      }
+      return;
+    }
+    handleSelectTargetStore(id);
+    navigate(`/${id}/admin`);
+  };
+
+  const fetchAllStores = async (activeUser = user) => {
     try {
       const querySnapshot = await getDocs(collection(db, "stores"));
       const storesList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Resolver tienda objetivo inmediatamente para evitar esperas o bloqueos en los botones del Header
+      const initialTargetId = resolveTargetStoreId(storesList, activeUser);
+      if (initialTargetId) setAdminStoreId(initialTargetId);
+      setStores(storesList);
 
       // 🌟 Contar productos y ventas reales por tienda para tener datos 100% exactos en vivo
       try {
@@ -145,12 +203,8 @@ export default function SuperAdminPage() {
             s.deuda_comision = Number((commissionTotalsAfterReset[s.id] || 0).toFixed(2));
           }
         });
+        setStores([...storesList]);
       } catch(e) {}
-
-      setStores(storesList);
-      // Buscar el storeId que pertenece al Super Admin
-      const myStore = storesList.find(s => s.ownerEmail?.toLowerCase() === MASTER_EMAIL?.toLowerCase());
-      if (myStore) setAdminStoreId(myStore.id);
     } catch (error) {
       toast.error("Error al cargar la base de datos de tiendas.");
     } finally {
@@ -436,7 +490,11 @@ export default function SuperAdminPage() {
       }
 
       await deleteDoc(doc(db, "stores", storeId));
-      setStores(stores.filter(store => store.id !== storeId));
+      const remainingStores = stores.filter(store => store.id !== storeId);
+      setStores(remainingStores);
+      if (adminStoreId === storeId) {
+        handleSelectTargetStore(remainingStores[0]?.id || "");
+      }
       
       toast.success("Tienda eliminada de la Base de Datos ☢️", { id: toastId, duration: 6000 });
     } catch (error) {
@@ -516,30 +574,46 @@ export default function SuperAdminPage() {
             </div>
           </div>
           
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3">
             {/* Botones con texto completo en pantallas grandes */}
             <button 
               onClick={() => navigate('/')} 
-              className="hidden sm:flex items-center gap-2 text-xs font-black bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl transition-colors tracking-widest uppercase border border-white/10"
+              className="hidden lg:flex items-center gap-2 text-xs font-black bg-white/10 hover:bg-white/20 text-white px-3.5 py-2 rounded-xl transition-colors tracking-widest uppercase border border-white/10"
               title="Ir a la página principal"
             >
               <span>🏪</span> Catálogo Principal
             </button>
+
+            {stores.length > 0 && (
+              <select
+                value={adminStoreId}
+                onChange={(e) => handleSelectTargetStore(e.target.value)}
+                aria-label="Seleccionar tienda objetivo"
+                className="hidden sm:block bg-white/10 hover:bg-white/15 text-white text-xs font-bold px-3 py-2 rounded-xl border border-white/15 outline-none focus:border-pink-400 max-w-[190px] truncate cursor-pointer"
+                title="Selecciona qué tienda ver o administrar"
+              >
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id} className="bg-gray-900 text-white">
+                    🏪 {s.nombre || s.id} (/{s.id})
+                  </option>
+                ))}
+              </select>
+            )}
             
             <button 
-              onClick={() => adminStoreId ? navigate(`/${adminStoreId}`) : toast.error("No se encontró tu tienda.")}
-              className="hidden sm:flex items-center gap-2 text-xs font-black bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-400 px-4 py-2 rounded-xl transition-colors tracking-widest uppercase border border-emerald-500/30"
-              title={adminStoreId ? `Ver tienda /${adminStoreId}` : "Buscando tu tienda..."}
+              onClick={() => goToStorePublic()}
+              className="hidden sm:flex items-center gap-2 text-xs font-black bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-400 px-3.5 py-2 rounded-xl transition-colors tracking-widest uppercase border border-emerald-500/30"
+              title={adminStoreId ? `Ir a la tienda /${adminStoreId}` : "Ir a tienda"}
             >
-              <span>🏠</span> Ver Mi Tienda
+              <span>🏠</span> Ir a Tienda
             </button>
 
             <button 
-              onClick={() => adminStoreId ? navigate(`/${adminStoreId}/admin`) : toast.error("No se encontró tu tienda. Verifica que tu email esté registrado como dueño.")}
-              className="hidden sm:flex items-center gap-2 text-xs font-black bg-pink-500/20 hover:bg-pink-500/40 text-pink-400 px-4 py-2 rounded-xl transition-colors tracking-widest uppercase border border-pink-500/30"
-              title={adminStoreId ? `Ir a /${adminStoreId}/admin` : "Buscando tu tienda..."}
+              onClick={() => goToStoreAdmin()}
+              className="hidden sm:flex items-center gap-2 text-xs font-black bg-pink-500/20 hover:bg-pink-500/40 text-pink-400 px-3.5 py-2 rounded-xl transition-colors tracking-widest uppercase border border-pink-500/30"
+              title={adminStoreId ? `Abrir panel admin /${adminStoreId}/admin` : "Abrir panel admin"}
             >
-              <span>🛍️</span> Mi Panel Admin
+              <span>🛍️</span> Panel Admin
             </button>
 
             <button onClick={() => navigate('/')} className="text-sm font-bold text-gray-400 hover:text-white transition-colors">
@@ -548,7 +622,7 @@ export default function SuperAdminPage() {
           </div>
         </div>
 
-        {/* Fila 2 SOLO en móvil: botones de acceso rápido */}
+        {/* Fila 2 SOLO en móvil: selector + botones de acceso rápido */}
         <div className="sm:hidden border-t border-white/10 px-4 py-2 flex items-center gap-2 overflow-x-auto hide-scrollbar">
           <button 
             onClick={() => navigate('/')} 
@@ -556,19 +630,34 @@ export default function SuperAdminPage() {
           >
             🏪 Catálogo
           </button>
+
+          {stores.length > 0 && (
+            <select
+              value={adminStoreId}
+              onChange={(e) => handleSelectTargetStore(e.target.value)}
+              aria-label="Seleccionar tienda en móvil"
+              className="bg-white/10 text-white text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-white/15 outline-none max-w-[140px] shrink-0"
+            >
+              {stores.map((s) => (
+                <option key={s.id} value={s.id} className="bg-gray-900 text-white">
+                  {s.nombre || s.id}
+                </option>
+              ))}
+            </select>
+          )}
           
           <button 
-            onClick={() => adminStoreId ? navigate(`/${adminStoreId}`) : toast.error("No se encontró tu tienda.")}
+            onClick={() => goToStorePublic()}
             className="flex items-center gap-1.5 text-[11px] font-bold bg-emerald-500/20 active:bg-emerald-500/40 text-emerald-400 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap border border-emerald-500/30"
           >
-            🏠 Ver Mi Tienda
+            🏠 Ir a Tienda
           </button>
 
           <button 
-            onClick={() => adminStoreId ? navigate(`/${adminStoreId}/admin`) : toast.error("No se encontró tu tienda.")}
+            onClick={() => goToStoreAdmin()}
             className="flex items-center gap-1.5 text-[11px] font-bold bg-pink-500/20 active:bg-pink-500/40 text-pink-400 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap border border-pink-500/30"
           >
-            🛍️ Mi Panel Admin
+            🛍️ Panel Admin
           </button>
         </div>
       </header>
@@ -837,6 +926,18 @@ export default function SuperAdminPage() {
                         </div>
 
                         <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => goToStorePublic(store.id)}
+                            className="px-4 py-2.5 bg-emerald-50 text-emerald-700 font-black rounded-xl text-xs hover:bg-emerald-100 transition-colors border border-emerald-200"
+                          >
+                            🏠 Ir a Tienda
+                          </button>
+                          <button
+                            onClick={() => goToStoreAdmin(store.id)}
+                            className="px-4 py-2.5 bg-pink-50 text-pink-700 font-black rounded-xl text-xs hover:bg-pink-100 transition-colors border border-pink-200"
+                          >
+                            ⚙️ Panel Admin
+                          </button>
                           {vs !== 'verified' && vs !== 'rejected' && (
                             <button
                               onClick={() => handleVerification(store.id, 'rejected')}
@@ -990,11 +1091,27 @@ export default function SuperAdminPage() {
                                   {store.nombre || "Sin nombre configurado"}
                                   {store.verification?.status === 'verified' && <VerifiedBadge variant="shield" size="xs" />}
                                 </p>
-                                <p className="text-[10px] text-gray-400 flex items-center gap-2">
+                                <p className="text-[10px] text-gray-400 flex items-center gap-2 flex-wrap">
                                   <span>ID: {store.id}</span>
                                   <span>•</span>
                                   <span>{store.ownerEmail}</span>
                                 </p>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => goToStorePublic(store.id)}
+                                    className="text-[10px] font-black bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-lg border border-emerald-200 transition-colors"
+                                  >
+                                    🏠 Ir a Tienda
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => goToStoreAdmin(store.id)}
+                                    className="text-[10px] font-black bg-pink-50 hover:bg-pink-100 text-pink-700 px-2.5 py-1 rounded-lg border border-pink-200 transition-colors"
+                                  >
+                                    ⚙️ Admin
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </td>

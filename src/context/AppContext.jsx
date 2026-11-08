@@ -38,7 +38,7 @@ export function AppProvider({ children }) {
       const saved = localStorage.getItem("global_branding");
       if (saved) return JSON.parse(saved);
     } catch (e) {}
-    return { companyName: "", companyLogo: "", homepageSections: null };
+    return { companyName: "", companyLogo: "", homepageSections: null, isCommissionActive: false };
   });
 
   useEffect(() => {
@@ -57,7 +57,8 @@ export function AppProvider({ children }) {
           const updated = {
             companyName: data.companyName || "",
             companyLogo: data.companyLogo || "",
-            homepageSections: data.homepageSections || null
+            homepageSections: data.homepageSections || null,
+            isCommissionActive: Boolean(data.isCommissionActive)
           };
           setGlobalBranding(updated);
           try {
@@ -78,7 +79,7 @@ export function AppProvider({ children }) {
     const pathParts = location.pathname.split('/').filter(Boolean);
     
     // 🌟 MAGIA: Rutas seguras completas (incluyendo 'api' para evitar conflictos con store-og)
-    const reservedPaths = ['admin', 'login', 'registro-vendedor', 'super-admin', 'search', 'ofertas', 'api']; 
+    const reservedPaths = ['admin', 'login', 'registro-vendedor', 'super-admin', 'search', 'ofertas', 'preguntas', 'aprender', 'api']; 
     
     let storeId = null; 
     
@@ -91,6 +92,9 @@ export function AppProvider({ children }) {
       setLoading(false);
       return;
     }
+
+    // Evitar mostrar datos residuales de otra tienda mientras carga la nueva
+    setStoreData((prev) => (prev?.id === storeId ? prev : null));
 
     const unsubStore = onSnapshot(
       doc(db, "stores", storeId),

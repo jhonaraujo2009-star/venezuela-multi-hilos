@@ -4,7 +4,7 @@ import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs
 import { createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from "firebase/auth";
 import { db, auth } from "../config/firebase";
 import toast from "react-hot-toast";
-import { SUPER_ADMIN_EMAIL } from "../config/constants";
+import { isSuperAdmin } from "../config/constants";
 import { useApp } from "../context/AppContext";
 
 const RESERVED_URLS = ['admin', 'login', 'registro-vendedor', 'super-admin', 'search', 'ofertas', 'preguntas', 'aprender', 'api'];
@@ -183,7 +183,7 @@ export default function RegisterStorePage() {
       toast.success("¡Tu tienda ha sido creada con éxito! 🚀");
       
       // Interceptor para el Super Admin
-      if (cleanEmail === SUPER_ADMIN_EMAIL?.toLowerCase()) {
+      if (isSuperAdmin(cleanEmail)) {
         const choice = window.confirm("¡Bienvenido, Jefe! 👑\n\n¿Deseas entrar al PANEL DE CONTROL TOTAL (Súper Admin)?\n\n(Aceptar = Súper Admin / Cancelar = Aprender a usar la App)");
         if (choice) {
           navigate("/super-admin", { replace: true });

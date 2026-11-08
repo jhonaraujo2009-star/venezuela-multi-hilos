@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useApp } from "../../context/AppContext";
 import { uploadImage } from "../../utils/imageUploader";
 import toast from "react-hot-toast";
@@ -6,8 +6,22 @@ import { doc, setDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import { Link } from "react-router-dom";
 
+const DEFAULT_QUICK_BUTTONS = [
+  { id: 'cat', label: 'Catálogo', icon: '🛍️', filter: 'all' },
+  { id: 'ofertas', label: 'Ofertas', icon: '🔥', filter: 'ofertas' },
+  { id: 'top', label: 'Top Ventas', icon: '🏆', filter: 'top' },
+  { id: 'new', label: 'Lo Último', icon: '✨', filter: 'new' }
+];
+
+const DEFAULT_WHATSAPP_WIDGET = {
+  active: true,
+  number: "",
+  message: "¡Hola! 💖 Estoy viendo la tienda y me gustaría recibir asesoría personalizada."
+};
+
 export default function AdminSettings() {
   const { settings, storeData } = useApp(); 
+  const loadedStoreIdRef = useRef(null);
   
   const [form, setForm] = useState({
     exchangeRate: storeData?.exchangeRate ?? settings.exchangeRate ?? "",
@@ -20,21 +34,12 @@ export default function AdminSettings() {
       youtubeLink: storeData?.verification?.youtubeLink || "",
       status: storeData?.verification?.status || "none",
     },
-    quickButtons: storeData?.quickButtons ?? settings.quickButtons ?? [
-      { id: 'cat', label: 'Catálogo', icon: '🛍️', filter: 'all' },
-      { id: 'ofertas', label: 'Ofertas', icon: '🔥', filter: 'ofertas' },
-      { id: 'top', label: 'Top Ventas', icon: '🏆', filter: 'top' },
-      { id: 'new', label: 'Lo Último', icon: '✨', filter: 'new' }
-    ],
+    quickButtons: storeData?.quickButtons ?? settings.quickButtons ?? DEFAULT_QUICK_BUTTONS,
     socialLinks: storeData?.socialLinks ?? settings.socialLinks ?? { instagram: "", tiktok: "", whatsapp: "" },
     customIcons: storeData?.customIcons ?? settings.customIcons ?? { whatsapp: "", instagram: "", tiktok: "" },
     shippingLogos: storeData?.shippingLogos ?? settings.shippingLogos ?? { mrw: "", tealca: "", zoom: "" },
     appLogos: storeData?.appLogos ?? settings.appLogos ?? { icon192: "", icon512: "" },
-    whatsappWidget: storeData?.whatsappWidget ?? settings.whatsappWidget ?? {
-      active: true,
-      number: "",
-      message: "¡Hola! 💖 Estoy viendo la tienda y me gustaría recibir asesoría personalizada."
-    }
+    whatsappWidget: storeData?.whatsappWidget ?? settings.whatsappWidget ?? DEFAULT_WHATSAPP_WIDGET
   });
 
   const [saving, setSaving] = useState(false);
@@ -42,29 +47,38 @@ export default function AdminSettings() {
   const [uploading, setUploading] = useState(null);
 
   useEffect(() => {
-    if (storeData) {
-      setForm((prev) => ({
-        ...prev,
-        storeName: storeData.nombre || prev.storeName,
-        primaryColor: storeData.primaryColor || prev.primaryColor,
-        exchangeRate: storeData.exchangeRate ?? prev.exchangeRate,
-        whatsappNumber: storeData.whatsappNumber ?? prev.whatsappNumber,
-        quickButtons: storeData.quickButtons || prev.quickButtons,
-        socialLinks: storeData.socialLinks || prev.socialLinks,
-        customIcons: storeData.customIcons || prev.customIcons,
-        shippingLogos: storeData.shippingLogos || prev.shippingLogos,
-        appLogos: storeData.appLogos || prev.appLogos, 
+    if (!storeData?.id) return;
+
+    if (loadedStoreIdRef.current !== storeData.id) {
+      loadedStoreIdRef.current = storeData.id;
+      setForm({
+        storeName: storeData.nombre ?? "",
+        primaryColor: storeData.primaryColor || "#ec4899",
+        exchangeRate: storeData.exchangeRate ?? settings.exchangeRate ?? "",
+        whatsappNumber: storeData.whatsappNumber ?? "",
+        quickButtons: storeData.quickButtons || DEFAULT_QUICK_BUTTONS,
+        socialLinks: storeData.socialLinks || { instagram: "", tiktok: "", whatsapp: "" },
+        customIcons: storeData.customIcons || { whatsapp: "", instagram: "", tiktok: "" },
+        shippingLogos: storeData.shippingLogos || { mrw: "", tealca: "", zoom: "" },
+        appLogos: storeData.appLogos || { icon192: "", icon512: "" },
         whatsappWidget: {
-          active: true,
-          number: "",
-          message: "¡Hola! 💖 Estoy viendo la tienda y me gustaría recibir asesoría personalizada.",
-          ...prev.whatsappWidget,
+          ...DEFAULT_WHATSAPP_WIDGET,
           ...(storeData.whatsappWidget || {}),
         },
+        verification: {
+          cedula: storeData.verification?.cedula || "",
+          registroComercio: storeData.verification?.registroComercio || "",
+          youtubeLink: storeData.verification?.youtubeLink || "",
+          status: storeData.verification?.status || "none",
+        },
+      });
+    } else if (storeData.verification?.status && storeData.verification.status !== form.verification.status) {
+      setForm((prev) => ({
+        ...prev,
         verification: { ...prev.verification, ...storeData.verification },
       }));
     }
-  }, [storeData]);
+  }, [storeData, settings.exchangeRate]);
 
   const handleUpload = async (e, type, category) => {
     const file = e.target.files[0];

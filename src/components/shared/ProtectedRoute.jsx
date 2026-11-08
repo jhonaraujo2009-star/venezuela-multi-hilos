@@ -3,7 +3,8 @@ import { Navigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
-import { SUPER_ADMIN_EMAIL } from "../../config/constants";
+import { isSuperAdmin } from "../../config/constants";
+import toast from "react-hot-toast";
 
 export default function ProtectedRoute({ children }) {
   const { user, authLoading } = useAuth();
@@ -11,22 +12,22 @@ export default function ProtectedRoute({ children }) {
   const [isAuthorized, setIsAuthorized] = useState(null);
 
   useEffect(() => {
+    let isMounted = true;
+
     const checkAccess = async () => {
       if (user && storeId) {
+        setIsAuthorized(null);
         try {
           const currentEmail = user.email ? user.email.trim().toLowerCase() : "";
 
-          // 👑 1. Si es Super Admin, tiene acceso total a cualquier tienda
-          if (
-            currentEmail &&
-            SUPER_ADMIN_EMAIL &&
-            currentEmail === SUPER_ADMIN_EMAIL.trim().toLowerCase()
-          ) {
-            setIsAuthorized(true);
+          // 👑 1. Si es Super Admin, tiene acceso total e inmediato a cualquier tienda
+          if (isSuperAdmin(user)) {
+            if (isMounted) setIsAuthorized(true);
             return;
           }
 
-          const storeRef = doc(db, "stores", storeId);
+          const cleanStoreId = decodeURIComponent(storeId).trim().toLowerCase();
+          const storeRef = doc(db, "stores", cleanStoreId);
           const storeSnap = await getDoc(storeRef);
 
           if (storeSnap.exists()) {
@@ -46,24 +47,31 @@ export default function ProtectedRoute({ children }) {
                   console.warn("No se pudo sincronizar ownerId:", syncErr);
                 }
               }
-              setIsAuthorized(true);
+              if (isMounted) setIsAuthorized(true);
               return;
             }
           }
           
-          setIsAuthorized(false);
+          if (isMounted) {
+            toast.error("No tienes permisos para administrar esta tienda.", { id: "protected-denied" });
+            setIsAuthorized(false);
+          }
         } catch (error) {
           console.error("Error comprobando acceso a tienda:", error);
-          setIsAuthorized(false);
+          if (isMounted) setIsAuthorized(false);
         }
       } else if (!user) {
-        setIsAuthorized(false);
+        if (isMounted) setIsAuthorized(false);
       }
     };
     
     if (!authLoading) {
       checkAccess();
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, [user, storeId, authLoading]);
 
   if (authLoading || isAuthorized === null) {

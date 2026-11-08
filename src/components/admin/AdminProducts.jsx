@@ -63,8 +63,8 @@ function VariantManager({ variants, onChange }) {
 function ProductForm({ sessions, product, onClose, storeData, defaultSessionId }) {
   const initialImages = product?.images?.length
     ? product.images
-    : product?.image
-    ? [product.image]
+    : product?.image || product?.imageUrl
+    ? [product.image || product.imageUrl]
     : [];
 
   const [form, setForm] = useState({
@@ -180,8 +180,9 @@ function ProductForm({ sessions, product, onClose, storeData, defaultSessionId }
         finalOfferEndsAt = Date.now() + (parseFloat(form.offerHours) * 60 * 60 * 1000);
       }
 
+      const { offerHours, ...cleanForm } = form;
       const data = {
-        ...form,
+        ...cleanForm,
         image: form.images?.[0] || null,
         sessionId,
         price: parseFloat(form.price),
@@ -407,16 +408,27 @@ export default function AdminProducts() {
 
     // 🌟 MAGIA 1: El panel admin AHORA SOLO CARGA los productos de la tienda actual
     const qProducts = query(collection(db, "products"), where("storeId", "==", storeData.id));
-    const unsub = onSnapshot(qProducts, (snap) => {
-      setProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      qProducts,
+      (snap) => {
+        setProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setLoading(false);
+      },
+      (err) => {
+        console.warn("Error leyendo productos:", err);
+        setLoading(false);
+      }
+    );
 
     // 🌟 MAGIA 2: El panel admin AHORA ESCUCHA en tiempo real las sesiones de la tienda
     const qSessions = query(collection(db, "sessions"), where("storeId", "==", storeData.id));
-    const unsubSessions = onSnapshot(qSessions, (snap) => {
-      setSessions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
+    const unsubSessions = onSnapshot(
+      qSessions,
+      (snap) => {
+        setSessions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      (err) => console.warn("Error leyendo sesiones:", err)
+    );
 
     return () => {
       unsub();
@@ -474,11 +486,10 @@ export default function AdminProducts() {
   const getAllImages = () => {
     const imgs = [];
     products.forEach(p => {
-      if (p.images?.length) {
-        p.images.forEach((url, i) => {
-          imgs.push({ url, productName: p.name, index: i });
-        });
-      }
+      const list = p.images?.length ? p.images : (p.image || p.imageUrl ? [p.image || p.imageUrl] : []);
+      list.forEach((url, i) => {
+        if (url) imgs.push({ url, productName: p.name || "producto", index: i });
+      });
     });
     return imgs;
   };
@@ -591,7 +602,7 @@ export default function AdminProducts() {
             onClick={() => { setFormProduct(null); setShowForm(true); }}
             className="px-5 py-2.5 rounded-2xl text-white text-sm font-black shadow-lg hover:scale-105 transition-transform"
             style={{ background: "var(--primary)" }}>
-            + Agregar_Productos
+            + Agregar Producto
           </button>
         </div>
       </div>
@@ -713,10 +724,11 @@ export default function AdminProducts() {
                             ? p.variants.reduce((s, v) => s + (v.stock || 0), 0)
                             : (p.totalStock ?? 0);
                           const pricing = calculateProductPricing(p);
-                          const thumbUrl = normalizeImageUrl(p.images?.[0] || p.image);
+                          const thumbUrl = normalizeImageUrl(p.images?.[0] || p.image || p.imageUrl);
+                          const rowImgs = p.images?.length ? p.images : (p.image || p.imageUrl ? [p.image || p.imageUrl] : []);
 
                           return (
-                            <div key={p.id} className="flex items-center gap-4 px-6 py-4 hover:bg-pink-50/30 transition-colors group/item">
+                            <div key={p.id} className="relative flex items-center gap-4 px-6 py-4 hover:bg-pink-50/30 transition-colors group/item">
                               <div className="w-4 border-b-2 border-l-2 border-gray-100 h-8 -mt-8 ml-2 rounded-bl-lg absolute" />
                               
                               <div className="ml-8 w-12 h-12 rounded-xl overflow-hidden bg-gray-50 shadow-sm flex-shrink-0 relative">
@@ -737,9 +749,9 @@ export default function AdminProducts() {
                               </div>
 
                               <div className={`flex gap-2 transition-opacity ${downloadMode ? "opacity-100" : "opacity-100 sm:opacity-0 sm:group-hover/item:opacity-100"}`}>
-                                {downloadMode && (p.images?.length > 0 || p.image) && (
+                                {downloadMode && rowImgs.length > 0 && (
                                   <div className="flex items-center gap-1">
-                                    {(p.images?.length ? p.images : [p.image]).map((imgUrl, imgIdx) => (
+                                    {rowImgs.map((imgUrl, imgIdx) => (
                                       <button 
                                         key={imgIdx}
                                         onClick={(e) => { e.stopPropagation(); toggleImageSelection(imgUrl); }}

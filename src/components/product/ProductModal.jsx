@@ -210,31 +210,37 @@ export default function ProductModal({ product, onClose }) {
     if (isLiking || !currentProduct?.id) return;
     setIsLiking(true);
 
-    let likedProducts = {};
     try {
-      likedProducts = JSON.parse(localStorage.getItem(likedKey) || "{}") || {};
-    } catch (e) {}
-    const productRef = doc(db, "products", currentProduct.id);
+      let likedProducts = {};
+      try {
+        likedProducts = JSON.parse(localStorage.getItem(likedKey) || "{}") || {};
+      } catch (e) {}
+      const productRef = doc(db, "products", currentProduct.id);
 
-    if (hasLiked) {
-      setHasLiked(false);
-      setLikesCount((prev) => Math.max(0, prev - 1));
-      delete likedProducts[currentProduct.id]; 
-      try { localStorage.setItem(likedKey, JSON.stringify(likedProducts)); } catch (e) {}
-      window.dispatchEvent(new CustomEvent("likes_updated"));
-      window.dispatchEvent(new CustomEvent("wishlist_updated"));
-      try { await updateDoc(productRef, { likes: increment(-1) }); } catch (error) {}
-    } else {
-      setHasLiked(true);
-      setLikesCount((prev) => prev + 1);
-      likedProducts[currentProduct.id] = true; 
-      try { localStorage.setItem(likedKey, JSON.stringify(likedProducts)); } catch (e) {}
-      window.dispatchEvent(new CustomEvent("likes_updated"));
-      window.dispatchEvent(new CustomEvent("wishlist_updated"));
-      try { await updateDoc(productRef, { likes: increment(1) }); } 
-      catch (error) { await setDoc(productRef, { likes: 1 }, { merge: true }); }
+      if (hasLiked) {
+        setHasLiked(false);
+        setLikesCount((prev) => Math.max(0, prev - 1));
+        delete likedProducts[currentProduct.id]; 
+        try { localStorage.setItem(likedKey, JSON.stringify(likedProducts)); } catch (e) {}
+        window.dispatchEvent(new CustomEvent("likes_updated"));
+        window.dispatchEvent(new CustomEvent("wishlist_updated"));
+        try { await updateDoc(productRef, { likes: increment(-1) }); } catch {}
+      } else {
+        setHasLiked(true);
+        setLikesCount((prev) => prev + 1);
+        likedProducts[currentProduct.id] = true; 
+        try { localStorage.setItem(likedKey, JSON.stringify(likedProducts)); } catch (e) {}
+        window.dispatchEvent(new CustomEvent("likes_updated"));
+        window.dispatchEvent(new CustomEvent("wishlist_updated"));
+        try {
+          await updateDoc(productRef, { likes: increment(1) });
+        } catch {
+          try { await setDoc(productRef, { likes: 1 }, { merge: true }); } catch {}
+        }
+      }
+    } finally {
+      setIsLiking(false);
     }
-    setIsLiking(false);
   };
 
   const extractProductImage = (item) => {
@@ -724,7 +730,13 @@ export default function ProductModal({ product, onClose }) {
                           exit={{ height: 0, opacity: 0 }}
                           className="overflow-hidden"
                         >
-                          <div className="pt-5 text-[13px] text-gray-600 leading-relaxed font-medium prose prose-sm max-w-none prose-pink" dangerouslySetInnerHTML={{ __html: currentProduct.description }} />
+                          <div className="pt-5 text-[13px] text-gray-600 leading-relaxed font-medium whitespace-pre-line">
+                            {String(currentProduct.description || "")
+                              .replace(/<br\s*\/?>/gi, "\n")
+                              .replace(/<\/p>/gi, "\n\n")
+                              .replace(/<[^>]*>/g, "")
+                              .trim()}
+                          </div>
                         </motion.div>
                       )}
                     </AnimatePresence>

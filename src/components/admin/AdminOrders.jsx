@@ -14,11 +14,22 @@ export default function AdminOrders() {
 
   const STATUSES = [
     { id: "pending", label: "⏳ Pendiente", color: "bg-yellow-100 text-yellow-700 border-yellow-200", badge: "bg-yellow-500" },
+    { id: "completed", label: "✅ Confirmado", color: "bg-emerald-100 text-emerald-700 border-emerald-200", badge: "bg-emerald-500" },
     { id: "pagado", label: "💸 Pagado", color: "bg-blue-100 text-blue-700 border-blue-200", badge: "bg-blue-500" },
     { id: "enviado", label: "🚚 Enviado", color: "bg-purple-100 text-purple-700 border-purple-200", badge: "bg-purple-500" },
-    { id: "entregado", label: "✅ Entregado", color: "bg-green-100 text-green-700 border-green-200", badge: "bg-green-500" },
+    { id: "entregado", label: "📦 Entregado", color: "bg-green-100 text-green-700 border-green-200", badge: "bg-green-500" },
     { id: "cancelado", label: "❌ Cancelado", color: "bg-red-100 text-red-700 border-red-200", badge: "bg-red-500" }
   ];
+
+  const formatWhatsApp = (phone) => {
+    if (!phone) return "";
+    let num = String(phone).replace(/\D/g, "");
+    if (num.startsWith("0")) num = num.substring(1);
+    if (num.length > 0 && !num.startsWith("58")) {
+      num = "58" + num;
+    }
+    return num;
+  };
 
   useEffect(() => {
     if (storeData?.id) fetchOrders();
@@ -74,8 +85,9 @@ export default function AdminOrders() {
       };
 
       // Si pasa a pagado/entregado/enviado y no se había descontado stock:
-      if (isFinalized && !order.stockDeducted && order.items && order.items.length > 0) {
-        const groupedMap = groupOrderItemsByProduct(order.items);
+      const rawOrderItems = order.items || order.cart || [];
+      if (isFinalized && !order.stockDeducted && rawOrderItems.length > 0) {
+        const groupedMap = groupOrderItemsByProduct(rawOrderItems);
 
         for (const [pId, itemsList] of groupedMap.entries()) {
           const prodRef = doc(db, "products", pId);
@@ -144,9 +156,9 @@ export default function AdminOrders() {
           commissionAmount: commissionAmount,
           commissionRecorded: commissionAmount > 0
         });
-      } else if (newStatus === "cancelado" && order.stockDeducted && order.items && order.items.length > 0) {
+      } else if (newStatus === "cancelado" && order.stockDeducted && rawOrderItems.length > 0) {
         // Restaurar inventario si se cancela un pedido que ya había restado stock
-        const groupedMap = groupOrderItemsByProduct(order.items);
+        const groupedMap = groupOrderItemsByProduct(rawOrderItems);
 
         for (const [pId, itemsList] of groupedMap.entries()) {
           const prodRef = doc(db, "products", pId);
@@ -223,8 +235,10 @@ export default function AdminOrders() {
   };
 
   const handleUpdateItemQuantity = async (order, itemIndex, delta) => {
-    const newItems = [...order.items];
+    const baseItems = order.items || order.cart || [];
+    const newItems = [...baseItems];
     const item = newItems[itemIndex];
+    if (!item) return;
     const newQuantity = getItemQty(item) + delta;
     
     if (newQuantity <= 0) return;
@@ -253,7 +267,7 @@ export default function AdminOrders() {
   const handleDeleteItem = async (order, itemIndex) => {
     if (!window.confirm("¿Seguro que el cliente NO pagará este producto? Se eliminará del pedido.")) return;
     
-    const newItems = [...order.items];
+    const newItems = [...(order.items || order.cart || [])];
     newItems.splice(itemIndex, 1);
     
     const newTotal = Number(newItems.reduce((acc, curr) => acc + (getItemPrice(curr) * getItemQty(curr)), 0).toFixed(2));
@@ -342,9 +356,10 @@ export default function AdminOrders() {
             const date = order.createdAt?.toDate ? order.createdAt.toDate() : new Date();
             const isExpanded = expandedOrderId === order.id;
 
-            const orderCustomerName = order.customerName || "Cliente Desconocido";
-            const orderCustomerPhone = order.customerPhone || "";
+            const orderCustomerName = order.customerName || order.customer?.name || "Cliente Desconocido";
+            const orderCustomerPhone = order.customerPhone || order.customer?.phone || "";
             const orderTotalAmount = Number(order.totalAmount ?? order.total ?? 0);
+            const orderItems = order.items || order.cart || [];
 
             return (
               <div 
@@ -406,14 +421,16 @@ export default function AdminOrders() {
                           <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">📞 WhatsApp del Cliente</h4>
                           <p className="text-lg font-black text-gray-900">{orderCustomerPhone}</p>
                         </div>
-                        <a 
-                          href={`https://wa.me/${orderCustomerPhone.replace(/\D/g,'')}`} 
-                          target="_blank" 
-                          rel="noreferrer" 
-                          className="bg-green-500 hover:bg-green-600 text-white w-full py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-colors flex items-center justify-center gap-2 shadow-sm"
-                        >
-                          <span>💬</span> Escribir al Cliente
-                        </a>
+                        {orderCustomerPhone && (
+                          <a 
+                            href={`https://wa.me/${formatWhatsApp(orderCustomerPhone)}`} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="bg-green-500 hover:bg-green-600 text-white w-full py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-colors flex items-center justify-center gap-2 shadow-sm"
+                          >
+                            <span>💬</span> Escribir al Cliente
+                          </a>
+                        )}
                       </div>
 
                       <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between gap-3">
@@ -421,7 +438,7 @@ export default function AdminOrders() {
                           <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">💳 Pago Reportado</h4>
                           <p className="text-sm font-bold text-gray-900 uppercase">{order.paymentMethod || order.paymentId || "No especificado"}</p>
                         </div>
-                        {currentStatus.id !== "pagado" && currentStatus.id !== "entregado" && (
+                        {currentStatus.id !== "pagado" && currentStatus.id !== "completed" && currentStatus.id !== "entregado" && (
                           <button 
                             onClick={() => updateOrderStatus(order.id, "pagado")}
                             className="bg-blue-100 text-blue-700 hover:bg-blue-200 w-full py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-colors shadow-sm"
@@ -436,7 +453,7 @@ export default function AdminOrders() {
                       <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">🛍️ Edición de Productos</h4>
                       
                       <div className="space-y-4">
-                        {order.items && order.items.length > 0 ? order.items.map((item, i) => {
+                        {orderItems.length > 0 ? orderItems.map((item, i) => {
                           const itemPrice = getItemPrice(item);
                           const itemName = getItemName(item);
                           const itemQty = getItemQty(item);
