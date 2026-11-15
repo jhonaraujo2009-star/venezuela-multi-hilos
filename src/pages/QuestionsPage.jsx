@@ -17,10 +17,12 @@ export default function QuestionsPage() {
   const effectiveStoreId = (storeData?.id || (routeStoreId ? decodeURIComponent(routeStoreId).trim().toLowerCase() : "")) || "";
 
   useEffect(() => {
-    if (Array.isArray(storeData?.publicQuestions) && storeData.publicQuestions.length > 0) {
+    if (storeData?.id === effectiveStoreId && Array.isArray(storeData?.publicQuestions)) {
       setQuestions(storeData.publicQuestions);
+    } else {
+      setQuestions([]);
     }
-  }, [storeData?.publicQuestions]);
+  }, [effectiveStoreId, storeData?.id, storeData?.publicQuestions]);
 
   useEffect(() => {
     if (!effectiveStoreId) return;

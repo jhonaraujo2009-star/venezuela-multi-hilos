@@ -110,17 +110,14 @@ export default function Header({ onProductClick, onFilter }) {
   }, [storeData?.id]);
 
   useEffect(() => {
-    if (!searchQuery.trim()) {
+    if (!searchQuery.trim() || !storeData?.id) {
       setSearchResults([]);
       return;
     }
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
-        let qRef = collection(db, "products");
-        if (storeData?.id) {
-          qRef = query(collection(db, "products"), where("storeId", "==", storeData.id));
-        }
+        const qRef = query(collection(db, "products"), where("storeId", "==", storeData.id));
         const snap = await getDocs(qRef);
         
         const q = searchQuery.toLowerCase();
@@ -370,7 +367,7 @@ export default function Header({ onProductClick, onFilter }) {
                             user.email.trim().toLowerCase() ===
                               storeData.ownerEmail.trim().toLowerCase()
                         ) &&
-                        (!storeData?.ownerId || user?.uid === storeData.ownerId);
+                        Boolean(storeData?.ownerId && user?.uid === storeData.ownerId);
 
                       const loginUrl = cleanStoreId
                         ? `/login?store=${encodeURIComponent(cleanStoreId)}`

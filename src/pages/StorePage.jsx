@@ -43,7 +43,7 @@ export default function StorePage() {
       user?.email &&
       storeData?.ownerEmail &&
       user.email.trim().toLowerCase() === storeData.ownerEmail.trim().toLowerCase() &&
-      (!storeData?.ownerId || user?.uid === storeData.ownerId)
+      Boolean(storeData?.ownerId && user?.uid === storeData.ownerId)
   );
   const canBypassLock = isUserSuperAdmin || isStoreOwner;
 

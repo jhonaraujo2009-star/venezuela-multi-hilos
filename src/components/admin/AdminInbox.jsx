@@ -106,6 +106,9 @@ export default function AdminInbox() {
         const orderRef = doc(db, "orders", order.id);
         const orderSnap = await transaction.get(orderRef);
         if (!orderSnap.exists()) throw new Error("El pedido ya no existe");
+        if (orderSnap.data()?.storeId !== storeData.id) {
+          throw new Error("Acceso denegado: este pedido no pertenece a tu tienda");
+        }
         if (orderSnap.data()?.status !== "pending") {
           throw new Error("Este pedido ya fue procesado anteriormente");
         }
@@ -119,12 +122,12 @@ export default function AdminInbox() {
           productItemsMap.get(pId).push(item);
         }
 
-        // Leer cada producto una sola vez en la transacción
+        // Leer cada producto una sola vez en la transacción (solo si pertenece a esta tienda)
         const productsToUpdate = [];
         for (const [pId, itemsList] of productItemsMap.entries()) {
           const pRef = doc(db, "products", pId);
           const pDoc = await transaction.get(pRef);
-          if (pDoc.exists()) {
+          if (pDoc.exists() && pDoc.data()?.storeId === storeData.id) {
             productsToUpdate.push({ ref: pRef, doc: pDoc, items: itemsList });
           }
         }

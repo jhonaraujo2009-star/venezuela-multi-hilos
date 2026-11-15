@@ -23,9 +23,11 @@ export default function AdminSettings() {
   const { settings, storeData } = useApp(); 
   const loadedStoreIdRef = useRef(null);
   
+  const initialStorePhone = storeData?.whatsappNumber || storeData?.phone || storeData?.whatsappWidget?.number || storeData?.telefono || "";
+
   const [form, setForm] = useState({
     exchangeRate: storeData?.exchangeRate ?? settings.exchangeRate ?? "",
-    whatsappNumber: storeData?.whatsappNumber || storeData?.phone || storeData?.whatsappWidget?.number || "",
+    whatsappNumber: initialStorePhone,
     primaryColor: storeData?.primaryColor || "#ec4899",
     storeName: storeData?.nombre ?? "",
     verification: {
@@ -42,6 +44,7 @@ export default function AdminSettings() {
     whatsappWidget: {
       ...DEFAULT_WHATSAPP_WIDGET,
       ...(storeData?.whatsappWidget || {}),
+      number: storeData?.whatsappWidget?.number || initialStorePhone,
     }
   });
 
@@ -194,6 +197,24 @@ export default function AdminSettings() {
               onChange={(e) => setForm({...form, storeName: e.target.value})} 
               placeholder="Ej: Tienda Oscar" 
               className="w-full bg-pink-50/50 border border-pink-100 rounded-2xl px-4 py-3 text-sm outline-none focus:border-pink-400 font-bold text-gray-800 transition-all" 
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-600 mb-1">Teléfono / WhatsApp de tu Tienda (Pedidos)</label>
+            <p className="text-[11px] text-gray-400 mb-2">Número propio e independiente donde tus clientes enviarán sus pedidos</p>
+            <input
+              type="tel"
+              value={form.whatsappWidget.number}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  whatsappNumber: e.target.value,
+                  whatsappWidget: { ...form.whatsappWidget, number: e.target.value },
+                })
+              }
+              placeholder="Ej: 04141234567 o 584141234567"
+              className="w-full bg-pink-50/50 border border-pink-100 rounded-2xl px-4 py-3 text-sm outline-none focus:border-pink-400 font-bold text-gray-800 transition-all"
             />
           </div>
           

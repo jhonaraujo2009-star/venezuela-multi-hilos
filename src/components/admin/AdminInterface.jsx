@@ -1,5 +1,5 @@
 import { uploadImage } from "../../utils/imageUploader";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useApp } from "../../context/AppContext";
 import toast from "react-hot-toast";
 import { doc, setDoc } from "firebase/firestore";
@@ -7,28 +7,28 @@ import { db } from "../../config/firebase";
 
 export default function AdminInterface() {
   const { storeData } = useApp();
+  const loadedStoreIdRef = useRef(null);
   
   const [form, setForm] = useState({
     announcementText: storeData?.announcementText ?? "",
     heroTitle: storeData?.heroTitle ?? "",
     heroDescription: storeData?.heroDescription ?? "",
     legalText: storeData?.legalText ?? "",
-    socialLinks: storeData?.socialLinks ?? {},
   });
   
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (storeData) {
-      setForm(prev => ({
-        ...prev,
-        announcementText: storeData.announcementText ?? prev.announcementText,
-        heroTitle: storeData.heroTitle ?? prev.heroTitle,
-        heroDescription: storeData.heroDescription ?? prev.heroDescription,
-        legalText: storeData.legalText ?? prev.legalText,
-        socialLinks: storeData.socialLinks ?? prev.socialLinks,
-      }));
+    if (!storeData?.id) return;
+    if (loadedStoreIdRef.current !== storeData.id) {
+      loadedStoreIdRef.current = storeData.id;
+      setForm({
+        announcementText: storeData.announcementText ?? "",
+        heroTitle: storeData.heroTitle ?? "",
+        heroDescription: storeData.heroDescription ?? "",
+        legalText: storeData.legalText ?? "",
+      });
     }
   }, [storeData]);
 
@@ -39,7 +39,7 @@ export default function AdminInterface() {
   };
 
   const uploadToCloudinary = async (file) => {
-    return await uploadImage(file, "tienda_maquillaje/perfiles");
+    return await uploadImage(file, `tienda_maquillaje/${storeData?.id || "general"}/perfiles`);
   };
 
   const handleProfileImage = async (e) => {

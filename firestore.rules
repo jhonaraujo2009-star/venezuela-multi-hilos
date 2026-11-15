@@ -44,13 +44,18 @@ service cloud.firestore {
         request.resource.data.ownerId == resource.data.ownerId &&
         request.resource.data.ownerEmail == resource.data.ownerEmail
       ) || (
-        // El Super Admin solo puede modificar estados administrativos de plataforma (nunca robar/editar datos internos de la tienda)
+        // El Super Admin solo puede modificar estados administrativos de plataforma (nunca robar/editar teléfono, correo, ownerId ni datos internos de la tienda)
         isSuperAdmin() &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.ownerEmail == resource.data.ownerEmail &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'isActive',
           'verification',
           'deuda_comision',
-          'comision_porcentaje'
+          'comision_porcentaje',
+          'ventas_consolidadas',
+          'lastDebtResetAt',
+          'systemMessage'
         ])
       );
 
@@ -65,38 +70,49 @@ service cloud.firestore {
         isStoreOwner(resource.data.storeId) &&
         request.resource.data.storeId == resource.data.storeId
       ) || (
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']) &&
+        request.resource.data.storeId == resource.data.storeId
       );
       allow delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
     }
 
-    // 5. PEDIDOS (ORDERS): clientes públicos pueden crear pedidos; solo el dueño de esa tienda puede leerlos/gestionarlos
+    // 5. PEDIDOS (ORDERS): clientes públicos pueden crear pedidos; solo el dueño de esa tienda puede actualizarlos
     match /orders/{orderId} {
       allow create: if request.resource.data.storeId is string &&
         request.resource.data.storeId.size() > 0;
-      allow read, update, delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
+      allow read, delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
+      allow update: if isStoreOwner(resource.data.storeId) &&
+        request.resource.data.storeId == resource.data.storeId;
     }
 
     // 6. MÉTODOS DE PAGO (PAYMENTS): lectura pública para checkout, escritura exclusiva del dueño de esa tienda
     match /payments/{paymentId} {
       allow read: if true;
       allow create: if isStoreOwner(request.resource.data.storeId);
-      allow update, delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
+      allow update: if isStoreOwner(resource.data.storeId) &&
+        request.resource.data.storeId == resource.data.storeId;
+      allow delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
     }
 
     // 7. SESIONES / CATEGORÍAS: lectura pública, escritura exclusiva del dueño de esa tienda
     match /sessions/{sessionId} {
       allow read: if true;
       allow create: if isStoreOwner(request.resource.data.storeId);
-      allow update, delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
+      allow update: if isStoreOwner(resource.data.storeId) &&
+        request.resource.data.storeId == resource.data.storeId;
+      allow delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
     }
 
     // 8. CUPONES: lectura pública para validación en bolsa, escritura exclusiva del dueño de esa tienda
     match /coupons/{couponId} {
       allow read: if true;
       allow create: if isStoreOwner(request.resource.data.storeId);
-      allow update: if isStoreOwner(resource.data.storeId) || (
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usageCount'])
+      allow update: if (
+        isStoreOwner(resource.data.storeId) &&
+        request.resource.data.storeId == resource.data.storeId
+      ) || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usageCount']) &&
+        request.resource.data.storeId == resource.data.storeId
       );
       allow delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
     }
@@ -105,16 +121,20 @@ service cloud.firestore {
     match /logistics/{logisticsId} {
       allow read: if true;
       allow create: if isStoreOwner(request.resource.data.storeId);
-      allow update, delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
+      allow update: if isStoreOwner(resource.data.storeId) &&
+        request.resource.data.storeId == resource.data.storeId;
+      allow delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
     }
 
     // 10. PREGUNTAS (Q&A): clientes públicos pueden enviar preguntas y leer las públicas; solo el dueño de la tienda gestiona todas las de su tienda
     match /questions/{questionId} {
-      allow read: if resource.data.isPublic == true || isStoreOwner(resource.data.storeId);
+      allow read: if resource.data.isPublic == true || isStoreOwner(resource.data.storeId) || isSuperAdmin();
       allow create: if request.resource.data.storeId is string &&
         request.resource.data.storeId.size() > 0 &&
         request.resource.data.isPublic == false;
-      allow update, delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
+      allow update: if isStoreOwner(resource.data.storeId) &&
+        request.resource.data.storeId == resource.data.storeId;
+      allow delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
     }
   }
 }

@@ -40,7 +40,7 @@ export default function AdminPage() {
       (user.email &&
         storeData.ownerEmail &&
         user.email.trim().toLowerCase() === storeData.ownerEmail.trim().toLowerCase() &&
-        (!storeData.ownerId || user.uid === storeData.ownerId)))
+        Boolean(storeData.ownerId && user.uid === storeData.ownerId)))
   );
 
   // 🌟 SI LA TIENDA ES RECIÉN REGISTRADA Y NO HA VISTO/SALTADO EL TUTORIAL, REDIRIGIR A /aprender

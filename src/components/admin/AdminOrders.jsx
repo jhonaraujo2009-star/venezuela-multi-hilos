@@ -92,7 +92,7 @@ export default function AdminOrders() {
         for (const [pId, itemsList] of groupedMap.entries()) {
           const prodRef = doc(db, "products", pId);
           const pSnap = await getDoc(prodRef);
-          if (!pSnap.exists()) continue;
+          if (!pSnap.exists() || pSnap.data()?.storeId !== storeData?.id) continue;
 
           const pData = pSnap.data();
           const totalQty = itemsList.reduce((acc, it) => acc + getItemQty(it), 0);
@@ -163,7 +163,7 @@ export default function AdminOrders() {
         for (const [pId, itemsList] of groupedMap.entries()) {
           const prodRef = doc(db, "products", pId);
           const pSnap = await getDoc(prodRef);
-          if (!pSnap.exists()) continue;
+          if (!pSnap.exists() || pSnap.data()?.storeId !== storeData?.id) continue;
 
           const pData = pSnap.data();
           const totalQty = itemsList.reduce((acc, it) => acc + getItemQty(it), 0);

@@ -114,6 +114,9 @@ export default function AdminSalesHistory() {
         if (!orderSnap.exists()) throw new Error("El ticket ya no existe");
 
         const currentOrder = orderSnap.data();
+        if (currentOrder.storeId !== storeData.id) {
+          throw new Error("Acceso denegado: este ticket no pertenece a tu tienda");
+        }
         const st = (currentOrder.status || "").toLowerCase();
         if (st === "cancelado" || st === "pending") {
           throw new Error("Esta venta ya fue anulada anteriormente");
@@ -132,7 +135,7 @@ export default function AdminSalesHistory() {
         for (const [pId, itemsList] of productItemsMap.entries()) {
           const pRef = doc(db, "products", pId);
           const pDoc = await transaction.get(pRef);
-          if (pDoc.exists()) {
+          if (pDoc.exists() && pDoc.data()?.storeId === storeData.id) {
             productsToRestore.push({ ref: pRef, doc: pDoc, items: itemsList });
           }
         }
