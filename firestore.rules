@@ -13,10 +13,8 @@ service cloud.firestore {
         storeId is string &&
         storeId.size() > 0 &&
         exists(/databases/$(database)/documents/stores/$(storeId)) &&
-        (
-          get(/databases/$(database)/documents/stores/$(storeId)).data.ownerId == request.auth.uid ||
-          get(/databases/$(database)/documents/stores/$(storeId)).data.ownerEmail == request.auth.token.email
-        );
+        get(/databases/$(database)/documents/stores/$(storeId)).data.ownerId == request.auth.uid &&
+        get(/databases/$(database)/documents/stores/$(storeId)).data.ownerEmail == request.auth.token.email;
     }
 
     // 1. SETTINGS GLOBAL: lectura pública, escritura solo Super Admin
@@ -31,7 +29,7 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
-    // 3. TIENDAS: lectura pública, creación autenticada propia, edición aislada al dueño real
+    // 3. TIENDAS: lectura pública, creación autenticada propia, edición aislada al dueño real (ownerId y ownerEmail son inmutables)
     match /stores/{storeId} {
       allow read: if true;
 
@@ -41,13 +39,9 @@ service cloud.firestore {
 
       allow update: if (
         request.auth != null &&
-        (
-          resource.data.ownerId == request.auth.uid ||
-          (
-            (!("ownerId" in resource.data) || resource.data.ownerId == "") &&
-            resource.data.ownerEmail == request.auth.token.email
-          )
-        ) &&
+        resource.data.ownerId == request.auth.uid &&
+        resource.data.ownerEmail == request.auth.token.email &&
+        request.resource.data.ownerId == resource.data.ownerId &&
         request.resource.data.ownerEmail == resource.data.ownerEmail
       ) || (
         // El Super Admin solo puede modificar estados administrativos de plataforma (nunca robar/editar datos internos de la tienda)

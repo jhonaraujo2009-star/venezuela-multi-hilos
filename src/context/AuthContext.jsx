@@ -10,6 +10,24 @@ const AuthContext = createContext(null);
 
 const TENANT_SESSION_KEY = "vmh_tenant_session_v1";
 
+function getFirebaseJwtSignature(authUser) {
+  const rawJwt = authUser?.accessToken || authUser?.stsTokenManager?.accessToken || "";
+  if (!rawJwt || typeof rawJwt !== "string") return "";
+  const parts = rawJwt.split(".");
+  return parts.length === 3 ? parts[2].slice(0, 32) : "";
+}
+
+function buildBoundSessionToken(role, cleanStoreId, uid, cleanEmail, jwtSig) {
+  if (!uid || !cleanEmail || !jwtSig) return "";
+  const payload = `${role}:${cleanStoreId || "global"}:${uid}:${cleanEmail}:${jwtSig}`;
+  let hash = 2166136261;
+  for (let i = 0; i < payload.length; i++) {
+    hash ^= payload.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${cleanStoreId || role}:${uid}:${(hash >>> 0).toString(16)}:${jwtSig.slice(0, 16)}`;
+}
+
 function readTenantSession() {
   try {
     const raw = window.sessionStorage.getItem(TENANT_SESSION_KEY);
@@ -35,19 +53,22 @@ export function AuthProvider({ children }) {
   }, []);
 
   // 🌟 AISLAMIENTO DE INQUILINOS (Tenant Isolation):
-  // Emite un token de sesión exclusivo para una tienda específica (storeId + uid + email)
+  // Vincula la sesión de la pestaña a la firma RSA del JWT de Firebase Auth del usuario autenticado
   const activateStoreSession = useCallback((storeId, authUser = auth.currentUser) => {
     const cleanStoreId = storeId ? decodeURIComponent(String(storeId)).trim().toLowerCase() : "";
     const cleanEmail = authUser?.email ? authUser.email.trim().toLowerCase() : "";
     const uid = authUser?.uid || "";
-    if (!cleanStoreId || !uid || !cleanEmail) return null;
+    const jwtSig = getFirebaseJwtSignature(authUser);
+    if (!cleanStoreId || !uid || !cleanEmail || !jwtSig) return null;
 
+    const boundToken = buildBoundSessionToken("store_admin", cleanStoreId, uid, cleanEmail, jwtSig);
     const sessionObj = {
       role: "store_admin",
       storeId: cleanStoreId,
       uid,
       email: cleanEmail,
-      token: `${cleanStoreId}:${uid}:${Date.now().toString(36)}`,
+      jwtSig,
+      token: boundToken,
       issuedAt: Date.now(),
     };
     try {
@@ -62,14 +83,17 @@ export function AuthProvider({ children }) {
   const activateSuperAdminSession = useCallback((authUser = auth.currentUser) => {
     const cleanEmail = authUser?.email ? authUser.email.trim().toLowerCase() : "";
     const uid = authUser?.uid || "";
-    if (!uid || !cleanEmail) return null;
+    const jwtSig = getFirebaseJwtSignature(authUser);
+    if (!uid || !cleanEmail || !jwtSig) return null;
 
+    const boundToken = buildBoundSessionToken("super_admin", "", uid, cleanEmail, jwtSig);
     const sessionObj = {
       role: "super_admin",
       storeId: null,
       uid,
       email: cleanEmail,
-      token: `super_admin:${uid}:${Date.now().toString(36)}`,
+      jwtSig,
+      token: boundToken,
       issuedAt: Date.now(),
     };
     try {
@@ -79,8 +103,8 @@ export function AuthProvider({ children }) {
     return sessionObj;
   }, []);
 
-  // 🌟 VALIDACIÓN ESTRICTA DE TOKEN DE TIENDA:
-  // Verifica que exista un token activo emitido específicamente para esta tienda y este usuario
+  // 🌟 VALIDACIÓN ESTRICTA DE TOKEN DE TIENDA VINCULADO AL JWT DE FIREBASE:
+  // Verifica que el token de sesión haya sido derivado del JWT firmado por Firebase para este usuario y tienda
   const hasValidStoreSession = useCallback(
     (targetStoreId, authUser = user) => {
       if (!targetStoreId || !authUser?.uid || !authUser?.email) return false;
@@ -88,15 +112,26 @@ export function AuthProvider({ children }) {
       const currentSession = readTenantSession() || tenantSession;
       if (!currentSession) return false;
 
-      // Evitar Session Bleeding: el rol debe ser estrictamente store_admin (nunca super_admin)
       if (currentSession.role !== "store_admin") return false;
-      if (!currentSession.token || !currentSession.storeId) return false;
+      if (!currentSession.token || !currentSession.storeId || !currentSession.jwtSig) return false;
 
       const cleanEmail = authUser.email.trim().toLowerCase();
+      const liveJwtSig = getFirebaseJwtSignature(authUser);
+      if (!liveJwtSig) return false;
+
+      const expectedToken = buildBoundSessionToken(
+        "store_admin",
+        cleanTarget,
+        authUser.uid,
+        cleanEmail,
+        currentSession.jwtSig
+      );
+
       return (
         currentSession.storeId === cleanTarget &&
         currentSession.uid === authUser.uid &&
-        currentSession.email === cleanEmail
+        currentSession.email === cleanEmail &&
+        currentSession.token === expectedToken
       );
     },
     [user, tenantSession]

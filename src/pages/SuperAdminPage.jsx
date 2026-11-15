@@ -140,21 +140,6 @@ export default function SuperAdminPage() {
     navigate(`/${id}`);
   };
 
-  const goToStoreAdmin = (targetId) => {
-    const id = targetId || adminStoreId;
-    if (!id) {
-      if (loading) {
-        toast("Cargando tiendas, intenta en un segundo...");
-      } else {
-        toast("Selecciona o crea tu tienda primero.");
-        navigate("/registro-vendedor");
-      }
-      return;
-    }
-    // 🔒 Redirigir siempre al login aislado de esa tienda para exigir usuario y clave
-    navigate(`/login?store=${encodeURIComponent(id)}`);
-  };
-
   const fetchAllStores = async (activeUser = user) => {
     try {
       const querySnapshot = await getDocs(collection(db, "stores"));
@@ -611,14 +596,6 @@ export default function SuperAdminPage() {
               <span>🏠</span> Ir a Tienda
             </button>
 
-            <button 
-              onClick={() => goToStoreAdmin()}
-              className="hidden sm:flex items-center gap-2 text-xs font-black bg-pink-500/20 hover:bg-pink-500/40 text-pink-400 px-3.5 py-2 rounded-xl transition-colors tracking-widest uppercase border border-pink-500/30"
-              title={adminStoreId ? `Abrir panel admin /${adminStoreId}/admin` : "Abrir panel admin"}
-            >
-              <span>🛍️</span> Panel Admin
-            </button>
-
             <button onClick={() => navigate('/')} className="text-sm font-bold text-gray-400 hover:text-white transition-colors">
               Salir →
             </button>
@@ -654,13 +631,6 @@ export default function SuperAdminPage() {
             className="flex items-center gap-1.5 text-[11px] font-bold bg-emerald-500/20 active:bg-emerald-500/40 text-emerald-400 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap border border-emerald-500/30"
           >
             🏠 Ir a Tienda
-          </button>
-
-          <button 
-            onClick={() => goToStoreAdmin()}
-            className="flex items-center gap-1.5 text-[11px] font-bold bg-pink-500/20 active:bg-pink-500/40 text-pink-400 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap border border-pink-500/30"
-          >
-            🛍️ Panel Admin
           </button>
         </div>
       </header>

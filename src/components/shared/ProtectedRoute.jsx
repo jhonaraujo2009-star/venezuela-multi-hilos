@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Navigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import toast from "react-hot-toast";
 
@@ -19,11 +19,8 @@ export default function ProtectedRoute({ children }) {
       if (user && cleanStoreId) {
         setIsAuthorized(null);
         try {
-          const currentEmail = user.email ? user.email.trim().toLowerCase() : "";
-
           // 🔒 1. AISLAMIENTO DE SESIÓN (Anti-Session Bleeding):
-          // Verificar que exista un token de sesión activo emitido específicamente para este storeId.
-          // Ni el Super Admin ni otra tienda pueden reutilizar su sesión global para entrar aquí.
+          // Verificar sesión vinculada al JWT de Firebase emitida explícitamente para este storeId.
           if (!hasValidStoreSession(cleanStoreId, user)) {
             if (isMounted) {
               toast.error("Debes iniciar sesión con el usuario y clave de esta tienda.", {
@@ -34,8 +31,18 @@ export default function ProtectedRoute({ children }) {
             return;
           }
 
-          // 🔒 2. VERIFICACIÓN ESTRICTA DE PROPIEDAD EN BASE DE DATOS (Tenant Isolation):
-          // El usuario autenticado debe coincidir exactamente con el storeId, ownerEmail y ownerId de la tienda.
+          // 🔒 2. VERIFICACIÓN DEL TOKEN JWT FIRMADO POR EL SERVIDOR DE FIREBASE AUTH:
+          const tokenResult = await user.getIdTokenResult();
+          const verifiedUid = String(
+            tokenResult?.claims?.user_id || tokenResult?.claims?.sub || user.uid || ""
+          ).trim();
+          const verifiedEmail = String(
+            tokenResult?.claims?.email || user.email || ""
+          )
+            .trim()
+            .toLowerCase();
+
+          // 🔒 3. VERIFICACIÓN ESTRICTA E INMUTABLE DE PROPIEDAD EN BASE DE DATOS (Sin reescribir ownerId):
           const storeRef = doc(db, "stores", cleanStoreId);
           const storeSnap = await getDoc(storeRef);
 
@@ -45,18 +52,13 @@ export default function ProtectedRoute({ children }) {
             const storeOwnerId = data.ownerId ? String(data.ownerId).trim() : "";
 
             const matchesEmail = Boolean(
-              currentEmail && storeOwnerEmail && currentEmail === storeOwnerEmail
+              verifiedEmail && storeOwnerEmail && verifiedEmail === storeOwnerEmail
             );
-            const matchesOwnerId = Boolean(!storeOwnerId || storeOwnerId === user.uid);
+            const matchesOwnerId = Boolean(
+              verifiedUid && storeOwnerId && storeOwnerId === verifiedUid
+            );
 
             if (matchesEmail && matchesOwnerId) {
-              if (!storeOwnerId) {
-                try {
-                  await updateDoc(storeRef, { ownerId: user.uid });
-                } catch (syncErr) {
-                  console.warn("No se pudo sincronizar ownerId:", syncErr);
-                }
-              }
               if (isMounted) setIsAuthorized(true);
               return;
             }
