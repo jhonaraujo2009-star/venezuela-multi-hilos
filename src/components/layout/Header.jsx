@@ -20,7 +20,7 @@ export default function Header({ onProductClick, onFilter }) {
   const searchRef = useRef(null);
   const menuRef = useRef(null);
   const { itemCount, setIsOpen } = useCart();
-  const { user } = useAuth();
+  const { user, hasValidStoreSession } = useAuth();
   
   const { storeData } = useApp(); 
   const navigate = useNavigate();
@@ -357,13 +357,26 @@ export default function Header({ onProductClick, onFilter }) {
                 <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50 p-2">
                   <button
                     onClick={() => {
+                      const cleanStoreId = storeData?.id
+                        ? String(storeData.id).trim().toLowerCase()
+                        : "";
+                      // 🔒 Regla Estricta de Aislamiento: Ni siquiera el Super Admin puede saltar el login de la tienda
                       const canManageThisStore =
-                        storeData?.id &&
-                        (isSuperAdmin(user) ||
-                          (user?.email &&
+                        Boolean(cleanStoreId) &&
+                        hasValidStoreSession(cleanStoreId, user) &&
+                        Boolean(
+                          user?.email &&
                             storeData?.ownerEmail &&
-                            user.email.trim().toLowerCase() === storeData.ownerEmail.trim().toLowerCase()));
-                      navigate(canManageThisStore ? `/${storeData.id}/admin` : "/login");
+                            user.email.trim().toLowerCase() ===
+                              storeData.ownerEmail.trim().toLowerCase()
+                        ) &&
+                        (!storeData?.ownerId || user?.uid === storeData.ownerId);
+
+                      const loginUrl = cleanStoreId
+                        ? `/login?store=${encodeURIComponent(cleanStoreId)}`
+                        : "/login";
+
+                      navigate(canManageThisStore ? `/${cleanStoreId}/admin` : loginUrl);
                       setMenuOpen(false);
                     }}
                     className="w-full text-left px-4 py-3 text-xs font-black uppercase tracking-widest hover:bg-gray-50 text-gray-800 flex items-center gap-3 rounded-xl transition-colors"

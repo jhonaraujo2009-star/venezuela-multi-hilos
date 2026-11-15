@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useApp } from "../../context/AppContext";
 import { auth, db } from "../../config/firebase";
@@ -7,13 +8,25 @@ import {
   reauthenticateWithCredential,
   updatePassword,
 } from "firebase/auth";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import toast from "react-hot-toast";
-import { isSuperAdmin } from "../../config/constants";
 
 export default function AdminSecurity() {
-  const { user, logout } = useAuth();
+  const { storeId } = useParams();
+  // Contexto de Autenticación (quién navega actualmente)
+  const { user: authUser, logout } = useAuth();
+  // Contexto Global de Tienda Activa
   const { storeData } = useApp();
+
+  const cleanStoreId = storeId
+    ? decodeURIComponent(storeId).trim().toLowerCase()
+    : storeData?.id
+      ? String(storeData.id).trim().toLowerCase()
+      : "";
+
+  // Contexto del Inquilino (datos extraídos estrictamente de la BD usando storeId)
+  const [tenantStore, setTenantStore] = useState(null);
+  const [loadingTenant, setLoadingTenant] = useState(true);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -25,15 +38,55 @@ export default function AdminSecurity() {
 
   const [loading, setLoading] = useState(false);
 
-  // Email registrado de la cuenta
-  const userEmail = user?.email || storeData?.ownerEmail || "";
-  const primaryColor = storeData?.primaryColor || "#ec4899";
-  const isInspectingOtherStore = Boolean(
-    isSuperAdmin(user) &&
-      storeData?.ownerEmail &&
-      user?.email &&
-      user.email.trim().toLowerCase() !== storeData.ownerEmail.trim().toLowerCase()
-  );
+  // 🔒 PETICIÓN DIRECTA A LA BASE DE DATOS POR STORE_ID (Ignorando el token JWT de sesión)
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchTenantStoreDetails = async () => {
+      if (!cleanStoreId) {
+        if (isMounted) {
+          setTenantStore(null);
+          setLoadingTenant(false);
+        }
+        return;
+      }
+
+      setLoadingTenant(true);
+      try {
+        const storeRef = doc(db, "stores", cleanStoreId);
+        const storeSnap = await getDoc(storeRef);
+        if (!isMounted) return;
+
+        if (storeSnap.exists() && storeSnap.id.trim().toLowerCase() === cleanStoreId) {
+          setTenantStore({ id: storeSnap.id, ...storeSnap.data() });
+        } else {
+          setTenantStore(null);
+        }
+      } catch (err) {
+        console.error("Error cargando perfil de tienda desde BD:", err);
+        if (isMounted) setTenantStore(null);
+      } finally {
+        if (isMounted) setLoadingTenant(false);
+      }
+    };
+
+    fetchTenantStoreDetails();
+    return () => {
+      isMounted = false;
+    };
+  }, [cleanStoreId]);
+
+  // Perfil exclusivo del inquilino actual (nunca usa datos de sesión/JWT)
+  const currentStore =
+    tenantStore ||
+    (storeData?.id && String(storeData.id).trim().toLowerCase() === cleanStoreId
+      ? storeData
+      : null);
+
+  // 🔒 DATA BINDING ESTRICTO: Correo y UID leídos única y exclusivamente del perfil de la tienda en BD
+  const storeOwnerEmail = currentStore?.ownerEmail || currentStore?.email || "";
+  const storeOwnerUid = currentStore?.ownerId || "";
+  const primaryColor = currentStore?.primaryColor || "#ec4899";
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -59,24 +112,36 @@ export default function AdminSecurity() {
       return;
     }
 
-    if (!auth.currentUser || !userEmail) {
-      toast.error("Sesión no válida. Vuelve a iniciar sesión.");
+    if (!auth.currentUser || !storeOwnerEmail) {
+      toast.error("Sesión o correo de tienda no válido. Vuelve a iniciar sesión.");
+      return;
+    }
+
+    // Verificar que el usuario autenticado coincida estrictamente con el propietario registrado de esta tienda
+    const activeAuthEmail = auth.currentUser.email
+      ? auth.currentUser.email.trim().toLowerCase()
+      : "";
+    if (
+      activeAuthEmail !== storeOwnerEmail.trim().toLowerCase() ||
+      (storeOwnerUid && auth.currentUser.uid !== storeOwnerUid)
+    ) {
+      toast.error("Acceso denegado: Solo el propietario titular de esta tienda puede cambiar su contraseña.");
       return;
     }
 
     setLoading(true);
     try {
-      // 1. Reautenticar al usuario para garantizar la seguridad
-      const credential = EmailAuthProvider.credential(userEmail, currentPassword);
+      // 1. Reautenticar usando exclusivamente el correo propietario de la tienda
+      const credential = EmailAuthProvider.credential(storeOwnerEmail, currentPassword);
       await reauthenticateWithCredential(auth.currentUser, credential);
 
       // 2. Actualizar la contraseña en Firebase Auth
       await updatePassword(auth.currentUser, newPassword);
 
-      // 3. Registrar fecha de actualización en Firestore si existe la tienda y es el dueño directo
-      if (storeData?.id && !isInspectingOtherStore) {
+      // 3. Registrar fecha de actualización en Firestore para esta tienda
+      if (currentStore?.id) {
         try {
-          await updateDoc(doc(db, "stores", storeData.id), {
+          await updateDoc(doc(db, "stores", currentStore.id), {
             last_password_change: serverTimestamp(),
           });
         } catch (dbErr) {
@@ -142,12 +207,16 @@ export default function AdminSecurity() {
 
         <div>
           <label className="block text-xs font-bold text-gray-700 mb-1.5">
-            Correo Registrado de la Cuenta
+            Correo Registrado de la Tienda ({currentStore?.nombre || cleanStoreId})
           </label>
           <div className="relative">
             <input
               type="email"
-              value={userEmail}
+              value={
+                loadingTenant && !storeOwnerEmail
+                  ? "Cargando correo de la tienda..."
+                  : storeOwnerEmail || "Sin correo asignado en esta tienda"
+              }
               readOnly
               disabled
               className="w-full bg-gray-100/80 border border-gray-200 rounded-2xl px-4 py-3.5 text-sm font-bold text-gray-700 outline-none cursor-not-allowed select-all"
@@ -157,15 +226,6 @@ export default function AdminSecurity() {
             </div>
           </div>
         </div>
-
-        {isInspectingOtherStore && storeData?.ownerEmail && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 text-xs text-amber-900">
-            <span className="font-black uppercase text-[10px] block text-amber-700 mb-0.5">
-              👑 Vista Súper Admin — Correo del dueño de esta tienda:
-            </span>
-            <span className="font-mono font-bold select-all">{storeData.ownerEmail}</span>
-          </div>
-        )}
 
         {/* ALERTA DE SEGURIDAD EXPLICATIVA */}
         <div className="bg-blue-50/70 border border-blue-100 rounded-2xl p-4 flex items-start gap-3 text-xs leading-relaxed text-blue-900">
@@ -317,7 +377,7 @@ export default function AdminSecurity() {
               Tienda Asignada
             </span>
             <span className="font-bold text-gray-800 text-sm">
-              {storeData?.nombre || "Mi Tienda"}
+              {currentStore?.nombre || cleanStoreId || "Mi Tienda"}
             </span>
           </div>
 
@@ -326,16 +386,16 @@ export default function AdminSecurity() {
               Enlace de tu Tienda
             </span>
             <span className="font-bold text-pink-600 text-sm">
-              /{storeData?.id || ""}
+              /{currentStore?.id || cleanStoreId || ""}
             </span>
           </div>
 
           <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-100 sm:col-span-2">
             <span className="text-[10px] text-gray-400 uppercase font-black block">
-              Identificador Único (UID)
+              Identificador Único del Propietario (UID de Tienda)
             </span>
             <span className="font-mono text-[11px] text-gray-600 select-all break-all">
-              {user?.uid || "No identificado"}
+              {storeOwnerUid || "No identificado"}
             </span>
           </div>
         </div>

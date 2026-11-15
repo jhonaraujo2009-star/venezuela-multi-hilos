@@ -6,11 +6,13 @@ import { db, auth } from "../config/firebase";
 import toast from "react-hot-toast";
 import { isSuperAdmin } from "../config/constants";
 import { useApp } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext";
 
 const RESERVED_URLS = ['admin', 'login', 'registro-vendedor', 'super-admin', 'search', 'ofertas', 'preguntas', 'aprender', 'api'];
 
 export default function RegisterStorePage() {
   const { globalBranding } = useApp() || {};
+  const { activateStoreSession, activateSuperAdminSession } = useAuth();
   const [formData, setFormData] = useState({
     storeName: "",
     storeUrl: "",
@@ -186,11 +188,14 @@ export default function RegisterStorePage() {
       if (isSuperAdmin(cleanEmail)) {
         const choice = window.confirm("¡Bienvenido, Jefe! 👑\n\n¿Deseas entrar al PANEL DE CONTROL TOTAL (Súper Admin)?\n\n(Aceptar = Súper Admin / Cancelar = Aprender a usar la App)");
         if (choice) {
+          activateSuperAdminSession(user);
           navigate("/super-admin", { replace: true });
         } else {
+          activateStoreSession(cleanUrl, user);
           navigate(`/${cleanUrl}/aprender`, { replace: true });
         }
       } else {
+        activateStoreSession(cleanUrl, user);
         navigate(`/${cleanUrl}/aprender`, { replace: true });
       }
 

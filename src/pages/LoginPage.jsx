@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useApp } from "../context/AppContext";
 import toast from "react-hot-toast";
@@ -9,6 +9,7 @@ import {
   where,
   getDocs,
   doc,
+  getDoc,
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
@@ -22,6 +23,11 @@ import { isSuperAdmin as checkIsSuperAdmin } from "../config/constants";
 
 export default function LoginPage() {
   const { globalBranding } = useApp() || {};
+  const [searchParams] = useSearchParams();
+  const rawStoreParam = searchParams.get("store");
+  const targetStoreId = rawStoreParam ? decodeURIComponent(rawStoreParam).trim().toLowerCase() : "";
+
+  const [targetStoreInfo, setTargetStoreInfo] = useState(null);
   const [viewMode, setViewMode] = useState("login"); // 'login' | 'forgot' | 'reset'
 
   // Estados para inicio de sesión
@@ -39,8 +45,36 @@ export default function LoginPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [recoveryLoading, setRecoveryLoading] = useState(false);
 
-  const { login, logout, currentUser, user } = useAuth();
+  const {
+    login,
+    logout,
+    currentUser,
+    user,
+    tenantSession,
+    activateStoreSession,
+    activateSuperAdminSession,
+    hasValidStoreSession,
+  } = useAuth();
   const navigate = useNavigate();
+
+  // 🌟 Cargar información pública de la tienda si el login es específico para una tienda (?store=...)
+  useEffect(() => {
+    let isMounted = true;
+    if (!targetStoreId) {
+      setTargetStoreInfo(null);
+      return;
+    }
+    getDoc(doc(db, "stores", targetStoreId))
+      .then((snap) => {
+        if (isMounted && snap.exists()) {
+          setTargetStoreInfo({ id: snap.id, ...snap.data() });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [targetStoreId]);
 
   // 🌟 MAGIA: Si viene con un enlace de restablecimiento en la URL (?mode=resetPassword&oobCode=XYZ)
   useEffect(() => {
@@ -63,50 +97,44 @@ export default function LoginPage() {
     }
   }, []);
 
-  // 🌟 Redirección automática si YA hay una sesión activa (solo si no está restaurando contraseña)
+  // 🌟 Redirección automática SOLO si existe un token de sesión válido para el destino (Evita Session Bleeding)
   useEffect(() => {
     const activeUser = currentUser || user;
-    if (activeUser && viewMode === "login") {
-      if (checkIsSuperAdmin(activeUser)) {
-        navigate("/super-admin");
-      } else {
-        const fetchMyStore = async () => {
-          const userEmail = activeUser.email ? activeUser.email.trim().toLowerCase() : "";
-          if (!userEmail) {
-            navigate("/");
-            return;
-          }
+    if (!activeUser || viewMode !== "login" || loading) return;
 
-          // 🔒 Regla Estricta: 1 Correo = 1 Tienda Única (búsqueda exclusiva por ownerEmail)
-          const snap = await getDocs(
-            query(
-              collection(db, "stores"),
-              where("ownerEmail", "==", userEmail)
-            )
-          );
-
-          if (!snap.empty) {
-            const storeDoc = snap.docs[0];
-            // Auto-sincronizar ownerId con el UID del dueño actual si estaba desfasado
-            if (storeDoc.data().ownerId !== activeUser.uid) {
-              try {
-                await updateDoc(doc(db, "stores", storeDoc.id), { ownerId: activeUser.uid });
-              } catch (e) {
-                console.warn("Error sincronizando ownerId:", e);
-              }
-            }
-            navigate(`/${storeDoc.id}/admin`);
-          } else {
-            navigate("/");
-          }
-        };
-        fetchMyStore();
+    // 🔒 Si se solicita entrar a una tienda específica (?store=xyz):
+    // Solo redirigir si ya posee un token válido y exclusivo para esa tienda.
+    // NUNCA redirigir al Super Admin ni a otra tienda distinta.
+    if (targetStoreId) {
+      if (hasValidStoreSession(targetStoreId, activeUser)) {
+        navigate(`/${targetStoreId}/admin`, { replace: true });
       }
+      return;
     }
-  }, [currentUser, user, navigate, viewMode]);
+
+    // 🔒 En /login general: solo redirigir si ya existe una sesión explícita emitida en esta sesión
+    if (tenantSession?.role === "super_admin" && checkIsSuperAdmin(activeUser)) {
+      navigate("/super-admin", { replace: true });
+    } else if (
+      tenantSession?.role === "store_admin" &&
+      tenantSession?.storeId &&
+      hasValidStoreSession(tenantSession.storeId, activeUser)
+    ) {
+      navigate(`/${tenantSession.storeId}/admin`, { replace: true });
+    }
+  }, [
+    currentUser,
+    user,
+    navigate,
+    viewMode,
+    targetStoreId,
+    tenantSession,
+    hasValidStoreSession,
+    loading,
+  ]);
 
   // ========================================================
-  // 1. INICIAR SESIÓN NORMAL
+  // 1. INICIAR SESIÓN NORMAL (CON AISLAMIENTO DE INQUILINOS)
   // ========================================================
   const handleLogin = async (e) => {
     if (e) e.preventDefault();
@@ -116,15 +144,66 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      const userCred = await login(email.trim().toLowerCase(), password);
-      const userUid = userCred.user.uid;
-
-      const isSuperAdmin = checkIsSuperAdmin(email);
-
       const cleanEmail = email.trim().toLowerCase();
 
-      // 🔒 2. Búsqueda estricta por ownerEmail (1 Correo = 1 Tienda Única)
-      // Se elimina la búsqueda por ownerId que permitía a un usuario anterior ingresar por UID
+      // 🔒 CASO A: Login estricto para una tienda específica (/login?store=xyz)
+      // Nadie (ni siquiera el Super Admin ni otro vendedor) puede entrar con credenciales que no sean las de esta tienda.
+      if (targetStoreId) {
+        const targetRef = doc(db, "stores", targetStoreId);
+        const targetSnap = await getDoc(targetRef);
+
+        if (!targetSnap.exists()) {
+          toast.error("La tienda solicitada no existe.");
+          setLoading(false);
+          return;
+        }
+
+        const targetData = targetSnap.data();
+        const storeOwnerEmail = targetData.ownerEmail
+          ? targetData.ownerEmail.trim().toLowerCase()
+          : "";
+
+        if (!storeOwnerEmail || cleanEmail !== storeOwnerEmail) {
+          toast.error(
+            "Acceso denegado: Este usuario no pertenece a esta tienda. Ingresa el correo y clave exclusivos de esta tienda. 🛑"
+          );
+          setLoading(false);
+          return;
+        }
+
+        const userCred = await login(cleanEmail, password);
+        const userUid = userCred.user.uid;
+
+        const updates = {
+          last_login: serverTimestamp(),
+        };
+        if (targetData.ownerId !== userUid) {
+          updates.ownerId = userUid;
+        }
+
+        try {
+          const ipResponse = await fetch("https://ipapi.co/json/");
+          const ipData = await ipResponse.json();
+          updates.ip_operacion = ipData.ip || "Desconocida";
+          updates.pais_operacion = ipData.country_name || "Desconocido";
+          await updateDoc(targetRef, updates);
+        } catch (geoError) {
+          await updateDoc(targetRef, updates);
+        }
+
+        // Emitir token exclusivo para esta tienda
+        activateStoreSession(targetStoreId, userCred.user);
+        navigate(`/${targetStoreId}/admin`, { replace: true });
+        toast.success("¡Bienvenido al panel de tu tienda! 🔐");
+        return;
+      }
+
+      // 🔒 CASO B: Login general (/login)
+      const userCred = await login(cleanEmail, password);
+      const userUid = userCred.user.uid;
+      const isSuperAdmin = checkIsSuperAdmin(cleanEmail);
+
+      // Búsqueda estricta por ownerEmail (1 Correo = 1 Tienda Única)
       const qEmail = query(
         collection(db, "stores"),
         where("ownerEmail", "==", cleanEmail)
@@ -140,7 +219,6 @@ export default function LoginPage() {
           last_login: serverTimestamp(),
         };
 
-        // Si el ownerId no corresponde al UID del usuario legítimo actual, se corrige inmediatamente
         if (storeData.ownerId !== userUid) {
           updates.ownerId = userUid;
         }
@@ -160,22 +238,26 @@ export default function LoginPage() {
             "¡Bienvenido, Jefe! 👑\n\n¿Deseas entrar al PANEL DE CONTROL TOTAL (Súper Admin)?\n\n(Aceptar = Súper Admin / Cancelar = Administrar mi Tienda)"
           );
           if (choice) {
-            navigate("/super-admin");
+            activateSuperAdminSession(userCred.user);
+            navigate("/super-admin", { replace: true });
             toast.success("¡Bienvenido al Olimpo! ⚡");
           } else {
-            navigate(`/${storeDoc.id}/admin`);
+            activateStoreSession(storeDoc.id, userCred.user);
+            navigate(`/${storeDoc.id}/admin`, { replace: true });
             toast.success("¡Bienvenido al panel admin! 🔐");
           }
         } else {
-          navigate(`/${storeDoc.id}/admin`);
+          activateStoreSession(storeDoc.id, userCred.user);
+          navigate(`/${storeDoc.id}/admin`, { replace: true });
           toast.success("¡Bienvenido al panel admin! 🔐");
         }
       } else if (isSuperAdmin) {
-        navigate("/super-admin");
+        activateSuperAdminSession(userCred.user);
+        navigate("/super-admin", { replace: true });
         toast.success("¡Bienvenido al Olimpo! ⚡");
       } else {
         toast.error("Tu usuario no tiene una tienda asignada.");
-        logout();
+        await logout();
       }
     } catch (error) {
       console.error("Detalle del error:", error);
@@ -288,17 +370,24 @@ export default function LoginPage() {
 
           if (!querySnapshot.empty) {
             const storeDoc = querySnapshot.docs[0];
-            const storeData = storeDoc.data();
-            // Auto-sincronizar ownerId con el UID del dueño actual
-            if (storeData.ownerId !== userUid) {
-              await updateDoc(doc(db, "stores", storeDoc.id), {
-                ownerId: userUid,
-              }).catch(err => console.warn("No se pudo actualizar ownerId tras reset:", err));
+            if (targetStoreId && storeDoc.id.toLowerCase() !== targetStoreId) {
+              toast.error("Esta cuenta no corresponde a la tienda solicitada.");
+              await logout();
+            } else {
+              const storeData = storeDoc.data();
+              // Auto-sincronizar ownerId con el UID del dueño actual
+              if (storeData.ownerId !== userUid) {
+                await updateDoc(doc(db, "stores", storeDoc.id), {
+                  ownerId: userUid,
+                }).catch(err => console.warn("No se pudo actualizar ownerId tras reset:", err));
+              }
+              activateStoreSession(storeDoc.id, userCred.user);
+              navigate(`/${storeDoc.id}/admin`, { replace: true });
+              return;
             }
-            navigate(`/${storeDoc.id}/admin`);
-            return;
-          } else if (isSuperAdmin) {
-            navigate("/super-admin");
+          } else if (isSuperAdmin && !targetStoreId) {
+            activateSuperAdminSession(userCred.user);
+            navigate("/super-admin", { replace: true });
             return;
           }
         } catch (loginErr) {
@@ -409,10 +498,14 @@ export default function LoginPage() {
         {/* Botón Volver Superior */}
         <div className="w-full max-w-md flex items-center justify-between mb-6 lg:absolute lg:top-8 lg:left-8 lg:mb-0 lg:w-auto">
           <button
-            onClick={() => navigate("/")}
+            onClick={() => navigate(targetStoreId ? `/${targetStoreId}` : "/")}
             className="text-xs sm:text-sm font-bold text-gray-500 hover:text-gray-900 flex items-center gap-2 transition-colors py-1.5 px-3 rounded-xl hover:bg-gray-100/70"
           >
-            ← <span className="hidden sm:inline">Volver a la tienda principal</span><span className="sm:hidden">Volver</span>
+            ←{" "}
+            <span className="hidden sm:inline">
+              {targetStoreId ? "Volver a la tienda" : "Volver a la tienda principal"}
+            </span>
+            <span className="sm:hidden">Volver</span>
           </button>
         </div>
 
@@ -453,16 +546,32 @@ export default function LoginPage() {
           {viewMode === "login" && (
             <div>
               {/* Cabecera */}
-              <div className="text-center sm:text-left mb-8">
+              <div className="text-center sm:text-left mb-6">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-pink-50 text-pink-600 text-[10px] font-black uppercase tracking-wider mb-3">
-                  🔐 Acceso Seguro
+                  🔐 Acceso Seguro e Independiente
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight">
-                  ¡Hola de nuevo! 👋
+                  {targetStoreId
+                    ? `Admin: ${targetStoreInfo?.nombre || targetStoreId}`
+                    : "¡Hola de nuevo! 👋"}
                 </h2>
                 <p className="text-gray-500 text-xs sm:text-sm mt-1">
-                  Ingresa tus credenciales para administrar tu tienda.
+                  {targetStoreId
+                    ? "Ingresa el usuario y contraseña exclusivos de esta tienda para acceder a su panel."
+                    : "Ingresa tus credenciales para administrar tu tienda."}
                 </p>
+
+                {targetStoreId && (
+                  <div className="mt-4 p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-left flex items-start gap-2.5">
+                    <span className="text-base shrink-0">🔒</span>
+                    <div className="text-[11px] text-amber-900 leading-relaxed">
+                      <span className="font-black block uppercase tracking-wider text-[10px] text-amber-700">
+                        Tienda Aislada (/{targetStoreId})
+                      </span>
+                      Nadie puede entrar sin el correo y clave registrados específicamente para esta tienda.
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Formulario */}

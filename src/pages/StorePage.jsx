@@ -28,7 +28,7 @@ export default function StorePage() {
 
   const { itemCount, total, setIsOpen, isOpen } = useCart();
   const { bsPrice, storeData, loading, globalBranding } = useApp();
-  const { user } = useAuth();
+  const { user, hasValidStoreSession } = useAuth();
 
   const normalizedStoreId = storeId ? decodeURIComponent(storeId).trim().toLowerCase() : "";
   const showFloatingElements = !isOpen && !selectedProduct;
@@ -38,9 +38,12 @@ export default function StorePage() {
   const isStoreDisabled = storeData?.isActive === false;
   const isUserSuperAdmin = isSuperAdmin(user);
   const isStoreOwner = Boolean(
-    user?.email &&
+    normalizedStoreId &&
+      hasValidStoreSession(normalizedStoreId, user) &&
+      user?.email &&
       storeData?.ownerEmail &&
-      user.email.trim().toLowerCase() === storeData.ownerEmail.trim().toLowerCase()
+      user.email.trim().toLowerCase() === storeData.ownerEmail.trim().toLowerCase() &&
+      (!storeData?.ownerId || user?.uid === storeData.ownerId)
   );
   const canBypassLock = isUserSuperAdmin || isStoreOwner;
 
@@ -168,12 +171,14 @@ export default function StorePage() {
             ⚠️ Vista previa privada ({isStoreDisabled ? "Tienda desactivada" : "Suspendida por comisión pendiente"}) — Oculta al público.
           </span>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate(`/${storeData?.id}/admin`)}
-              className="bg-white text-amber-900 px-3 py-1 rounded-lg font-black text-[11px] hover:bg-amber-50 transition-colors"
-            >
-              ⚙️ Panel Admin
-            </button>
+            {isStoreOwner && (
+              <button
+                onClick={() => navigate(`/${storeData?.id}/admin`)}
+                className="bg-white text-amber-900 px-3 py-1 rounded-lg font-black text-[11px] hover:bg-amber-50 transition-colors"
+              >
+                ⚙️ Panel Admin
+              </button>
+            )}
             {isUserSuperAdmin && (
               <button
                 onClick={() => navigate("/super-admin")}

@@ -7,6 +7,39 @@ import { useBackButton } from "../../hooks/useBackButton";
 import { normalizeImageUrl } from "../../utils/imageNormalizer";
 import toast from "react-hot-toast";
 
+const formatStoreWhatsAppPhone = (rawValue) => {
+  if (!rawValue) return "";
+  let digits = String(rawValue).replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("0")) {
+    digits = "58" + digits.slice(1);
+  } else if (digits.length === 10 && /^(412|414|424|416|426)/.test(digits)) {
+    digits = "58" + digits;
+  }
+  return digits.length >= 10 ? digits : "";
+};
+
+const extractStrictStorePhone = (storeDoc, paymentDoc = null, storePayments = []) => {
+  if (!storeDoc?.id) return "";
+  const candidates = [
+    storeDoc.phone,
+    storeDoc.whatsappNumber,
+    storeDoc.whatsappWidget?.number,
+    storeDoc.telefono,
+    !paymentDoc?.storeId || paymentDoc.storeId === storeDoc.id ? paymentDoc?.phone : "",
+    ...(Array.isArray(storePayments)
+      ? storePayments
+          .filter((p) => !p?.storeId || p.storeId === storeDoc.id)
+          .map((p) => p?.phone)
+      : []),
+  ];
+  for (const candidate of candidates) {
+    const formatted = formatStoreWhatsAppPhone(candidate);
+    if (formatted) return formatted;
+  }
+  return "";
+};
+
 export default function CartDrawer({ onSelectProduct }) {
   const { 
     items, 
@@ -78,30 +111,41 @@ export default function CartDrawer({ onSelectProduct }) {
     }, 0);
   }, [selectedItems]);
 
-  // 🌟 CARGAR INFORMACIÓN DE LAS TIENDAS PRESENTES EN LA BOLSA
+  // 🌟 CARGAR INFORMACIÓN DE LAS TIENDAS PRESENTES EN LA BOLSA (ESTRICTO POR STORE_ID DESDE BD)
   useEffect(() => {
     if (!isOpen) return;
 
     storeGroups.forEach((group) => {
-      const sId = group.storeId;
-      if (!sId) return;
+      const sId = group.storeId ? String(group.storeId).trim().toLowerCase() : "";
+      if (!sId || sId === "tienda") return;
 
       if (sId === storeData?.id && storeData?.nombre) {
-        setStoreMetaMap((prev) => (prev[sId]?.nombre ? prev : { ...prev, [sId]: storeData }));
-        return;
+        setStoreMetaMap((prev) => ({ ...prev, [sId]: storeData }));
       }
 
-      setStoreMetaMap((prev) => {
-        if (prev[sId]) return prev;
-        getDoc(doc(db, "stores", sId))
-          .then((sSnap) => {
-            if (sSnap.exists()) {
-              setStoreMetaMap((p) => ({ ...p, [sId]: { id: sSnap.id, ...sSnap.data() } }));
-            }
-          })
-          .catch((e) => console.warn("No se pudo cargar info de la tienda:", sId, e));
-        return prev;
-      });
+      getDoc(doc(db, "stores", sId))
+        .then((sSnap) => {
+          if (sSnap.exists() && sSnap.id.trim().toLowerCase() === sId) {
+            const data = sSnap.data() || {};
+            const resolvedPhone = String(
+              data.phone ||
+                data.whatsappNumber ||
+                data.whatsappWidget?.number ||
+                data.telefono ||
+                ""
+            ).trim();
+            setStoreMetaMap((p) => ({
+              ...p,
+              [sId]: {
+                id: sSnap.id,
+                ...data,
+                phone: resolvedPhone,
+                whatsappNumber: data.whatsappNumber || resolvedPhone,
+              },
+            }));
+          }
+        })
+        .catch((e) => console.warn("No se pudo cargar info de la tienda:", sId, e));
     });
   }, [isOpen, storeGroups, storeData]);
 
@@ -203,9 +247,27 @@ export default function CartDrawer({ onSelectProduct }) {
 
   const activeStoreData = useMemo(() => {
     if (!activeCheckoutStoreId) return null;
-    if (storeData?.id === activeCheckoutStoreId) return storeData;
-    return storeMetaMap[activeCheckoutStoreId] || { id: activeCheckoutStoreId, nombre: activeCheckoutStoreId };
+    const normalizedCheckoutId = String(activeCheckoutStoreId).trim().toLowerCase();
+    const fromMap = storeMetaMap[normalizedCheckoutId];
+    const fromContext =
+      storeData?.id && String(storeData.id).trim().toLowerCase() === normalizedCheckoutId
+        ? storeData
+        : null;
+    if (fromContext && fromMap) {
+      return { ...fromContext, ...fromMap };
+    }
+    return fromMap || fromContext || { id: normalizedCheckoutId, nombre: activeCheckoutStoreId };
   }, [activeCheckoutStoreId, storeData, storeMetaMap]);
+
+  // 🔒 NÚMERO DE WHATSAPP ESTRICTAMENTE DINÁMICO DE LA TIENDA ACTIVA (Cero fallbacks globales)
+  const activeStorePhone = useMemo(() => {
+    if (!activeCheckoutStoreId || !activeStoreData) return "";
+    const normalizedCheckoutId = String(activeCheckoutStoreId).trim().toLowerCase();
+    if (String(activeStoreData.id || "").trim().toLowerCase() !== normalizedCheckoutId) {
+      return "";
+    }
+    return extractStrictStorePhone(activeStoreData, selectedPayment, paymentMethods);
+  }, [activeCheckoutStoreId, activeStoreData, selectedPayment, paymentMethods]);
 
   // 🌟 CARGAR MÉTODOS DE PAGO DE LA TIENDA ACTIVA AL FINALIZAR
   useEffect(() => {
@@ -321,6 +383,9 @@ export default function CartDrawer({ onSelectProduct }) {
   const sendOrder = async () => {
     if (selectedItems.length === 0) return toast.error("No hay artículos seleccionados");
     if (!customer.name || !customer.phone) return toast.error("Dinos tu nombre y teléfono");
+    if (!activeCheckoutStoreId) return toast.error("No se pudo identificar la tienda de la orden");
+
+    const normalizedCheckoutId = String(activeCheckoutStoreId).trim().toLowerCase();
 
     const effectivePayment = selectedPayment || {
       id: "acordar_vendedor",
@@ -329,26 +394,42 @@ export default function CartDrawer({ onSelectProduct }) {
       idNumber: "N/A"
     };
 
-    const rawPhone = effectivePayment?.phone || 
-                     activeStoreData?.whatsappWidget?.number || 
-                     activeStoreData?.telefono || 
-                     settings?.whatsappNumber;
-
-    let targetPhone = String(rawPhone || "").replace(/\D/g, "");
-    if (targetPhone.startsWith("0")) {
-      targetPhone = "58" + targetPhone.slice(1);
-    } else if (targetPhone.length === 10 && /^(412|414|424|416|426)/.test(targetPhone)) {
-      targetPhone = "58" + targetPhone;
-    }
-
     try {
+      // 🔒 Validación estricta contra la BD por storeId (sin ningún fallback global ni del Super Admin)
+      let verifiedStoreDoc =
+        activeStoreData?.id &&
+        String(activeStoreData.id).trim().toLowerCase() === normalizedCheckoutId
+          ? activeStoreData
+          : null;
+
+      try {
+        const freshStoreSnap = await getDoc(doc(db, "stores", normalizedCheckoutId));
+        if (freshStoreSnap.exists() && freshStoreSnap.id.trim().toLowerCase() === normalizedCheckoutId) {
+          verifiedStoreDoc = { id: freshStoreSnap.id, ...freshStoreSnap.data() };
+          setStoreMetaMap((prev) => ({ ...prev, [normalizedCheckoutId]: verifiedStoreDoc }));
+        }
+      } catch (fetchErr) {
+        console.warn("Error verificando contacto directo de la tienda:", fetchErr);
+      }
+
+      const targetPhone = extractStrictStorePhone(
+        verifiedStoreDoc,
+        effectivePayment,
+        paymentMethods
+      );
+
+      if (!targetPhone) {
+        toast.error("Tienda sin contacto configurado");
+        return;
+      }
+
       const orderData = { 
         ...customer, 
         paymentId: effectivePayment.id,
         paymentMethod: effectivePayment.bankName,
         total 
       };
-      await createOrder(orderData, activeCheckoutStoreId, selectedItems, total);
+      await createOrder(orderData, normalizedCheckoutId, selectedItems, total);
 
       if (coupon?.id) {
         try {
@@ -369,7 +450,7 @@ export default function CartDrawer({ onSelectProduct }) {
         return `🔹 *${i.product.name}*${modelTag}${variantTag} (x${i.quantity}) ➔ $${(uPrice * i.quantity).toFixed(2)}${offerTag}`;
       }).join("\n");
       
-      const storeDisplayName = (activeStoreData?.nombre || activeCheckoutStoreId || "TIENDA").toUpperCase();
+      const storeDisplayName = (verifiedStoreDoc?.nombre || activeStoreData?.nombre || normalizedCheckoutId || "TIENDA").toUpperCase();
 
       const paymentDetails = [];
       if (effectivePayment.bankName) {
@@ -417,9 +498,7 @@ ${paymentDetails.join("\n")}
 _Por favor, adjunte el capture o comprobante de su transferencia/pago móvil por este chat para procesar y despachar su orden de inmediato. ¡Muchas gracias por su compra!_ 🙌`;
 
       const encodedMsg = encodeURIComponent(message);
-      const whatsappUrl = targetPhone 
-        ? `https://api.whatsapp.com/send?phone=${targetPhone}&text=${encodedMsg}`
-        : `https://api.whatsapp.com/send?text=${encodedMsg}`;
+      const whatsappUrl = `https://api.whatsapp.com/send?phone=${targetPhone}&text=${encodedMsg}`;
 
       window.open(whatsappUrl, "_blank");
       
@@ -788,6 +867,20 @@ _Por favor, adjunte el capture o comprobante de su transferencia/pago móvil por
                 </p>
               </div>
 
+              {!activeStorePhone && (
+                <div className="bg-red-50 border border-red-200 p-4 rounded-2xl text-xs text-red-700 flex items-start gap-2.5">
+                  <span className="text-base leading-none">⚠️</span>
+                  <div>
+                    <p className="font-black uppercase tracking-wider text-red-800">
+                      Tienda sin contacto configurado
+                    </p>
+                    <p className="text-[11px] font-medium text-red-600 mt-0.5">
+                      Esta tienda aún no tiene un número de WhatsApp configurado para recibir pedidos.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-3">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
                   Información de Entrega
@@ -970,9 +1063,16 @@ _Por favor, adjunte el capture o comprobante de su transferencia/pago móvil por
                   <button 
                     type="button"
                     onClick={sendOrder}
-                    className="w-full py-4 bg-green-500 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-xl shadow-green-200 active:scale-95 transition-all flex items-center justify-center gap-2"
+                    disabled={!activeStorePhone}
+                    className={`w-full py-4 rounded-2xl font-black uppercase tracking-[0.2em] text-xs transition-all flex items-center justify-center gap-2 ${
+                      activeStorePhone
+                        ? "bg-green-500 text-white shadow-xl shadow-green-200 active:scale-95"
+                        : "bg-gray-200 text-gray-500 cursor-not-allowed opacity-80"
+                    }`}
                   >
-                    Confirmar por WhatsApp 📲
+                    {activeStorePhone
+                      ? "Confirmar por WhatsApp 📲"
+                      : "Tienda sin contacto configurado 🚫"}
                   </button>
                   <button 
                     type="button"

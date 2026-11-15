@@ -369,9 +369,19 @@ export default function HomePage() {
   const searchContainerRef = useRef(null);
 
   const navigate = useNavigate();
-  const { currentUser, user, logout } = useAuth();
+  const { currentUser, user, logout, tenantSession } = useAuth();
   const activeUser = currentUser || user;
   const { bsPrice } = useApp();
+
+  const handleGoToPanel = () => {
+    if (tenantSession?.role === "store_admin" && tenantSession?.storeId) {
+      navigate(`/${tenantSession.storeId}/admin`);
+    } else if (isSuperAdmin(activeUser)) {
+      navigate("/super-admin");
+    } else {
+      navigate("/login");
+    }
+  };
 
   const [currentSlide, setCurrentSlide] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
@@ -923,11 +933,15 @@ export default function HomePage() {
                   <button
                     onClick={() => {
                       setIsMobileMenuOpen(false);
-                      navigate(isSuperAdmin(activeUser) ? "/super-admin" : "/login");
+                      handleGoToPanel();
                     }}
                     className="flex-1 bg-slate-900 text-white font-bold py-2.5 rounded-xl transition-colors text-xs active:scale-95 shadow-xs hover:bg-pink-600"
                   >
-                    {isSuperAdmin(activeUser) ? "👑 Súper Admin" : "Ir a mi Panel"}
+                    {tenantSession?.role === "store_admin" && tenantSession?.storeId
+                      ? "Ir a mi Panel"
+                      : isSuperAdmin(activeUser)
+                      ? "👑 Súper Admin"
+                      : "Ir a mi Panel"}
                   </button>
                   <button
                     onClick={handleLogout}
@@ -1231,11 +1245,23 @@ export default function HomePage() {
               {activeUser ? (
                 <div className="hidden md:flex items-center gap-2">
                   <button
-                    onClick={() => navigate(isSuperAdmin(activeUser) ? "/super-admin" : "/login")}
+                    onClick={handleGoToPanel}
                     className="flex items-center gap-2 bg-slate-900 hover:bg-pink-600 text-white px-4 py-2.5 rounded-2xl text-xs font-bold transition-colors shadow-xs"
                   >
-                    <span>{isSuperAdmin(activeUser) ? "👑" : "⚡"}</span>
-                    <span>{isSuperAdmin(activeUser) ? "Súper Admin" : "Mi Panel"}</span>
+                    <span>
+                      {tenantSession?.role === "store_admin" && tenantSession?.storeId
+                        ? "⚡"
+                        : isSuperAdmin(activeUser)
+                        ? "👑"
+                        : "⚡"}
+                    </span>
+                    <span>
+                      {tenantSession?.role === "store_admin" && tenantSession?.storeId
+                        ? "Mi Panel"
+                        : isSuperAdmin(activeUser)
+                        ? "Súper Admin"
+                        : "Mi Panel"}
+                    </span>
                   </button>
                   <button
                     onClick={handleLogout}
@@ -2002,10 +2028,14 @@ export default function HomePage() {
                 </div>
               </div>
               <button
-                onClick={() => navigate(isSuperAdmin(activeUser) ? "/super-admin" : "/login")}
+                onClick={handleGoToPanel}
                 className="bg-white text-slate-950 hover:bg-pink-500 hover:text-white px-6 py-3 rounded-2xl font-black text-xs sm:text-sm transition-colors shrink-0"
               >
-                {isSuperAdmin(activeUser) ? "👑 Ir a Súper Admin →" : "Ir a mi Panel →"}
+                {tenantSession?.role === "store_admin" && tenantSession?.storeId
+                  ? "Ir a mi Panel →"
+                  : isSuperAdmin(activeUser)
+                  ? "👑 Ir a Súper Admin →"
+                  : "Ir a mi Panel →"}
               </button>
             </div>
           )}

@@ -1,26 +1,40 @@
 import { useState } from "react";
 import { useApp } from "../../context/AppContext";
+import toast from "react-hot-toast";
 
 export default function WhatsAppVIP() {
-  const { settings, storeData } = useApp();
+  const { storeData } = useApp();
   
   // 🌟 Estado para controlar si el usuario cerró el widget
   const [isVisible, setIsVisible] = useState(true);
   
-  const widget = storeData?.whatsappWidget || settings?.whatsappWidget;
+  // 🔒 AISLAMIENTO ESTRICTO DE INQUILINO: Leer única y exclusivamente de la tienda actual (sin fallback a settings globales)
+  const widget = storeData?.whatsappWidget;
+  const rawPhone =
+    widget?.number ||
+    storeData?.phone ||
+    storeData?.whatsappNumber ||
+    storeData?.telefono ||
+    "";
 
-  // Si está apagado, no hay número, o el usuario lo cerró, no mostramos nada
-  if (!widget?.active || !widget?.number || !isVisible) return null;
+  let cleanNumber = String(rawPhone || "").replace(/\D/g, "");
+  if (cleanNumber.startsWith("0")) {
+    cleanNumber = "58" + cleanNumber.slice(1);
+  } else if (cleanNumber.length === 10 && /^(412|414|424|416|426)/.test(cleanNumber)) {
+    cleanNumber = "58" + cleanNumber;
+  }
+  const hasValidStorePhone = cleanNumber.length >= 10;
+
+  // Si no hay tienda activa, está apagado, no tiene número propio configurado, o el usuario lo cerró, no mostramos nada
+  if (!storeData?.id || !widget?.active || !hasValidStorePhone || !isVisible) return null;
 
   const handleChat = () => {
-    let num = String(widget.number || "").replace(/\D/g, "");
-    if (num.startsWith("0")) {
-      num = "58" + num.slice(1);
-    } else if (num.length === 10 && /^(412|414|424|416|426)/.test(num)) {
-      num = "58" + num;
+    if (!hasValidStorePhone) {
+      toast.error("Tienda sin contacto configurado");
+      return;
     }
     const text = encodeURIComponent(widget.message || "Hola, necesito asesoría.");
-    window.open(`https://wa.me/${num}?text=${text}`, "_blank");
+    window.open(`https://wa.me/${cleanNumber}?text=${text}`, "_blank");
   };
 
   return (

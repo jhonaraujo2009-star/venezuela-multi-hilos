@@ -6,14 +6,14 @@ import { doc, setDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
 
 export default function AdminInterface() {
-  const { settings, storeData } = useApp();
+  const { storeData } = useApp();
   
   const [form, setForm] = useState({
-    announcementText: storeData?.announcementText ?? settings.announcementText ?? "",
-    heroTitle: storeData?.heroTitle ?? settings.heroTitle ?? "",
-    heroDescription: storeData?.heroDescription ?? settings.heroDescription ?? "",
-    legalText: storeData?.legalText ?? settings.legalText ?? "",
-    socialLinks: storeData?.socialLinks ?? settings.socialLinks ?? {},
+    announcementText: storeData?.announcementText ?? "",
+    heroTitle: storeData?.heroTitle ?? "",
+    heroDescription: storeData?.heroDescription ?? "",
+    legalText: storeData?.legalText ?? "",
+    socialLinks: storeData?.socialLinks ?? {},
   });
   
   const [uploading, setUploading] = useState(false);
@@ -69,8 +69,8 @@ export default function AdminInterface() {
     }
   };
 
-  // Variables visuales (le damos prioridad a los datos de la tienda)
-  const currentProfileImage = storeData?.profileImage || settings.profileImage;
+  // Variables visuales (exclusivas de los datos de la tienda)
+  const currentProfileImage = storeData?.profileImage || "";
 
   return (
     <div className="space-y-6">

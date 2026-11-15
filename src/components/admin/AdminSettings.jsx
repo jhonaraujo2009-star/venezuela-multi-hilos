@@ -25,8 +25,8 @@ export default function AdminSettings() {
   
   const [form, setForm] = useState({
     exchangeRate: storeData?.exchangeRate ?? settings.exchangeRate ?? "",
-    whatsappNumber: storeData?.whatsappNumber ?? settings.whatsappNumber ?? "",
-    primaryColor: storeData?.primaryColor ?? settings.primaryColor ?? "#ec4899",
+    whatsappNumber: storeData?.whatsappNumber || storeData?.phone || storeData?.whatsappWidget?.number || "",
+    primaryColor: storeData?.primaryColor || "#ec4899",
     storeName: storeData?.nombre ?? "",
     verification: {
       cedula: storeData?.verification?.cedula || "",
@@ -34,12 +34,15 @@ export default function AdminSettings() {
       youtubeLink: storeData?.verification?.youtubeLink || "",
       status: storeData?.verification?.status || "none",
     },
-    quickButtons: storeData?.quickButtons ?? settings.quickButtons ?? DEFAULT_QUICK_BUTTONS,
-    socialLinks: storeData?.socialLinks ?? settings.socialLinks ?? { instagram: "", tiktok: "", whatsapp: "" },
-    customIcons: storeData?.customIcons ?? settings.customIcons ?? { whatsapp: "", instagram: "", tiktok: "" },
-    shippingLogos: storeData?.shippingLogos ?? settings.shippingLogos ?? { mrw: "", tealca: "", zoom: "" },
-    appLogos: storeData?.appLogos ?? settings.appLogos ?? { icon192: "", icon512: "" },
-    whatsappWidget: storeData?.whatsappWidget ?? settings.whatsappWidget ?? DEFAULT_WHATSAPP_WIDGET
+    quickButtons: storeData?.quickButtons || DEFAULT_QUICK_BUTTONS,
+    socialLinks: storeData?.socialLinks || { instagram: "", tiktok: "", whatsapp: "" },
+    customIcons: storeData?.customIcons || { whatsapp: "", instagram: "", tiktok: "" },
+    shippingLogos: storeData?.shippingLogos || { mrw: "", tealca: "", zoom: "" },
+    appLogos: storeData?.appLogos || { icon192: "", icon512: "" },
+    whatsappWidget: {
+      ...DEFAULT_WHATSAPP_WIDGET,
+      ...(storeData?.whatsappWidget || {}),
+    }
   });
 
   const [saving, setSaving] = useState(false);
@@ -51,11 +54,12 @@ export default function AdminSettings() {
 
     if (loadedStoreIdRef.current !== storeData.id) {
       loadedStoreIdRef.current = storeData.id;
+      const storePhone = storeData.whatsappNumber || storeData.phone || storeData.whatsappWidget?.number || storeData.telefono || "";
       setForm({
         storeName: storeData.nombre ?? "",
         primaryColor: storeData.primaryColor || "#ec4899",
         exchangeRate: storeData.exchangeRate ?? settings.exchangeRate ?? "",
-        whatsappNumber: storeData.whatsappNumber ?? "",
+        whatsappNumber: storePhone,
         quickButtons: storeData.quickButtons || DEFAULT_QUICK_BUTTONS,
         socialLinks: storeData.socialLinks || { instagram: "", tiktok: "", whatsapp: "" },
         customIcons: storeData.customIcons || { whatsapp: "", instagram: "", tiktok: "" },
@@ -64,6 +68,7 @@ export default function AdminSettings() {
         whatsappWidget: {
           ...DEFAULT_WHATSAPP_WIDGET,
           ...(storeData.whatsappWidget || {}),
+          number: storeData.whatsappWidget?.number || storePhone,
         },
         verification: {
           cedula: storeData.verification?.cedula || "",
@@ -142,17 +147,23 @@ export default function AdminSettings() {
     }
     setSaving(true);
     try {
+      const cleanStorePhone = String(form.whatsappWidget?.number || form.whatsappNumber || "").trim();
       const storeUpdates = {
         nombre: form.storeName,
         primaryColor: form.primaryColor,
         exchangeRate: parseFloat(form.exchangeRate) || 0,
-        whatsappNumber: form.whatsappNumber || form.whatsappWidget?.number || "",
+        phone: cleanStorePhone,
+        whatsappNumber: cleanStorePhone,
+        telefono: cleanStorePhone,
         quickButtons: form.quickButtons,
         socialLinks: form.socialLinks,
         customIcons: form.customIcons,
         shippingLogos: form.shippingLogos,
         appLogos: form.appLogos, 
-        whatsappWidget: form.whatsappWidget,
+        whatsappWidget: {
+          ...form.whatsappWidget,
+          number: cleanStorePhone,
+        },
       };
 
       await setDoc(doc(db, "stores", storeData.id), storeUpdates, { merge: true });
@@ -339,28 +350,43 @@ export default function AdminSettings() {
         </div>
       </div>
 
-      {/* MÓDULO ASESORÍA WHATSAPP VIP */}
+      {/* MÓDULO ASESORÍA WHATSAPP VIP Y RECEPCIÓN DE PEDIDOS */}
       <div className="bg-white/90 backdrop-blur-xl rounded-[2.5rem] p-7 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white space-y-4">
         <div className="flex justify-between items-center mb-2">
-          <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">WhatsApp VIP</h3>
-          <label className="relative inline-flex items-center cursor-pointer">
+          <div>
+            <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">WhatsApp de Pedidos y VIP</h3>
+            <p className="text-[11px] text-gray-500 mt-0.5">Número exclusivo de esta tienda para recibir pedidos y asesoría</p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer" title="Activar/Desactivar burbuja flotante VIP">
             <input type="checkbox" className="sr-only peer" checked={form.whatsappWidget.active} onChange={(e) => setForm({...form, whatsappWidget: {...form.whatsappWidget, active: e.target.checked}})} />
             <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-500"></div>
           </label>
         </div>
         
-        {form.whatsappWidget.active && (
-          <div className="space-y-4">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1">Tu Número de WhatsApp para Pedidos (Ej: 584141234567)</label>
+            <input
+              type="text"
+              value={form.whatsappWidget.number}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  whatsappNumber: e.target.value,
+                  whatsappWidget: { ...form.whatsappWidget, number: e.target.value },
+                })
+              }
+              placeholder="58..."
+              className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm outline-none border border-gray-100 focus:border-pink-300"
+            />
+          </div>
+          {form.whatsappWidget.active && (
             <div>
-              <label className="block text-xs font-bold text-gray-600 mb-1">Tu Número (Ej: 584141234567)</label>
-              <input type="text" value={form.whatsappWidget.number} onChange={(e) => setForm({...form, whatsappWidget: {...form.whatsappWidget, number: e.target.value}})} placeholder="58..." className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm outline-none border border-gray-100 focus:border-pink-300" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-600 mb-1">Mensaje Pre-escrito</label>
+              <label className="block text-xs font-bold text-gray-600 mb-1">Mensaje Pre-escrito (Burbuja VIP)</label>
               <textarea value={form.whatsappWidget.message} onChange={(e) => setForm({...form, whatsappWidget: {...form.whatsappWidget, message: e.target.value}})} rows={3} className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm outline-none border border-gray-100 focus:border-pink-300 resize-none" />
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
 

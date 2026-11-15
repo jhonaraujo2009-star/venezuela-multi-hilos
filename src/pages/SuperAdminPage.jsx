@@ -39,13 +39,16 @@ export default function SuperAdminPage() {
   });
   
   const navigate = useNavigate();
-  const { user, authLoading } = useAuth();
+  const { user, authLoading, activateSuperAdminSession } = useAuth();
 
   useEffect(() => {
     if (authLoading) return;
 
     if (user) {
       if (isSuperAdmin(user)) {
+        // 🔒 AISLAMIENTO DE SESIÓN: Marcar la sesión estrictamente como Super Admin
+        // para que nunca se filtre (Session Bleeding) hacia las rutas /admin de las tiendas
+        activateSuperAdminSession(user);
         setIsAuthorized(true);
         fetchAllStores(user);
       } else {
@@ -57,7 +60,7 @@ export default function SuperAdminPage() {
       toast.error("Debes iniciar sesión primero. 🛑");
       navigate("/login");
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, activateSuperAdminSession]);
 
   useEffect(() => {
     const fetchGlobalSettings = async () => {

@@ -7,7 +7,7 @@ const AppContext = createContext(null);
 
 const DEFAULT_SETTINGS = {
   exchangeRate: 36.5,
-  whatsappNumber: "584120496690",
+  whatsappNumber: "",
   freeShippingGoal: 50,
   primaryColor: "#ec4899",
   announcementText: "🚚 Envíos gratis por MRW a partir de $50",
@@ -45,7 +45,16 @@ export function AppProvider({ children }) {
     const unsubConfig = onSnapshot(
       doc(db, "config", "settings"),
       (snap) => {
-        if (snap.exists()) setSettings((prev) => ({ ...prev, ...snap.data() }));
+        if (snap.exists()) {
+          const rawConfig = snap.data() || {};
+          // 🔒 AISLAMIENTO MULTI-INQUILINO: Nunca permitir que un teléfono o WhatsApp global contamine el estado
+          const { whatsappNumber: _ignoredPhone, whatsappWidget: _ignoredWidget, phone: _ignoredTel, ...safeGlobalSettings } = rawConfig;
+          setSettings((prev) => ({
+            ...prev,
+            ...safeGlobalSettings,
+            whatsappNumber: "",
+          }));
+        }
       },
       (err) => console.warn("Aviso leyendo config/settings:", err)
     );
@@ -93,17 +102,27 @@ export function AppProvider({ children }) {
       return;
     }
 
-    // Evitar mostrar datos residuales de otra tienda mientras carga la nueva
+    // 🔒 Limpieza estricta inmediata al cambiar de tienda para evitar contaminación de estado (Global State Contamination)
     setStoreData((prev) => (prev?.id === storeId ? prev : null));
 
     const unsubStore = onSnapshot(
       doc(db, "stores", storeId),
       (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
+        if (snap.exists() && snap.id.trim().toLowerCase() === storeId) {
+          const data = snap.data() || {};
+          const resolvedStorePhone = String(
+            data.phone ||
+              data.whatsappNumber ||
+              data.whatsappWidget?.number ||
+              data.telefono ||
+              ""
+          ).trim();
           setStoreData({ 
             id: snap.id, 
             ...data,
+            phone: resolvedStorePhone,
+            whatsappNumber: data.whatsappNumber || resolvedStorePhone,
+            ownerEmail: data.ownerEmail || data.email || "",
             verification: data.verification || { status: 'none' } 
           });
         } else {
@@ -114,6 +133,7 @@ export function AppProvider({ children }) {
       },
       (err) => {
         console.error("Error cargando tienda:", err);
+        setStoreData(null);
         setLoading(false);
       }
     );
