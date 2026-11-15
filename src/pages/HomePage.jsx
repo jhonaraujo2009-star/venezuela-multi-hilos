@@ -463,12 +463,13 @@ export default function HomePage() {
     }
   };
 
-  // 🌟 NAVEGACIÓN DIRECTA A LA TIENDA DEL PRODUCTO CON RADAR DE COMISIÓN
+  // 🌟 NAVEGACIÓN DIRECTA A LA TIENDA DEL PRODUCTO CON RADAR DE COMISIÓN AISLADO POR TIENDA
   const goToStoreWithRadar = (storeId, productId = null) => {
     if (!storeId) return;
-    sessionStorage.setItem("origenVenta", "index_super_admin");
+    const cleanStoreId = String(storeId).trim().toLowerCase();
+    sessionStorage.setItem(`origenVenta_${cleanStoreId}`, "index_super_admin");
     const queryStr = productId ? `?product=${productId}&ref=index` : `?ref=index`;
-    navigate(`/${storeId}${queryStr}`);
+    navigate(`/${cleanStoreId}${queryStr}`);
   };
 
   const handleGoToStore = (storeId) => {

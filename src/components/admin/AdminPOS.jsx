@@ -24,9 +24,15 @@ export default function AdminPOS() {
   const [selectedProduct, setSelectedProduct] = useState(null); // Para modal de variantes
   const [processing, setProcessing] = useState(false);
 
-  // 1. Cargar productos de la tienda actual
+  // 1. Cargar productos de la tienda actual (y limpiar ticket al cambiar de tienda)
   useEffect(() => {
-    if (!storeData?.id) return;
+    setCart([]);
+    if (!storeData?.id) {
+      setProducts([]);
+      setLoading(false);
+      return;
+    }
+    setProducts([]);
     const q = query(collection(db, "products"), where("storeId", "==", storeData.id));
     const unsub = onSnapshot(
       q,
@@ -209,8 +215,10 @@ export default function AdminPOS() {
       }
 
       for (const [productId, itemsList] of cartByProduct.entries()) {
-        const prodRef = doc(db, "products", productId);
         const productInState = products.find((p) => p.id === productId);
+        // 🔒 AISLAMIENTO MULTI-INQUILINO: Solo actualizar productos que pertenezcan a esta tienda
+        if (!productInState || productInState.storeId !== storeData.id) continue;
+        const prodRef = doc(db, "products", productId);
         const totalQty = itemsList.reduce((s, i) => s + (Number(i.quantity) || 1), 0);
 
         if (productInState && productInState.variants && productInState.variants.length > 0) {

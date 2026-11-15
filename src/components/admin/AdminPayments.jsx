@@ -49,10 +49,21 @@ function PaymentForm({ payment, onClose, storeData }) {
       toast.error("Completa los campos obligatorios");
       return;
     }
+    if (!storeData?.id) {
+      toast.error("Error: No se detectó tu tienda.");
+      return;
+    }
     setSaving(true);
     try {
       if (payment?.id) {
-        await updateDoc(doc(db, "payments", payment.id), form);
+        if (payment.storeId && payment.storeId !== storeData.id) {
+          toast.error("Acceso denegado: este método de pago no pertenece a tu tienda.");
+          return;
+        }
+        await updateDoc(doc(db, "payments", payment.id), {
+          ...form,
+          storeId: storeData.id,
+        });
         toast.success("Método actualizado ✅");
       } else {
         // 🌟 ASIGNAMOS EL MÉTODO DE PAGO AL DUEÑO ACTUAL
@@ -124,7 +135,11 @@ export default function AdminPayments() {
   const { storeData } = useApp(); // 🌟 SABER DE QUIÉN ES LA TIENDA
 
   useEffect(() => {
-    if (!storeData?.id) return;
+    if (!storeData?.id) {
+      setPayments([]);
+      return;
+    }
+    setPayments([]);
     // 🌟 SOLO TRAE LOS MÉTODOS DE PAGO DE ESTA TIENDA
     const unsub = onSnapshot(query(collection(db, "payments"), where("storeId", "==", storeData.id)), (snap) => {
       const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -134,6 +149,12 @@ export default function AdminPayments() {
   }, [storeData?.id]);
 
   const deletePayment = async (id) => {
+    if (!storeData?.id) return;
+    const targetPayment = payments.find((p) => p.id === id);
+    if (!targetPayment || targetPayment.storeId !== storeData.id) {
+      toast.error("Acceso denegado: este método de pago no pertenece a tu tienda.");
+      return;
+    }
     if (!confirm("¿Eliminar método de pago?")) return;
     await deleteDoc(doc(db, "payments", id));
     toast.success("Eliminado");

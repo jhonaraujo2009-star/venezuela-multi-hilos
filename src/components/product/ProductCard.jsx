@@ -105,10 +105,11 @@ export default function ProductCard({ product, onClick, rank }) {
   }, [endTime, isFlashOffer]);
 
   // ------------------------------------------------------------------
-  // 🌟 FASE 2: EL CHISMOSO (Rastreador de Origen) 🌟
+  // 🌟 FASE 2: EL CHISMOSO (Rastreador de Origen aislado por tienda) 🌟
   // ------------------------------------------------------------------
   const isFromSuperAdmin = typeof window !== "undefined" && window.location.pathname === "/";
-  const savedOrigin = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("origenVenta") : null;
+  const productStoreKey = product?.storeId ? `origenVenta_${String(product.storeId).trim().toLowerCase()}` : null;
+  const savedOrigin = typeof sessionStorage !== "undefined" && productStoreKey ? sessionStorage.getItem(productStoreKey) : null;
   const originToUse = isFromSuperAdmin ? "index_super_admin" : (savedOrigin || "tienda_directa");
 
   // Clonamos el producto con los precios matemáticos unificados y la firma invisible

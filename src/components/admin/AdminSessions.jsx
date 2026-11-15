@@ -17,7 +17,12 @@ export default function AdminSessions() {
   const { storeData } = useApp(); // 🌟 Extraemos la tienda actual
 
   useEffect(() => {
-    if (!storeData?.id) return;
+    if (!storeData?.id) {
+      setSessions([]);
+      return;
+    }
+
+    setSessions([]);
 
     // 🌟 MAGIA: Solo busca las sesiones que pertenezcan a esta tienda
     const unsub = onSnapshot(
@@ -56,8 +61,14 @@ export default function AdminSessions() {
   };
 
   const updateSession = async (id, updates) => {
+    if (!storeData?.id) return;
+    const targetSession = sessions.find((s) => s.id === id);
+    if (!targetSession || targetSession.storeId !== storeData.id) {
+      toast.error("Acceso denegado: esta sesión no pertenece a tu tienda");
+      return;
+    }
     try {
-      await updateDoc(doc(db, "sessions", id), updates);
+      await updateDoc(doc(db, "sessions", id), { ...updates, storeId: storeData.id });
       toast.success("Sesión actualizada");
     } catch {
       toast.error("Error al actualizar");
@@ -65,6 +76,12 @@ export default function AdminSessions() {
   };
 
   const deleteSession = async (id) => {
+    if (!storeData?.id) return;
+    const targetSession = sessions.find((s) => s.id === id);
+    if (!targetSession || targetSession.storeId !== storeData.id) {
+      toast.error("Acceso denegado: esta sesión no pertenece a tu tienda");
+      return;
+    }
     if (!confirm("¿Eliminar esta sesión?")) return;
     try {
       await deleteDoc(doc(db, "sessions", id));

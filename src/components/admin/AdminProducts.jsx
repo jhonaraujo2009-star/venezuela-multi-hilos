@@ -197,6 +197,10 @@ function ProductForm({ sessions, product, onClose, storeData, defaultSessionId }
       };
 
       if (product?.id) {
+        if (product.storeId && product.storeId !== storeData.id) {
+          toast.error("Acceso denegado: este producto no pertenece a tu tienda.");
+          return;
+        }
         await updateDoc(doc(db, "products", product.id), data);
         toast.success("Producto actualizado ✅");
       } else {
@@ -404,7 +408,16 @@ export default function AdminProducts() {
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
-    if (!storeData?.id) return; // Esperar a tener el ID de la tienda
+    if (!storeData?.id) {
+      setProducts([]);
+      setSessions([]);
+      setSelectedImages(new Set());
+      return;
+    }
+
+    setProducts([]);
+    setSessions([]);
+    setSelectedImages(new Set());
 
     // 🌟 MAGIA 1: El panel admin AHORA SOLO CARGA los productos de la tienda actual
     const qProducts = query(collection(db, "products"), where("storeId", "==", storeData.id));
@@ -437,19 +450,27 @@ export default function AdminProducts() {
   }, [storeData?.id]); // Recarga si cambia la tienda
 
   const deleteProduct = async (id, e) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
+    if (!storeData?.id) return;
+    const targetProduct = products.find((p) => p.id === id);
+    if (!targetProduct || targetProduct.storeId !== storeData.id) {
+      toast.error("Acceso denegado: este producto no pertenece a tu tienda.");
+      return;
+    }
     if (!confirm("¿Eliminar este producto?")) return;
     await deleteDoc(doc(db, "products", id));
-    if (storeData?.id) {
-      try {
-        await updateDoc(doc(db, "stores", storeData.id), { total_productos: increment(-1) });
-      } catch (err) {}
-    }
+    try {
+      await updateDoc(doc(db, "stores", storeData.id), { total_productos: increment(-1) });
+    } catch (err) {}
     toast.success("Producto eliminado");
   };
 
   const editProduct = (p, e) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
+    if (!storeData?.id || p?.storeId !== storeData.id) {
+      toast.error("Acceso denegado: este producto no pertenece a tu tienda.");
+      return;
+    }
     setFormProduct(p);
     setShowForm(true);
   };

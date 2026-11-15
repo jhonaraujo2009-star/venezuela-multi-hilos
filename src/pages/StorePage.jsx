@@ -59,13 +59,16 @@ export default function StorePage() {
   useEffect(() => {
     if (storeData?.id) {
       try {
-        const currentOrigin = sessionStorage.getItem("origenVenta");
-        if (!currentOrigin) {
-          sessionStorage.setItem("origenVenta", "tienda_directa");
+        const originKey = `origenVenta_${storeData.id}`;
+        const isFromIndexRef = searchParams.get("ref") === "index";
+        if (isFromIndexRef) {
+          sessionStorage.setItem(originKey, "index_super_admin");
+        } else if (!sessionStorage.getItem(originKey)) {
+          sessionStorage.setItem(originKey, "tienda_directa");
         }
       } catch (e) {}
     }
-  }, [storeData?.id]);
+  }, [storeData?.id, searchParams]);
 
   // 🌟 MAGIA: ESCUCHADOR DE ENLACES PROFUNDOS (DEEP-LINKS)
   useEffect(() => {
@@ -84,7 +87,7 @@ export default function StorePage() {
             if (data.storeId === storeData.id) {
                let sourceOrigin = "tienda_directa";
                try {
-                 sourceOrigin = sessionStorage.getItem("origenVenta") || "tienda_directa";
+                 sourceOrigin = sessionStorage.getItem(`origenVenta_${storeData.id}`) || "tienda_directa";
                } catch (e) {}
                data._origenVenta = sourceOrigin;
 

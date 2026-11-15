@@ -263,34 +263,51 @@ export default function CartDrawer({ onSelectProduct }) {
     return extractStrictStorePhone(activeStoreData, selectedPayment, paymentMethods);
   }, [activeCheckoutStoreId, activeStoreData, selectedPayment, paymentMethods]);
 
-  // 🌟 CARGAR MÉTODOS DE PAGO DE LA TIENDA ACTIVA AL FINALIZAR
+  // 🌟 CARGAR MÉTODOS DE PAGO DE LA TIENDA ACTIVA AL FINALIZAR (LIMPIEZA INMEDIATA AL CAMBIAR DE TIENDA)
   useEffect(() => {
+    let isCurrent = true;
+    const defaultFallbackPayment = {
+      id: "acordar_vendedor",
+      bankName: "Acordar con vendedor",
+      holderName: "Por WhatsApp (Efectivo / Pago Móvil)",
+      idNumber: "N/A"
+    };
+
     if (isOpen && activeCheckoutStoreId) {
+      setPaymentMethods([]);
+      setSelectedPayment(null);
       const loadPayments = async () => {
         try {
           const q = query(collection(db, "payments"), where("storeId", "==", activeCheckoutStoreId));
           const snap = await getDocs(q);
-          const payments = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          if (!isCurrent) return;
+          const payments = snap.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((p) => p.storeId === activeCheckoutStoreId);
           setPaymentMethods(payments);
           if (payments.length > 0) {
             setSelectedPayment(payments[0]);
           } else {
-            setSelectedPayment({
-              id: "acordar_vendedor",
-              bankName: "Acordar con vendedor",
-              holderName: "Por WhatsApp (Efectivo / Pago Móvil)",
-              idNumber: "N/A"
-            });
+            setSelectedPayment(defaultFallbackPayment);
           }
         } catch (e) {
           console.warn("Error cargando métodos de pago:", e);
+          if (isCurrent) {
+            setPaymentMethods([]);
+            setSelectedPayment(defaultFallbackPayment);
+          }
         }
       };
       loadPayments();
     } else if (!isOpen) {
-      setStep(1); 
+      setStep(1);
+      setPaymentMethods([]);
       setSelectedPayment(null);
     }
+
+    return () => {
+      isCurrent = false;
+    };
   }, [isOpen, activeCheckoutStoreId]);
 
   // Limpiar cupón automáticamente si el cliente cambia de tienda activa en la bolsa

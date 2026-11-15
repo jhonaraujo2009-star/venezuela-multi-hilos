@@ -24,7 +24,14 @@ export default function AdminInbox() {
    * 2. Preguntas enviadas por clientes a la tienda
    */
   useEffect(() => {
-    if (!storeData?.id) return;
+    if (!storeData?.id) {
+      setOrders([]);
+      setQuestions([]);
+      setLoading(false);
+      return;
+    }
+    setOrders([]);
+    setQuestions([]);
     lastSyncedQuestionsRef.current = JSON.stringify(storeData.publicQuestions || []);
 
     const qOrders = query(
@@ -220,6 +227,11 @@ export default function AdminInbox() {
    * ELIMINAR O RECHAZAR PEDIDO
    */
   const rejectOrder = async (orderId) => {
+    if (!storeData?.id) return;
+    const targetOrder = orders.find((o) => o.id === orderId);
+    if (!targetOrder || targetOrder.storeId !== storeData.id) {
+      return toast.error("Acceso denegado: este pedido no pertenece a tu tienda");
+    }
     if (!confirm("¿Estás seguro de que quieres rechazar o eliminar este pedido? No existirá registro de esta solicitud.")) return;
     try {
       await deleteDoc(doc(db, "orders", orderId));
@@ -233,6 +245,11 @@ export default function AdminInbox() {
    * GESTIÓN DE PREGUNTAS (RESPUESTAS Y FAQ)
    */
   const handleSaveQuestionReply = async (questionId, makePublic = false) => {
+    if (!storeData?.id) return;
+    const targetQuestion = questions.find((q) => q.id === questionId);
+    if (!targetQuestion || targetQuestion.storeId !== storeData.id) {
+      return toast.error("Acceso denegado: esta pregunta no pertenece a tu tienda");
+    }
     const text = replyTextMap[questionId];
     if (!text || !text.trim()) {
       return toast.error("Escribe una respuesta antes de guardar");
@@ -242,7 +259,8 @@ export default function AdminInbox() {
     try {
       await updateDoc(doc(db, "questions", questionId), {
         adminReply: text.trim(),
-        isPublic: makePublic
+        isPublic: makePublic,
+        storeId: storeData.id
       });
       toast.success(makePublic ? "Respuesta publicada en FAQ oficial ✅" : "Respuesta guardada ✅");
     } catch (error) {
@@ -253,8 +271,13 @@ export default function AdminInbox() {
   };
 
   const handleToggleQuestionPublic = async (questionId, currentStatus) => {
+    if (!storeData?.id) return;
+    const targetQuestion = questions.find((q) => q.id === questionId);
+    if (!targetQuestion || targetQuestion.storeId !== storeData.id) {
+      return toast.error("Acceso denegado: esta pregunta no pertenece a tu tienda");
+    }
     try {
-      await updateDoc(doc(db, "questions", questionId), { isPublic: !currentStatus });
+      await updateDoc(doc(db, "questions", questionId), { isPublic: !currentStatus, storeId: storeData.id });
       toast.success(!currentStatus ? "Pregunta visible en FAQ oficial" : "Pregunta ocultada del FAQ");
     } catch {
       toast.error("Error al cambiar visibilidad");
@@ -262,6 +285,11 @@ export default function AdminInbox() {
   };
 
   const handleDeleteQuestion = async (questionId) => {
+    if (!storeData?.id) return;
+    const targetQuestion = questions.find((q) => q.id === questionId);
+    if (!targetQuestion || targetQuestion.storeId !== storeData.id) {
+      return toast.error("Acceso denegado: esta pregunta no pertenece a tu tienda");
+    }
     if (!confirm("¿Eliminar esta pregunta?")) return;
     try {
       await deleteDoc(doc(db, "questions", questionId));

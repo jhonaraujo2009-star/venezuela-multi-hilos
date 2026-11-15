@@ -288,7 +288,11 @@ export default function ProductModal({ product, onClose }) {
     if (remainingStock <= 0) return toast.error(`Ya tienes el límite disponible (${availableStock} unidades) en tu bolsa`);
     if (quantity > remainingStock) return toast.error(`Solo puedes agregar hasta ${remainingStock} unidades más`);
 
-    const originToUse = currentProduct._origenVenta || (typeof sessionStorage !== "undefined" ? sessionStorage.getItem("origenVenta") : null) || "tienda_directa";
+    const modalStoreId = String(currentProduct?.storeId || storeData?.id || "").trim().toLowerCase();
+    const originToUse =
+      currentProduct._origenVenta ||
+      (typeof sessionStorage !== "undefined" && modalStoreId ? sessionStorage.getItem(`origenVenta_${modalStoreId}`) : null) ||
+      "tienda_directa";
     const selectedImageUrl = images[activeImage] || currentProduct.image || currentProduct.imageUrl;
 
     const productToAdd = { 
@@ -570,8 +574,9 @@ export default function ProductModal({ product, onClose }) {
                       <button
                         type="button"
                         onClick={() => {
-                          sessionStorage.setItem("origenVenta", "index_super_admin");
-                          navigate(`/${currentProduct.storeId}?ref=index`);
+                          const targetStore = String(currentProduct.storeId).trim().toLowerCase();
+                          sessionStorage.setItem(`origenVenta_${targetStore}`, "index_super_admin");
+                          navigate(`/${targetStore}?ref=index`);
                           onClose();
                         }}
                         className="mt-3 inline-flex items-center gap-1.5 text-xs text-gray-600 hover:text-pink-600 transition-colors font-bold group bg-gray-50 hover:bg-pink-50 px-3 py-1.5 rounded-full border border-gray-200 hover:border-pink-200 active:scale-95"

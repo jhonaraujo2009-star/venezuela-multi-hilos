@@ -63,10 +63,16 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Middleware inteligente para servir cualquier imagen solicitada
+// Middleware inteligente para servir cualquier imagen solicitada con aislamiento de carpeta por tienda
 app.use("/uploads", (req, res, next) => {
-  const reqSubPath = decodeURIComponent(req.path.replace(/^\//, ""));
-  const directPath = path.join(UPLOADS_DIR, reqSubPath);
+  const reqSubPath = decodeURIComponent(req.path.replace(/^\//, "")).replace(/\\/g, "/");
+  if (reqSubPath.includes("..")) {
+    return res.status(400).send("Ruta inválida");
+  }
+  const directPath = path.resolve(UPLOADS_DIR, reqSubPath);
+  if (!directPath.startsWith(path.resolve(UPLOADS_DIR))) {
+    return res.status(403).send("Acceso denegado");
+  }
 
   // 1. Si existe en la ruta exacta solicitada
   if (fs.existsSync(directPath) && fs.statSync(directPath).isFile()) {
@@ -76,14 +82,25 @@ app.use("/uploads", (req, res, next) => {
     return res.sendFile(directPath);
   }
 
-  // 2. Si no, buscar por nombre de archivo en los zips extraídos (migración transparente)
-  const filename = path.basename(reqSubPath).toLowerCase();
-  const matchedPath = fileIndex.get(filename);
-  if (matchedPath && fs.existsSync(matchedPath) && fs.statSync(matchedPath).isFile()) {
+  // 2. Fallback por nombre base SOLO si no se solicitó una carpeta específica de otra tienda
+  const normalizedRel = reqSubPath.toLowerCase();
+  const matchedByRel = fileIndex.get(normalizedRel);
+  if (matchedByRel && fs.existsSync(matchedByRel) && fs.statSync(matchedByRel).isFile()) {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     res.setHeader("Cache-Control", "public, max-age=604800");
-    return res.sendFile(matchedPath);
+    return res.sendFile(matchedByRel);
+  }
+
+  if (!reqSubPath.includes("/")) {
+    const filename = path.basename(reqSubPath).toLowerCase();
+    const matchedPath = fileIndex.get(filename);
+    if (matchedPath && fs.existsSync(matchedPath) && fs.statSync(matchedPath).isFile()) {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      res.setHeader("Cache-Control", "public, max-age=604800");
+      return res.sendFile(matchedPath);
+    }
   }
 
   return res.status(404).send("Imagen no encontrada");

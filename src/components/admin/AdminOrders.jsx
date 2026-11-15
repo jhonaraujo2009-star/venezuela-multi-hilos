@@ -64,7 +64,10 @@ export default function AdminOrders() {
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
       const order = orders.find(o => o.id === orderId);
-      if (!order) return;
+      if (!order || !storeData?.id || order.storeId !== storeData.id) {
+        toast.error("Acceso denegado: este pedido no pertenece a tu tienda");
+        return;
+      }
 
       const orderTotal = Number(order.totalAmount ?? order.total ?? 0);
       const isFinalized = ["pagado", "entregado", "completed", "enviado"].includes(newStatus.toLowerCase());
@@ -235,6 +238,10 @@ export default function AdminOrders() {
   };
 
   const handleUpdateItemQuantity = async (order, itemIndex, delta) => {
+    if (!order || !storeData?.id || order.storeId !== storeData.id) {
+      toast.error("Acceso denegado: este pedido no pertenece a tu tienda");
+      return;
+    }
     const baseItems = order.items || order.cart || [];
     const newItems = [...baseItems];
     const item = newItems[itemIndex];
@@ -265,6 +272,10 @@ export default function AdminOrders() {
   };
 
   const handleDeleteItem = async (order, itemIndex) => {
+    if (!order || !storeData?.id || order.storeId !== storeData.id) {
+      toast.error("Acceso denegado: este pedido no pertenece a tu tienda");
+      return;
+    }
     if (!window.confirm("¿Seguro que el cliente NO pagará este producto? Se eliminará del pedido.")) return;
     
     const newItems = [...(order.items || order.cart || [])];

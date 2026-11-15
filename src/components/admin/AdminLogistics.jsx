@@ -20,6 +20,8 @@ export default function AdminLogistics() {
   const { storeData } = useApp(); // 🌟 SABER DE QUIÉN ES LA TIENDA
 
   useEffect(() => {
+    setLogistics({});
+    setCoupons([]);
     if (!storeData?.id) return;
     lastSyncedCouponsRef.current = JSON.stringify(storeData.publicCoupons || []);
 
@@ -105,6 +107,10 @@ export default function AdminLogistics() {
   };
 
   const addCoupon = async () => {
+    if (!storeData?.id) {
+      toast.error("Error: No se detectó tu tienda activa");
+      return;
+    }
     if (!newCoupon.code.trim() || !newCoupon.value) {
       toast.error("Completa código y valor");
       return;
@@ -130,6 +136,12 @@ export default function AdminLogistics() {
   };
 
   const toggleCoupon = async (id, active) => {
+    if (!storeData?.id) return;
+    const targetCoupon = coupons.find((c) => c.id === id);
+    if (!targetCoupon || targetCoupon.storeId !== storeData.id) {
+      toast.error("Acceso denegado: este cupón no pertenece a tu tienda");
+      return;
+    }
     try {
       await updateDoc(doc(db, "coupons", id), { active: !active });
     } catch {
@@ -138,6 +150,12 @@ export default function AdminLogistics() {
   };
 
   const deleteCoupon = async (id) => {
+    if (!storeData?.id) return;
+    const targetCoupon = coupons.find((c) => c.id === id);
+    if (!targetCoupon || targetCoupon.storeId !== storeData.id) {
+      toast.error("Acceso denegado: este cupón no pertenece a tu tienda");
+      return;
+    }
     if (!confirm("¿Eliminar cupón?")) return;
     try {
       await deleteDoc(doc(db, "coupons", id));

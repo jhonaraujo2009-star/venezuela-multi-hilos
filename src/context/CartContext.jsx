@@ -143,11 +143,17 @@ export function CartProvider({ children }) {
       const baseKeyPrefix = `${product.id}-${variant?.id || "default"}`;
       const imgSuffix = product.selectedImageIndex !== undefined ? `-mod${product.selectedImageIndex}` : "";
       const key = `${baseKeyPrefix}${imgSuffix}`;
-      const existing = prev.find((i) => i.key === key);
+      const existing = prev.find(
+        (i) => i.key === key && (i.storeId || i.product?.storeId || sId) === sId
+      );
 
-      // Sumar cantidad de todos los modelos del mismo producto/variante ya en la bolsa (comparten el mismo stock físico)
+      // Sumar cantidad de todos los modelos del mismo producto/variante ya en la bolsa de la misma tienda (comparten el mismo stock físico)
       const totalInCartForVariant = prev
-        .filter((i) => i.key === baseKeyPrefix || i.key.startsWith(`${baseKeyPrefix}-mod`))
+        .filter(
+          (i) =>
+            (i.storeId || i.product?.storeId || sId) === sId &&
+            (i.key === baseKeyPrefix || i.key.startsWith(`${baseKeyPrefix}-mod`))
+        )
         .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
 
       if (totalInCartForVariant + quantity > maxStock) {
@@ -160,7 +166,9 @@ export function CartProvider({ children }) {
         toast.error(`Solo puedes agregar ${allowedToAdd} más. Stock máximo alcanzado (${maxStock})`);
         if (existing) {
           return prev.map((i) =>
-            i.key === key ? { ...i, quantity: existing.quantity + allowedToAdd, selected: true } : i
+            i.key === key && (i.storeId || i.product?.storeId || sId) === sId
+              ? { ...i, quantity: existing.quantity + allowedToAdd, selected: true }
+              : i
           );
         }
         quantity = allowedToAdd;
@@ -168,7 +176,9 @@ export function CartProvider({ children }) {
 
       if (existing) {
         return prev.map((i) =>
-          i.key === key ? { ...i, quantity: existing.quantity + quantity, selected: true } : i
+          i.key === key && (i.storeId || i.product?.storeId || sId) === sId
+            ? { ...i, quantity: existing.quantity + quantity, selected: true }
+            : i
         );
       }
 
@@ -224,9 +234,15 @@ export function CartProvider({ children }) {
       const targetItem = prev.find((i) => i.key === key);
       if (!targetItem) return prev;
 
+      const targetStoreId = targetItem.storeId || targetItem.product?.storeId || "tienda";
       const baseKeyPrefix = `${targetItem.product?.id}-${targetItem.variant?.id || "default"}`;
       const otherModelsQty = prev
-        .filter((i) => i.key !== key && (i.key === baseKeyPrefix || i.key.startsWith(`${baseKeyPrefix}-mod`)))
+        .filter(
+          (i) =>
+            i.key !== key &&
+            (i.storeId || i.product?.storeId || "tienda") === targetStoreId &&
+            (i.key === baseKeyPrefix || i.key.startsWith(`${baseKeyPrefix}-mod`))
+        )
         .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
 
       const maxStock = targetItem.variant
@@ -315,12 +331,11 @@ export function CartProvider({ children }) {
   );
   // Calcular subtotal elegible para el cupón (solo productos de la tienda del cupón)
   const eligibleCouponSubtotal = useMemo(() => {
-    if (!coupon) return 0;
-    if (!coupon.storeId) return subtotal;
+    if (!coupon || !coupon.storeId) return 0;
     return selectedItems
       .filter((i) => (i.storeId || i.product?.storeId) === coupon.storeId)
       .reduce((sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0);
-  }, [coupon, selectedItems, subtotal]);
+  }, [coupon, selectedItems]);
 
   const discountAmount = useMemo(() => {
     if (!coupon || eligibleCouponSubtotal <= 0) return 0;

@@ -70,10 +70,12 @@ export default function FlashOffersPage() {
   }, []);
 
   const goToStoreProduct = (storeId, productId = null) => {
-    // 🌟 INYECCIÓN DEL RASTREADOR DE COMISIONES DEL SUPERADMIN
-    sessionStorage.setItem("origenVenta", "index_super_admin");
-    const query = productId ? `?product=${productId}` : ``;
-    navigate(`/${storeId}${query}`);
+    if (!storeId) return;
+    const cleanStoreId = String(storeId).trim().toLowerCase();
+    // 🌟 INYECCIÓN DEL RASTREADOR DE COMISIONES AISLADO POR TIENDA
+    sessionStorage.setItem(`origenVenta_${cleanStoreId}`, "index_super_admin");
+    const query = productId ? `?product=${productId}&ref=index` : `?ref=index`;
+    navigate(`/${cleanStoreId}${query}`);
   };
 
   const filteredOffers = products.filter(p => 

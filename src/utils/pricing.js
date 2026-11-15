@@ -104,10 +104,11 @@ export function calculateProductPricing(product) {
  */
 export function prepareProductForCart(product, customOrigin = null) {
   const pricing = calculateProductPricing(product);
+  const storeKey = product?.storeId ? `origenVenta_${String(product.storeId).trim().toLowerCase()}` : null;
   const origenVentaActual =
     customOrigin ||
     product._origenVenta ||
-    (typeof sessionStorage !== "undefined" ? sessionStorage.getItem("origenVenta") : null) ||
+    (typeof sessionStorage !== "undefined" && storeKey ? sessionStorage.getItem(storeKey) : null) ||
     "tienda_directa";
 
   return {

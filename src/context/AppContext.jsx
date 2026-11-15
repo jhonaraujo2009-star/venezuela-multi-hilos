@@ -146,10 +146,6 @@ export function AppProvider({ children }) {
     document.documentElement.style.setProperty("--primary", activeColor);
   }, [settings.primaryColor, storeData?.primaryColor]);
 
-  const updateSettings = async (updates) => {
-    await setDoc(doc(db, "config", "settings"), updates, { merge: true });
-  };
-
   const bsPrice = (usdPrice) => {
     const rate = Number(storeData?.exchangeRate || settings?.exchangeRate || 36.5);
     const num = Number(usdPrice) || 0;
@@ -157,7 +153,7 @@ export function AppProvider({ children }) {
   };
 
   return (
-    <AppContext.Provider value={{ settings, storeData, loading, updateSettings, bsPrice, globalBranding }}>
+    <AppContext.Provider value={{ settings, storeData, loading, bsPrice, globalBranding }}>
       {children}
     </AppContext.Provider>
   );

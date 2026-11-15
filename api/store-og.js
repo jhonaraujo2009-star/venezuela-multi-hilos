@@ -64,19 +64,23 @@ export default async function handler(req, res) {
       else if (appLogo192) storeImage = appLogo192;
     }
 
-    if (product && typeof product === "string") {
+    if (product && typeof product === "string" && /^[a-zA-Z0-9_-]{1,80}$/.test(product)) {
       const prodRes = await fetch(
         `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT}/databases/(default)/documents/products/${product}?key=${FIREBASE_API_KEY}`
       );
       if (prodRes.ok) {
         const prodDoc = await prodRes.json();
         const pf = prodDoc.fields || {};
-        const pName = getStr(pf, "name", "");
-        const pDesc = getStr(pf, "description", "");
-        const pImg = getStr(pf, "image", "") || (pf?.images?.arrayValue?.values?.[0]?.stringValue || "");
-        if (pName) storeName = `${pName} | ${storeName}`;
-        if (pDesc) storeDescription = pDesc;
-        if (pImg) storeImage = pImg;
+        const prodStoreId = getStr(pf, "storeId", "").trim().toLowerCase();
+        // 🔒 AISLAMIENTO MULTI-INQUILINO: Solo mostrar OG del producto si pertenece estrictamente a este storeId
+        if (prodStoreId && prodStoreId === storeId.trim().toLowerCase()) {
+          const pName = getStr(pf, "name", "");
+          const pDesc = getStr(pf, "description", "");
+          const pImg = getStr(pf, "image", "") || (pf?.images?.arrayValue?.values?.[0]?.stringValue || "");
+          if (pName) storeName = `${pName} | ${storeName}`;
+          if (pDesc) storeDescription = pDesc;
+          if (pImg) storeImage = pImg;
+        }
       }
     }
   } catch (err) {
