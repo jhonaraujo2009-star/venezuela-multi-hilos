@@ -1,0 +1,126 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── FUNCIONES DE SEGURIDAD Y AISLAMIENTO MULTI-INQUILINO ──
+    function isSuperAdmin() {
+      return request.auth != null &&
+        request.auth.token.email == "jhonaraujo2009@gmail.com";
+    }
+
+    function isStoreOwner(storeId) {
+      return request.auth != null &&
+        storeId is string &&
+        storeId.size() > 0 &&
+        exists(/databases/$(database)/documents/stores/$(storeId)) &&
+        (
+          get(/databases/$(database)/documents/stores/$(storeId)).data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/stores/$(storeId)).data.ownerEmail == request.auth.token.email
+        );
+    }
+
+    // 1. SETTINGS GLOBAL: lectura pública, escritura solo Super Admin
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    // 2. CONFIGURACIÓN BASE: lectura pública, escritura solo Super Admin
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    // 3. TIENDAS: lectura pública, creación autenticada propia, edición aislada al dueño real
+    match /stores/{storeId} {
+      allow read: if true;
+
+      allow create: if request.auth != null &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.ownerEmail == request.auth.token.email;
+
+      allow update: if (
+        request.auth != null &&
+        (
+          resource.data.ownerId == request.auth.uid ||
+          (
+            (!("ownerId" in resource.data) || resource.data.ownerId == "") &&
+            resource.data.ownerEmail == request.auth.token.email
+          )
+        ) &&
+        request.resource.data.ownerEmail == resource.data.ownerEmail
+      ) || (
+        // El Super Admin solo puede modificar estados administrativos de plataforma (nunca robar/editar datos internos de la tienda)
+        isSuperAdmin() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'isActive',
+          'verification',
+          'deuda_comision',
+          'comision_porcentaje'
+        ])
+      );
+
+      allow delete: if isSuperAdmin();
+    }
+
+    // 4. PRODUCTOS: lectura pública, escritura exclusiva del dueño de esa tienda (clientes pueden dar like)
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if isStoreOwner(request.resource.data.storeId);
+      allow update: if (
+        isStoreOwner(resource.data.storeId) &&
+        request.resource.data.storeId == resource.data.storeId
+      ) || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+      );
+      allow delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
+    }
+
+    // 5. PEDIDOS (ORDERS): clientes públicos pueden crear pedidos; solo el dueño de esa tienda puede leerlos/gestionarlos
+    match /orders/{orderId} {
+      allow create: if request.resource.data.storeId is string &&
+        request.resource.data.storeId.size() > 0;
+      allow read, update, delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
+    }
+
+    // 6. MÉTODOS DE PAGO (PAYMENTS): lectura pública para checkout, escritura exclusiva del dueño de esa tienda
+    match /payments/{paymentId} {
+      allow read: if true;
+      allow create: if isStoreOwner(request.resource.data.storeId);
+      allow update, delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
+    }
+
+    // 7. SESIONES / CATEGORÍAS: lectura pública, escritura exclusiva del dueño de esa tienda
+    match /sessions/{sessionId} {
+      allow read: if true;
+      allow create: if isStoreOwner(request.resource.data.storeId);
+      allow update, delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
+    }
+
+    // 8. CUPONES: lectura pública para validación en bolsa, escritura exclusiva del dueño de esa tienda
+    match /coupons/{couponId} {
+      allow read: if true;
+      allow create: if isStoreOwner(request.resource.data.storeId);
+      allow update: if isStoreOwner(resource.data.storeId) || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usageCount'])
+      );
+      allow delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
+    }
+
+    // 9. LOGÍSTICA (MRW, Zoom, Tealca): lectura pública, escritura exclusiva del dueño de esa tienda
+    match /logistics/{logisticsId} {
+      allow read: if true;
+      allow create: if isStoreOwner(request.resource.data.storeId);
+      allow update, delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
+    }
+
+    // 10. PREGUNTAS (Q&A): clientes públicos pueden enviar preguntas y leer las públicas; solo el dueño de la tienda gestiona todas las de su tienda
+    match /questions/{questionId} {
+      allow read: if resource.data.isPublic == true || isStoreOwner(resource.data.storeId);
+      allow create: if request.resource.data.storeId is string &&
+        request.resource.data.storeId.size() > 0 &&
+        request.resource.data.isPublic == false;
+      allow update, delete: if isStoreOwner(resource.data.storeId) || isSuperAdmin();
+    }
+  }
+}

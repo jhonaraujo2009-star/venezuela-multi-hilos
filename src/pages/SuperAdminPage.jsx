@@ -141,18 +141,18 @@ export default function SuperAdminPage() {
   };
 
   const goToStoreAdmin = (targetId) => {
-    const id = targetId || adminStoreId || stores[0]?.id;
+    const id = targetId || adminStoreId;
     if (!id) {
       if (loading) {
         toast("Cargando tiendas, intenta en un segundo...");
       } else {
-        toast("Aún no hay tiendas registradas. Puedes crear una aquí.");
+        toast("Selecciona o crea tu tienda primero.");
         navigate("/registro-vendedor");
       }
       return;
     }
-    handleSelectTargetStore(id);
-    navigate(`/${id}/admin`);
+    // 🔒 Redirigir siempre al login aislado de esa tienda para exigir usuario y clave
+    navigate(`/login?store=${encodeURIComponent(id)}`);
   };
 
   const fetchAllStores = async (activeUser = user) => {
@@ -935,12 +935,6 @@ export default function SuperAdminPage() {
                           >
                             🏠 Ir a Tienda
                           </button>
-                          <button
-                            onClick={() => goToStoreAdmin(store.id)}
-                            className="px-4 py-2.5 bg-pink-50 text-pink-700 font-black rounded-xl text-xs hover:bg-pink-100 transition-colors border border-pink-200"
-                          >
-                            ⚙️ Panel Admin
-                          </button>
                           {vs !== 'verified' && vs !== 'rejected' && (
                             <button
                               onClick={() => handleVerification(store.id, 'rejected')}
@@ -1106,13 +1100,6 @@ export default function SuperAdminPage() {
                                     className="text-[10px] font-black bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-lg border border-emerald-200 transition-colors"
                                   >
                                     🏠 Ir a Tienda
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => goToStoreAdmin(store.id)}
-                                    className="text-[10px] font-black bg-pink-50 hover:bg-pink-100 text-pink-700 px-2.5 py-1 rounded-lg border border-pink-200 transition-colors"
-                                  >
-                                    ⚙️ Admin
                                   </button>
                                 </div>
                               </div>

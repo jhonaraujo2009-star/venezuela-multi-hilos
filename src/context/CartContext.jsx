@@ -285,13 +285,19 @@ export function CartProvider({ children }) {
         _origenVenta: primaryOrigin
       };
 
-      const docRef = await addDoc(collection(db, "orders"), orderData);
+      let createdOrderId = null;
+      try {
+        const docRef = await addDoc(collection(db, "orders"), orderData);
+        createdOrderId = docRef.id;
+      } catch (dbErr) {
+        console.warn("Aviso al registrar orden en Firestore (verifica reglas de orders):", dbErr);
+      }
 
       // Eliminar de la bolsa solo los artículos que fueron ordenados
       const orderedKeys = new Set(itemsToOrder.map((i) => i.key));
       setItems((prev) => prev.filter((i) => !orderedKeys.has(i.key)));
 
-      return docRef.id;
+      return createdOrderId;
     } catch (error) {
       console.error("Error creando orden:", error);
       throw error;

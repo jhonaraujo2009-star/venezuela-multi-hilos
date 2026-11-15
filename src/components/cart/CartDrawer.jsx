@@ -19,19 +19,13 @@ const formatStoreWhatsAppPhone = (rawValue) => {
   return digits.length >= 10 ? digits : "";
 };
 
-const extractStrictStorePhone = (storeDoc, paymentDoc = null, storePayments = []) => {
+const extractStrictStorePhone = (storeDoc) => {
   if (!storeDoc?.id) return "";
   const candidates = [
     storeDoc.phone,
     storeDoc.whatsappNumber,
     storeDoc.whatsappWidget?.number,
     storeDoc.telefono,
-    !paymentDoc?.storeId || paymentDoc.storeId === storeDoc.id ? paymentDoc?.phone : "",
-    ...(Array.isArray(storePayments)
-      ? storePayments
-          .filter((p) => !p?.storeId || p.storeId === storeDoc.id)
-          .map((p) => p?.phone)
-      : []),
   ];
   for (const candidate of candidates) {
     const formatted = formatStoreWhatsAppPhone(candidate);

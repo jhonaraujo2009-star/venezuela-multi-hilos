@@ -174,10 +174,17 @@ export default function LoginPage() {
         const userCred = await login(cleanEmail, password);
         const userUid = userCred.user.uid;
 
+        if (targetData.ownerId && targetData.ownerId !== userUid) {
+          await logout();
+          toast.error("Acceso denegado: El identificador de propietario (UID) no coincide con esta tienda.");
+          setLoading(false);
+          return;
+        }
+
         const updates = {
           last_login: serverTimestamp(),
         };
-        if (targetData.ownerId !== userUid) {
+        if (!targetData.ownerId) {
           updates.ownerId = userUid;
         }
 
@@ -215,11 +222,18 @@ export default function LoginPage() {
         const storeData = storeDoc.data();
         const storeRef = doc(db, "stores", storeDoc.id);
 
+        if (storeData.ownerId && storeData.ownerId !== userUid) {
+          await logout();
+          toast.error("Acceso denegado: El identificador de propietario (UID) no coincide con esta tienda.");
+          setLoading(false);
+          return;
+        }
+
         const updates = {
           last_login: serverTimestamp(),
         };
 
-        if (storeData.ownerId !== userUid) {
+        if (!storeData.ownerId) {
           updates.ownerId = userUid;
         }
 
@@ -375,8 +389,12 @@ export default function LoginPage() {
               await logout();
             } else {
               const storeData = storeDoc.data();
-              // Auto-sincronizar ownerId con el UID del dueño actual
-              if (storeData.ownerId !== userUid) {
+              if (storeData.ownerId && storeData.ownerId !== userUid) {
+                toast.error("Acceso denegado: El UID de esta cuenta no coincide con el propietario de la tienda.");
+                await logout();
+                return;
+              }
+              if (!storeData.ownerId) {
                 await updateDoc(doc(db, "stores", storeDoc.id), {
                   ownerId: userUid,
                 }).catch(err => console.warn("No se pudo actualizar ownerId tras reset:", err));
