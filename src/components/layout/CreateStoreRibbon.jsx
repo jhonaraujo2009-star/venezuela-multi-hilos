@@ -1,8 +1,54 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
+const DISMISS_STORAGE_KEY = "create_store_ribbon_dismissed";
+
 export default function CreateStoreRibbon() {
+  const [isVisible, setIsVisible] = useState(() => {
+    try {
+      return sessionStorage.getItem(DISMISS_STORAGE_KEY) !== "1";
+    } catch (e) {
+      return true;
+    }
+  });
+
+  if (!isVisible) return null;
+
+  const handleClose = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsVisible(false);
+    try {
+      sessionStorage.setItem(DISMISS_STORAGE_KEY, "1");
+    } catch (err) {}
+  };
+
   return (
-    <div className="fixed left-0 top-1/2 -translate-y-1/2 z-[35] flex items-center select-none pointer-events-none">
+    <div className="fixed left-0 top-1/2 -translate-y-1/2 z-[35] flex flex-col items-start select-none pointer-events-none">
+      {/* Botón "X" para cerrar la franja */}
+      <button
+        type="button"
+        onClick={handleClose}
+        title="Cerrar aviso"
+        aria-label="Cerrar franja de crear tienda gratis"
+        className="pointer-events-auto mb-1.5 ml-1.5 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#14091d]/90 hover:bg-pink-600 text-pink-200 hover:text-white border border-pink-400/45 shadow-[0_4px_14px_rgba(0,0,0,0.3)] backdrop-blur-md flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-400"
+      >
+        <svg
+          className="w-3 h-3 sm:w-3.5 sm:h-3.5"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2.75}
+            d="M6 18L18 6M6 6l12 12"
+          />
+        </svg>
+      </button>
+
       <Link
         to="/registro-vendedor"
         aria-label="¡Crea tu tienda virtual gratis!"

@@ -14,6 +14,8 @@ export default function HeroBanner({ activeFilter, onFilter }) {
   
   const primaryColor = storeData?.primaryColor || settings.primaryColor || "#ec4899";
   const isVerified = storeData?.verification?.status === "verified";
+  // 🔒 AISLAMIENTO ESTRICTO: Leer visitas única y exclusivamente del documento de esta tienda
+  const storeVisits = storeData?.id ? Math.max(0, Math.floor(Number(storeData.visits) || 0)) : 0;
 
   return (
     <section className="w-full bg-transparent pt-3 pb-1 px-3 sm:px-4">
@@ -66,6 +68,42 @@ export default function HeroBanner({ activeFilter, onFilter }) {
                   </div>
                 )}
               </div>
+
+              {/* Contador de visitas único e independiente de esta tienda */}
+              {storeData?.id && (
+                <div
+                  className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 border border-gray-200/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)]"
+                  title={`${storeVisits.toLocaleString("es-VE")} ${storeVisits === 1 ? "visita" : "visitas"} en ${rawTitle}`}
+                >
+                  <svg
+                    className="w-3 h-3 shrink-0"
+                    style={{ color: primaryColor }}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2.2}
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2.2}
+                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                    />
+                  </svg>
+                  <span className="text-[10px] font-black text-gray-800 tabular-nums leading-none">
+                    {storeVisits.toLocaleString("es-VE")}
+                  </span>
+                  <span className="text-[8px] font-bold text-gray-400 uppercase tracking-wider leading-none">
+                    {storeVisits === 1 ? "visita" : "visitas"}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* COLUMNA DERECHA: NOMBRE DE TIENDA Y BOTONES UNO DEBAJO DEL OTRO */}

@@ -96,6 +96,9 @@ export default function AdminStatistics() {
     }, 0).toFixed(2)
   );
 
+  // 👁️ VISITAS EXCLUSIVAS DE ESTA TIENDA (Aislamiento estricto)
+  const storeVisits = storeData?.id ? Math.max(0, Math.floor(Number(storeData.visits) || 0)) : 0;
+
   // 🥇 1. CÁLCULO DEL PODIO (Top 3 Productos Estrella)
   const topProducts = [...products]
     .filter(p => getProductRevenue(p) > 0)
@@ -133,8 +136,8 @@ export default function AdminStatistics() {
         </span>
       </div>
 
-      {/* 🌟 KPIs FINANCIEROS (Tarjetas principales) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      {/* 🌟 KPIs FINANCIEROS Y TRÁFICO (Tarjetas principales) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div className="bg-gradient-to-br from-gray-900 to-black rounded-[2rem] p-7 text-white shadow-xl relative overflow-hidden group">
           <div className="absolute -bottom-4 -right-4 p-4 opacity-10 text-8xl group-hover:scale-110 transition-transform">💰</div>
           <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400 mb-2">Ingreso Bruto</p>
@@ -154,6 +157,23 @@ export default function AdminStatistics() {
           <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-blue-500 mb-2">Valor en Inventario</p>
           <h3 className="text-4xl font-black mb-1 tracking-tighter">${totalInventoryValue.toLocaleString()}</h3>
           <p className="text-xs font-semibold text-gray-500 mt-2">Capital en mercancía actual</p>
+        </div>
+
+        <div className="bg-white rounded-[2rem] p-7 text-gray-900 shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-1.5 h-full bg-violet-500"></div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-violet-600 mb-2 flex items-center gap-1.5">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500"></span>
+            </span>
+            Visitas a tu Tienda
+          </p>
+          <h3 className="text-4xl font-black mb-1 tracking-tighter tabular-nums">
+            {storeVisits.toLocaleString("es-VE")}
+          </h3>
+          <p className="text-xs font-semibold text-gray-500 mt-2 truncate">
+            Conteo exclusivo de /{storeData?.id}
+          </p>
         </div>
       </div>
 

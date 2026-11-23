@@ -175,6 +175,7 @@ export default function RegisterStorePage() {
         deuda_comision: 0,
         total_productos: 0,
         ventas_consolidadas: 0,
+        visits: 0,
         onboardingCompleted: false
       });
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"; 
 import { useSearchParams, useParams, useNavigate } from "react-router-dom";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, increment } from "firebase/firestore";
 import { db } from "../config/firebase";
 
 import AnnouncementBar from "../components/layout/AnnouncementBar";
@@ -70,6 +70,27 @@ export default function StorePage() {
       } catch (e) {}
     }
   }, [storeData?.id, searchParams]);
+
+  // 🌟 CONTADOR DE VISITAS INDEPENDIENTE POR TIENDA (Aislamiento estricto por storeId)
+  useEffect(() => {
+    if (!normalizedStoreId || !storeData?.id) return;
+    if (storeData.id.trim().toLowerCase() !== normalizedStoreId) return;
+    if ((isBlockedByDebt || isStoreDisabled) && !canBypassLock) return;
+
+    const visitKey = `store_visit_counted_${normalizedStoreId}`;
+    try {
+      if (sessionStorage.getItem(visitKey) === "1") return;
+      sessionStorage.setItem(visitKey, "1");
+    } catch (e) {}
+
+    const storeRef = doc(db, "stores", storeData.id);
+    updateDoc(storeRef, { visits: increment(1) }).catch((err) => {
+      console.warn(`No se pudo incrementar el contador de visitas de ${storeData.id}:`, err);
+      try {
+        sessionStorage.removeItem(visitKey);
+      } catch (e) {}
+    });
+  }, [normalizedStoreId, storeData?.id, isBlockedByDebt, isStoreDisabled, canBypassLock]);
 
   // 🌟 MAGIA: ESCUCHADOR DE ENLACES PROFUNDOS (DEEP-LINKS)
   useEffect(() => {

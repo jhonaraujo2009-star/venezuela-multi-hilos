@@ -57,6 +57,15 @@ service cloud.firestore {
           'lastDebtResetAt',
           'systemMessage'
         ])
+      ) || (
+        // Contador público de visitas aislado por tienda: solo permite incrementar +1 el campo 'visits' sin alterar ningún otro dato
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visits']) &&
+        request.resource.data.visits is int &&
+        request.resource.data.visits == (
+          (('visits' in resource.data) && (resource.data.visits is int))
+            ? resource.data.visits + 1
+            : 1
+        )
       );
 
       allow delete: if isSuperAdmin();
