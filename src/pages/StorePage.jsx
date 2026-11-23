@@ -12,6 +12,7 @@ import CartDrawer from "../components/cart/CartDrawer";
 import Footer from "../components/layout/Footer";
 import InstallButton from "../InstallButton";
 import WhatsAppVIP from "../components/layout/WhatsAppVIP";
+import CreateStoreRibbon from "../components/layout/CreateStoreRibbon";
 
 import { useCart } from "../context/CartContext";
 import { useApp } from "../context/AppContext";
@@ -209,6 +210,7 @@ export default function StorePage() {
         {selectedProduct && <ProductModal product={selectedProduct} onClose={() => setSelectedProduct(null)} />}
       </AnimatePresence>
       <CartDrawer onSelectProduct={setSelectedProduct} />
+      {showFloatingElements && <CreateStoreRibbon />}
       {showFloatingElements && <WhatsAppVIP />}
       <InstallButton />
 

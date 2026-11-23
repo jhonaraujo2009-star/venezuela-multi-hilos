@@ -4,6 +4,7 @@ import { db } from "../config/firebase";
 import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useApp } from "../context/AppContext"; // 🌟 INYECTAMOS LA TIENDA
+import CreateStoreRibbon from "../components/layout/CreateStoreRibbon";
 
 export default function QuestionsPage() {
   const [questions, setQuestions] = useState([]);
@@ -86,6 +87,7 @@ export default function QuestionsPage() {
 
   return (
     <div className="min-h-screen bg-white max-w-md mx-auto px-4 py-8">
+      <CreateStoreRibbon />
       <div className="flex items-center gap-3 mb-6">
         {/* 🌟 MAGIA: El botón de volver regresa a la tienda correcta */}
         <button onClick={() => navigate(`/${effectiveStoreId || ""}`)} className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center">

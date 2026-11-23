@@ -45,3 +45,123 @@ img[loading="lazy"] {
 img[loading="lazy"].loaded {
   opacity: 1;
 }
+
+/* 🌟 Franja lateral izquierda: "Crea tu tienda virtual gratis!" */
+@keyframes createStoreBorderFlow {
+  0% {
+    background-position: 0% 0%;
+  }
+  50% {
+    background-position: 0% 100%;
+  }
+  100% {
+    background-position: 0% 0%;
+  }
+}
+
+@keyframes createStoreNeonPulse {
+  0%, 100% {
+    opacity: 0.42;
+    transform: scaleY(0.96) scaleX(0.92);
+  }
+  45%, 55% {
+    opacity: 0.95;
+    transform: scaleY(1.03) scaleX(1.12);
+  }
+}
+
+@keyframes createStoreFlashOverlay {
+  0%, 100% {
+    opacity: 0.14;
+  }
+  42% {
+    opacity: 0.68;
+  }
+  52% {
+    opacity: 0.25;
+  }
+  64% {
+    opacity: 0.82;
+  }
+  78% {
+    opacity: 0.18;
+  }
+}
+
+@keyframes createStoreShimmerSweep {
+  0% {
+    transform: translateY(115%);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.9;
+  }
+  75% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-115%);
+    opacity: 0;
+  }
+}
+
+@keyframes createStoreBadgeBlink {
+  0%, 100% {
+    filter: brightness(1);
+    box-shadow: 0 0 8px rgba(250, 204, 21, 0.55), 0 0 18px rgba(236, 72, 153, 0.4);
+  }
+  48% {
+    filter: brightness(1.22);
+    box-shadow: 0 0 16px rgba(250, 204, 21, 0.95), 0 0 28px rgba(236, 72, 153, 0.8);
+  }
+  60% {
+    filter: brightness(0.95);
+    box-shadow: 0 0 6px rgba(250, 204, 21, 0.45);
+  }
+  72% {
+    filter: brightness(1.28);
+    box-shadow: 0 0 18px rgba(253, 224, 71, 1), 0 0 32px rgba(244, 63, 94, 0.85);
+  }
+}
+
+@keyframes createStoreArrowNudge {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(2.5px);
+  }
+}
+
+.create-store-ribbon-border {
+  background: linear-gradient(
+    180deg,
+    #facc15 0%,
+    #ec4899 28%,
+    #a855f7 56%,
+    #f43f5e 80%,
+    #facc15 100%
+  );
+  background-size: 100% 240%;
+  animation: createStoreBorderFlow 3.2s ease-in-out infinite;
+}
+
+.create-store-ribbon-aura {
+  animation: createStoreNeonPulse 2s ease-in-out infinite;
+}
+
+.create-store-ribbon-flash {
+  animation: createStoreFlashOverlay 2.1s ease-in-out infinite;
+}
+
+.create-store-ribbon-shimmer {
+  animation: createStoreShimmerSweep 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.create-store-badge-blink {
+  animation: createStoreBadgeBlink 2.1s ease-in-out infinite;
+}
+
+.create-store-arrow-nudge {
+  animation: createStoreArrowNudge 1.4s ease-in-out infinite;
+}
